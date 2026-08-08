@@ -78,8 +78,8 @@ public static class ViGEmInput
         return vk switch
         {
             Input.VK_SPACE => Button(Xbox360Button.A, down),
-            Input.VK_NUMPAD5 => Button(Xbox360Button.B, down),
-            Input.VK_NUMPAD9 or Input.VK_C => Button(Xbox360Button.LeftShoulder, down),
+            Input.VK_NUMPAD5 => Button(Xbox360Button.X, down),
+            Input.VK_NUMPAD9 or Input.VK_C => Slider(Xbox360Slider.LeftTrigger, down ? (byte)255 : (byte)0),
             Input.VK_UP => Axis(Xbox360Axis.LeftThumbY, down ? (short)32767 : (short)0),
             Input.VK_DOWN => Axis(Xbox360Axis.LeftThumbY, down ? (short)-32767 : (short)0),
             Input.VK_LEFT => Axis(Xbox360Axis.LeftThumbX, down ? (short)-32767 : (short)0),
@@ -95,7 +95,7 @@ public static class ViGEmInput
     {
         return vk switch
         {
-            Input.VK_LBUTTON => Button(Xbox360Button.X, down),
+            Input.VK_LBUTTON => Button(Xbox360Button.RightShoulder, down),
             Input.VK_RBUTTON => Slider(Xbox360Slider.RightTrigger, down ? (byte)255 : (byte)0),
             _ => true
         };

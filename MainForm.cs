@@ -25,6 +25,7 @@ public sealed class MainForm : Form
     private Label _statusLabel;
     private CancellationTokenSource _testCts = new();
     private int _testMode;
+    private bool _uiReady;
     private bool _shiftDown;
     private bool _rDown;
     private bool _fKeyDown;
@@ -33,8 +34,8 @@ public sealed class MainForm : Form
     {
         ("Dodge (A)", () => Input.KeyTap(Input.VK_SPACE)),
         ("Heavy (RT)", () => Input.MouseClick(Input.VK_RBUTTON)),
-        ("Light (X)", () => Input.MouseClick(Input.VK_LBUTTON)),
-        ("Guard Break (B)", () => Input.KeyTap(Input.VK_NUMPAD5)),
+        ("Light (RB)", () => Input.MouseClick(Input.VK_LBUTTON)),
+        ("Guard Break (X)", () => Input.KeyTap(Input.VK_NUMPAD5)),
         ("Guard Top", () => Input.KeyTap(Input.VK_NUMPAD8)),
         ("Guard Left", () => Input.KeyTap(Input.VK_NUMPAD4)),
         ("Guard Right", () => Input.KeyTap(Input.VK_NUMPAD6))
@@ -190,6 +191,7 @@ If you paid for this you have been scammed lmfao. ";
             UpdateStatus();
         };
         statusTimer.Start();
+        _uiReady = true;
     }
 
     private void OnScan(object sender, EventArgs e)
@@ -236,6 +238,7 @@ If you paid for this you have been scammed lmfao. ";
         if (_bot.IsRunning)
         {
             _statusLabel.Text =
+                $"P1:{(_bot.S.Parry ? "ON" : "off")} P2:{(_bot.S.Parry2 ? "ON" : "off")} U:{(_bot.S.Unblockables ? "ON" : "off")} " +
                 $"M:{(_bot.MarkerFound ? "FOUND" : "MISSING")} F:{(_bot.FHeld ? "DOWN" : "up")} " +
                 $"Ind:{(_bot.AttackIndicator ? "YES" : "no")} G:{_bot.GuardDir} " +
                 $"Fl:{(_bot.Flash ? "YES" : "no")} P:{_bot.ParryCount} S:{Input.InjectedCount} " +
@@ -379,6 +382,10 @@ If you paid for this you have been scammed lmfao. ";
             ForeColor = Color.White,
             Location = new Point(x - parent.Left, y - parent.Top),
             Size = new Size(w, 20)
+        };
+        cb.CheckedChanged += (_, _) =>
+        {
+            if (_uiReady) ReadControlsToSettings();
         };
         parent.Controls.Add(cb);
         return cb;

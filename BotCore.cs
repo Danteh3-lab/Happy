@@ -106,6 +106,30 @@ public sealed class BotCore
         return _frame.PixelSearch(x1, y1, x2, y2, r, g, b, variation, out px, out py);
     }
 
+    private bool FreshIndicatorPx(int r, int g, int b, int variation, out int px, out int py)
+    {
+        px = py = 0;
+        int left = (int)Math.Floor(Math.Min(X16, X17));
+        int top = (int)Math.Floor(Math.Min(Y16, Y17));
+        int right = (int)Math.Ceiling(Math.Max(X16, X17));
+        int bottom = (int)Math.Ceiling(Math.Max(Y16, Y17));
+        var bounds = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
+        left = Math.Clamp(left, bounds.Left, bounds.Right - 1);
+        top = Math.Clamp(top, bounds.Top, bounds.Bottom - 1);
+        right = Math.Clamp(right, left + 1, bounds.Right);
+        bottom = Math.Clamp(bottom, top + 1, bounds.Bottom);
+
+        _frame = ScreenCapture.Capture(_frame, new Rectangle(left, top, right - left, bottom - top));
+        ScreenWidth = bounds.Width;
+        ScreenHeight = bounds.Height;
+        if (!_frame.PixelSearch(0, 0, _frame.Width - 1, _frame.Height - 1, r, g, b, variation, out int localX, out int localY))
+            return false;
+
+        px = localX + left;
+        py = localY + top;
+        return true;
+    }
+
     public string DebugScan()
     {
         var f = ScreenCapture.Capture(null);
@@ -250,6 +274,7 @@ public sealed class BotCore
 
     private void SearchBot()
     {
+        if (!S.Unblockables) return;
         if (!CurrentPx(X16, Y16, X17, Y17, 246, 98, 8, 10, out _, out _)) return;
 
         if (CurrentPx(X16, Y16, X17, Y17, 255, 34, 28, 10, out _, out _))
@@ -260,8 +285,16 @@ public sealed class BotCore
             return;
         }
 
+        if (S.Active1 == 0) return;
+
+        if (S.Nohero)
+        {
+            Dodge2();
+            return;
+        }
+
         if (S.Ch("Blackprior")) Dodge1();
-        if (!S.Ch("Blackprior")) Dodge2();
+        else Dodge2();
         if (S.Ch("Nobushi")) Dodge4();
         if (S.Ch("Shaman")) Dodge5();
         if (S.Ch("Orochi")) Dodge6();
@@ -272,7 +305,8 @@ public sealed class BotCore
     {
         GuardDir = "-";
         AttackIndicator = false;
-        if (!CurrentPx(X16, Y16, X17, Y17, 255, 49, 41, 15, out int zx, out int zy)) return;
+        if (!S.Autoblock) return;
+        if (!FreshIndicatorPx(255, 49, 41, 15, out int zx, out int zy)) return;
         AttackIndicator = true;
 
         if (zx > X4 && zy > Y4) { RGT(); return; }
@@ -283,6 +317,12 @@ public sealed class BotCore
 
     private void UbParry()
     {
+        if (!S.Unblockables)
+        {
+            S.Ubp = 0;
+            return;
+        }
+
         while (S.Ubp == 1)
         {
             _frame = ScreenCapture.Capture(_frame);
@@ -332,6 +372,8 @@ public sealed class BotCore
 
     private void Dodge1()
     {
+        if (!S.Unblockables) return;
+
         if (S.Unblockables)
         {
             Sleep(S.Pause);
@@ -355,7 +397,8 @@ public sealed class BotCore
 
     private void Dodge2()
     {
-        if (!S.Unblockables || S.Ch("Nobushi") || S.Ch("Shaman") || S.Ch("Orochi") || S.Ch("Jiangjun")) return;
+        if (!S.Unblockables || (!S.Nohero &&
+            (S.Ch("Nobushi") || S.Ch("Shaman") || S.Ch("Orochi") || S.Ch("Jiangjun")))) return;
 
         Sleep(S.Pause);
         if (Input.IsDown(Input.VK_W))
@@ -396,14 +439,14 @@ public sealed class BotCore
 
     private void Dodge4()
     {
-        if (!S.Ch("Nobushi")) return;
+        if (!S.Unblockables || S.Nohero || !S.Ch("Nobushi")) return;
         Sleep(S.Pause2);
         Input.KeyTap(Input.VK_C);
     }
 
     private void Dodge5()
     {
-        if (!S.Ch("Shaman")) return;
+        if (!S.Unblockables || S.Nohero || !S.Ch("Shaman")) return;
         Sleep(S.Pause2);
         Input.KeyDown(Input.VK_SPACE);
         Input.KeyTap(Input.VK_NUMPAD5);
@@ -413,7 +456,7 @@ public sealed class BotCore
 
     private void Dodge6()
     {
-        if (!S.Ch("Orochi")) return;
+        if (!S.Unblockables || S.Nohero || !S.Ch("Orochi")) return;
         Sleep(S.Pause2);
         Input.KeyTap(Input.VK_SPACE);
         Input.KeyTap(Input.VK_NUMPAD9);
@@ -422,7 +465,7 @@ public sealed class BotCore
 
     private void Dodge7()
     {
-        if (!S.Ch("Jiangjun")) return;
+        if (!S.Unblockables || S.Nohero || !S.Ch("Jiangjun")) return;
         Sleep(S.Pause2);
         Input.KeyDown(Input.VK_C);
         Sleep(250);
@@ -448,7 +491,17 @@ public sealed class BotCore
         return Flash;
     }
 
-    private bool YourChar(string name) => S.YourHero && S.Ch(name);
+    private bool YourChar(string name) => S.YourHero && !S.Nohero && S.Ch(name);
+
+    private bool HasEAction() => S.Parry2 || S.Crushing2;
+
+    private bool HasFAction() => S.Parry || S.Crushing || S.Deflect || HasHeroAction();
+
+    private bool HasHeroAction() =>
+        S.YourHero && !S.Nohero &&
+        (S.Ch("Warden") || S.Ch("Blackprior") || S.Ch("Warlord") ||
+         S.Ch("Shaman") || S.Ch("Varangian") || S.Ch("Orochi") ||
+         S.Ch("Nobushi") || S.Ch("Aramusha") || S.Ch("Jiangjun"));
 
     private void SendParry()
     {
@@ -507,9 +560,9 @@ public sealed class BotCore
     {
         GuardDir = "TOP";
         Sleep(S.Pause3);
-        Input.KeyTap(Input.VK_NUMPAD8);
+        Input.KeyTap(Input.VK_NUMPAD8, 60);
 
-        if (EHeld)
+        if (EHeld && HasEAction())
         {
             while (EHeld)
             {
@@ -520,7 +573,7 @@ public sealed class BotCore
             }
         }
 
-        if (FHeld)
+        if (FHeld && HasFAction())
         {
             while (FHeld)
             {
@@ -574,9 +627,9 @@ public sealed class BotCore
     {
         GuardDir = "LFT";
         Sleep(S.Pause3);
-        Input.KeyTap(Input.VK_NUMPAD4);
+        Input.KeyTap(Input.VK_NUMPAD4, 60);
 
-        if (EHeld)
+        if (EHeld && HasEAction())
         {
             while (EHeld)
             {
@@ -587,7 +640,7 @@ public sealed class BotCore
             }
         }
 
-        if (FHeld)
+        if (FHeld && HasFAction())
         {
             while (FHeld)
             {
@@ -633,9 +686,9 @@ public sealed class BotCore
     {
         GuardDir = "RGT";
         Sleep(S.Pause3);
-        Input.KeyTap(Input.VK_NUMPAD6);
+        Input.KeyTap(Input.VK_NUMPAD6, 60);
 
-        if (EHeld)
+        if (EHeld && HasEAction())
         {
             while (EHeld)
             {
@@ -646,7 +699,7 @@ public sealed class BotCore
             }
         }
 
-        if (FHeld)
+        if (FHeld && HasFAction())
         {
             while (FHeld)
             {

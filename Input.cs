@@ -141,8 +141,13 @@ public static class Input
 
     public static void KeyTap(int vk)
     {
+        KeyTap(vk, KeyTapDelayMs);
+    }
+
+    public static void KeyTap(int vk, int holdMs)
+    {
         KeyDown(vk);
-        Thread.Sleep(KeyTapDelayMs);
+        Thread.Sleep(holdMs);
         KeyUp(vk);
     }
 

@@ -15,7 +15,7 @@ public sealed class Settings
     public int Pbp = 1;
     public int Ubp;
     public int NMode;
-    public int Active1;
+    public int Active1 = 1;
     public int Active3;
     public int Active4;
     public int Active9;
