@@ -11,7 +11,7 @@ public sealed class MainForm : Form
     private static readonly string[] CheckKeys =
     {
         "DodgeL", "DodgeH", "Leftdodge", "Rightdodge", "Unblockables", "Autoblock", "Lightbash",
-        "Parry", "Crushing", "Deflect", "Parry2", "Crushing2", "Nohero", "YourHero",
+        "Parry", "Crushing", "Deflect", "Parry2", "Crushing2", "Nohero", "YourHero", "Legit",
         "Warden", "Peacekeeper", "Centurion", "Blackprior", "Gryphon", "Conqueror", "Lawbringer", "Gladiator", "Warmonger",
         "Raider", "Berserker", "Highlander", "Jormungandr", "Warlord", "Valkyrie", "Shaman", "Varangian", "Null",
         "Kensei", "Orochi", "Shinobi", "Hitokiri", "Sohei", "Shugoki", "Nobushi", "Aramusha", "Kyoshin",
@@ -144,7 +144,7 @@ If you paid for this you have been scammed lmfao. ";
         Text = "HappyBot Rebuilt FREE";
         BackColor = Color.Black;
         ForeColor = Color.White;
-        ClientSize = new Size(715, 440);
+        ClientSize = new Size(715, 470);
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         AutoScaleMode = AutoScaleMode.None;
@@ -160,7 +160,7 @@ If you paid for this you have been scammed lmfao. ";
         _statusLabel = new Label
         {
             ForeColor = Color.Lime,
-            Location = new Point(10, 415),
+            Location = new Point(10, 445),
             Size = new Size(555, 20),
             Text = "Press Start to begin"
         };
@@ -169,7 +169,7 @@ If you paid for this you have been scammed lmfao. ";
         var scanBtn = new Button
         {
             Text = "Scan Screen",
-            Location = new Point(570, 412),
+            Location = new Point(570, 442),
             Size = new Size(85, 24)
         };
         scanBtn.Click += OnScan;
@@ -178,7 +178,7 @@ If you paid for this you have been scammed lmfao. ";
         var testBtn = new Button
         {
             Text = "Test Input",
-            Location = new Point(660, 412),
+            Location = new Point(660, 442),
             Size = new Size(45, 24)
         };
         testBtn.Click += OnTestInput;
@@ -239,6 +239,7 @@ If you paid for this you have been scammed lmfao. ";
         {
             _statusLabel.Text =
                 $"P1:{(_bot.S.Parry ? "ON" : "off")} P2:{(_bot.S.Parry2 ? "ON" : "off")} U:{(_bot.S.Unblockables ? "ON" : "off")} " +
+                $"L:{(_bot.S.Legit ? "ON" : "off")} " +
                 $"M:{(_bot.MarkerFound ? "FOUND" : "MISSING")} F:{(_bot.FHeld ? "DOWN" : "up")} " +
                 $"Ind:{(_bot.AttackIndicator ? "YES" : "no")} G:{_bot.GuardDir} " +
                 $"Fl:{(_bot.Flash ? "YES" : "no")} P:{_bot.ParryCount} S:{Input.InjectedCount} " +
@@ -487,12 +488,13 @@ If you paid for this you have been scammed lmfao. ";
         AddCheck(blue, "Ocelotl", "Ocelotl", 470, 110, 60);
         AddCheck(blue, "Virtuosa", "Virtuosa", 470, 130, 60);
 
-        var fBtn = AddGroup("For Button - [F]", Color.White, 10, 220, 170, 125);
+        var fBtn = AddGroup("For Button - [F]", Color.White, 10, 220, 170, 155);
         AddCheck(fBtn, "Parry", "Auto Parry", 20, 240, 110);
         AddCheck(fBtn, "Crushing", "Auto CC", 20, 260, 110);
         AddCheck(fBtn, "Deflect", "Auto Deflect", 20, 280, 110);
         AddCheck(fBtn, "Nohero", "No Hero", 20, 300, 135);
         AddCheck(fBtn, "YourHero", "Your Hero", 20, 320, 135);
+        AddCheck(fBtn, "Legit", "Legit Mode", 20, 345, 135);
 
         var auto = AddGroup("Auto features", Color.White, 185, 220, 180, 125);
         AddCheck(auto, "Unblockables", "Dodge Bashes/Unblockables", 195, 240, 170);
@@ -501,9 +503,9 @@ If you paid for this you have been scammed lmfao. ";
         AddCheck(auto, "DodgeH", "RMouse after dodge", 195, 300, 160);
         AddCheck(auto, "DodgeL", "LMouse after dodge", 195, 320, 160);
 
-        var eBtn = AddGroup("For Button - [E]", Color.White, 10, 345, 170, 60);
-        AddCheck(eBtn, "Parry2", "Auto Parry", 20, 362, 110);
-        AddCheck(eBtn, "Crushing2", "Auto CC", 20, 382, 110);
+        var eBtn = AddGroup("For Button - [E]", Color.White, 10, 385, 170, 60);
+        AddCheck(eBtn, "Parry2", "Auto Parry", 20, 402, 110);
+        AddCheck(eBtn, "Crushing2", "Auto CC", 20, 422, 110);
 
         var credits = AddGroup("Credits", Color.White, 185, 345, 180, 60);
         AddText(credits, "Developed by FlorasSecret", 195, 365, 170, 20, Color.Cyan);
@@ -591,6 +593,7 @@ If you paid for this you have been scammed lmfao. ";
         s.Crushing2 = GetCheck("Crushing2");
         s.Nohero = GetCheck("Nohero");
         s.YourHero = GetCheck("YourHero");
+        s.Legit = GetCheck("Legit");
         foreach (string key in CheckKeys)
             s.Chars[key] = GetCheck(key);
     }

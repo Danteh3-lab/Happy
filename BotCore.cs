@@ -2,6 +2,9 @@ namespace HappyBot;
 
 public sealed class BotCore
 {
+    private const int LegitChancePercent = 55;
+    private const int LegitCooldownMs = 1200;
+    private long _lastReactionTick;
     public readonly Settings S = new();
 
     public double B55, Y55;
@@ -501,6 +504,16 @@ public sealed class BotCore
 
     private bool HasEAction() => S.Parry2 || S.Crushing2;
 
+    private bool ReactionAllowed()
+    {
+        if (!S.Legit) return true;
+        long now = Environment.TickCount64;
+        if (now - _lastReactionTick < LegitCooldownMs) return false;
+        if (Random.Shared.Next(100) >= LegitChancePercent) return false;
+        _lastReactionTick = now;
+        return true;
+    }
+
     private bool HasFAction() => S.Parry || S.Crushing || S.Deflect || HasHeroAction();
 
     private bool HasHeroAction() =>
@@ -573,6 +586,7 @@ public sealed class BotCore
             while (EHeld)
             {
                 if (!AttackFlashing()) continue;
+                if (!ReactionAllowed()) { while (AttackFlashing()) { } continue; }
 
                 if (S.Parry2) { SendParry(); Sleep(850); return; }
                 if (S.Crushing2) { Input.MouseClick(Input.VK_LBUTTON); Sleep(1200); return; }
@@ -584,6 +598,7 @@ public sealed class BotCore
             while (FHeld)
             {
                 if (!AttackFlashing()) continue;
+                if (!ReactionAllowed()) { while (AttackFlashing()) { } continue; }
 
                 if (YourChar("Warden"))
                 {
@@ -640,6 +655,7 @@ public sealed class BotCore
             while (EHeld)
             {
                 if (!AttackFlashing()) continue;
+                if (!ReactionAllowed()) { while (AttackFlashing()) { } continue; }
 
                 if (S.Parry2) { SendParry(); Sleep(850); return; }
                 if (S.Crushing2) { Input.MouseClick(Input.VK_LBUTTON); Sleep(1200); return; }
@@ -651,6 +667,7 @@ public sealed class BotCore
             while (FHeld)
             {
                 if (!AttackFlashing()) continue;
+                if (!ReactionAllowed()) { while (AttackFlashing()) { } continue; }
 
                 if (S.Parry) { SendParry(); Sleep(850); return; }
                 if (YourChar("Blackprior")) { Input.KeyTap(Input.VK_NUMPAD9); Sleep(2000); return; }
@@ -699,6 +716,7 @@ public sealed class BotCore
             while (EHeld)
             {
                 if (!AttackFlashing()) continue;
+                if (!ReactionAllowed()) { while (AttackFlashing()) { } continue; }
 
                 if (S.Parry2) { SendParry(); Sleep(850); return; }
                 if (S.Crushing2) { Input.MouseClick(Input.VK_LBUTTON); Sleep(1200); return; }
@@ -710,6 +728,7 @@ public sealed class BotCore
             while (FHeld)
             {
                 if (!AttackFlashing()) continue;
+                if (!ReactionAllowed()) { while (AttackFlashing()) { } continue; }
 
                 if (S.Parry) { SendParry(); Sleep(850); return; }
                 if (YourChar("Blackprior")) { Input.KeyTap(Input.VK_NUMPAD9); Sleep(2000); return; }

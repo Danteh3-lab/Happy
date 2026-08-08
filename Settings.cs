@@ -36,6 +36,7 @@ public sealed class Settings
     public bool Crushing2;
     public bool Nohero;
     public bool YourHero;
+    public bool Legit;
 
     public readonly Dictionary<string, bool> Chars = new(StringComparer.OrdinalIgnoreCase)
     {
