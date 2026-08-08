@@ -486,7 +486,13 @@ public sealed class BotCore
             _frame = ScreenCapture.Capture(_frame);
         ScreenWidth = _frame.Width;
         ScreenHeight = _frame.Height;
-        bool lightFlash = _frame.PixelSearch(0, 0, _frame.Width - 1, _frame.Height - 1, 255, 154, 141, 60, out _, out _);
+        if (_frame.PixelSearch(0, 0, _frame.Width - 1, _frame.Height - 1, 255, 41, 34, 0, out _, out _))
+        {
+            Flash = false;
+            return false;
+        }
+
+        bool lightFlash = _frame.PixelSearch(0, 0, _frame.Width - 1, _frame.Height - 1, 255, 154, 141, 0, out _, out _);
         Flash = lightFlash;
         return Flash;
     }
