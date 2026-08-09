@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DANBOT Control Deck</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="titlebar" data-drag>
+      <div class="brand-lockup">
+        <div class="brand-chip">D</div>
+        <div>
+          <div class="brand-name">DANBOT</div>
+          <div class="brand-subtitle">VI-GEM CONTROL DECK</div>
+        </div>
+      </div>
+      <div class="titlebar-spacer"></div>
+      <div class="top-runtime" id="top-runtime"><span class="status-dot"></span> STANDBY</div>
+      <button class="window-button" data-action="minimize" aria-label="Minimize">_</button>
+      <button class="window-button close" data-action="close" aria-label="Close">x</button>
+    </header>
+
+    <div class="workspace">
+      <aside class="sidebar">
+        <div class="sidebar-heading">CONTROL SURFACE</div>
+        <nav class="nav-list">
+          <button class="nav-item active" data-view-target="overview"><span class="nav-icon">+</span><span>Overview</span></button>
+          <button class="nav-item" data-view-target="features"><span class="nav-icon">*</span><span>Features</span></button>
+          <button class="nav-item" data-view-target="heroes"><span class="nav-icon">#</span><span>Heroes</span></button>
+          <button class="nav-item" data-view-target="timing"><span class="nav-icon">~</span><span>Timing</span></button>
+          <button class="nav-item" data-view-target="guide"><span class="nav-icon">?</span><span>Guide</span></button>
+        </nav>
+        <div class="sidebar-bottom">
+          <div class="sidebar-line"></div>
+          <div class="sidebar-meta">INPUT ENGINE</div>
+          <div class="sidebar-engine"><span class="status-dot green"></span><span id="sidebar-input">ViGEm / idle</span></div>
+          <div class="sidebar-meta">BUILD</div>
+          <div class="sidebar-version">DANBOT / Danteh</div>
+        </div>
+      </aside>
+
+      <main class="main-wrap">
+        <section class="view active" data-view="overview">
+          <div class="page-heading stack">
+            <div>
+              <div class="eyebrow">OPERATIONS / OVERVIEW</div>
+              <h1>Control deck</h1>
+              <p>Screen-aware reactions with a merged virtual controller path.</p>
+            </div>
+            <div class="heading-badge" id="heading-badge">READY TO CONFIGURE</div>
+          </div>
+
+          <div class="hero-card card stack">
+            <div class="hero-card-top">
+              <div>
+                <div class="eyebrow">RUNTIME CORE</div>
+                <h2 id="runtime-title">Waiting for launch</h2>
+                <p id="runtime-copy">Configure a feature set, then start the bot before returning to the game.</p>
+              </div>
+              <div class="runtime-orb" id="runtime-orb"><span></span></div>
+            </div>
+            <div class="hero-actions">
+              <button class="btn btn-primary" id="start-button" data-action="start">Start bot</button>
+              <button class="btn btn-secondary" data-action="scan">Scan screen</button>
+              <button class="btn btn-secondary" data-action="test">Test input</button>
+            </div>
+            <div class="utility-actions">
+              <button data-action="load">Load settings</button>
+              <button data-action="save">Save settings</button>
+              <button data-action="apply">Apply settings</button>
+              <button data-action="howto">How to use</button>
+              <button data-action="readme">Feature notes</button>
+              <button data-action="reload">Reload app</button>
+            </div>
+          </div>
+
+          <div class="overview-grid stack">
+            <article class="card signal-card">
+              <div class="card-head"><div><div class="eyebrow">LIVE SIGNAL</div><h3>Detection state</h3></div><span class="icon-chip">S</span></div>
+              <div class="metric-grid">
+                <div class="metric"><span>Marker</span><strong id="metric-marker">MISSING</strong></div>
+                <div class="metric"><span>Hold gate</span><strong id="metric-hold">UP</strong></div>
+                <div class="metric"><span>Indicator</span><strong id="metric-indicator">NO</strong></div>
+                <div class="metric"><span>Guard</span><strong id="metric-guard">-</strong></div>
+              </div>
+            </article>
+            <article class="card signal-card">
+              <div class="card-head"><div><div class="eyebrow">CONTROLLER PATH</div><h3>Input bridge</h3></div><span class="icon-chip">V</span></div>
+              <div class="metric-grid">
+                <div class="metric"><span>Mode</span><strong id="metric-mode">ViGEm</strong></div>
+                <div class="metric"><span>Source</span><strong id="metric-source">OFF</strong></div>
+                <div class="metric"><span>Virtual</span><strong id="metric-virtual">OFF</strong></div>
+                <div class="metric"><span>Loop</span><strong id="metric-loop">0 Hz</strong></div>
+              </div>
+            </article>
+          </div>
+
+          <div class="overview-grid stack">
+            <article class="card quick-card">
+              <div class="card-head"><div><div class="eyebrow">PRIMARY AUTOMATION</div><h3>Orange dodge</h3></div><span class="badge badge-accent">LT GATED</span></div>
+              <p class="card-copy">Dodge orange-only indicators. Orange plus red unblockable heavies use RT parry.</p>
+              <label class="toggle-row prominent"><input type="checkbox" data-setting="Unblockables"><span class="toggle-ui"></span><span><b>Enable orange detection</b><small>Maps to Dodge Bashes/Unblockables</small></span></label>
+            </article>
+            <article class="card quick-card">
+              <div class="card-head"><div><div class="eyebrow">GUARD AUTOMATION</div><h3>Auto block</h3></div><span class="badge badge-muted" id="parry-count">0 parries</span></div>
+              <p class="card-copy">Fresh red indicators steer the guard stick before optional F/E reactions.</p>
+              <label class="toggle-row prominent"><input type="checkbox" data-setting="Autoblock"><span class="toggle-ui"></span><span><b>Enable auto block</b><small>Uses the calibrated guard regions</small></span></label>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" data-view="features">
+          <div class="page-heading stack"><div><div class="eyebrow">CONFIGURATION / FEATURES</div><h1>Feature switches</h1><p>Keep automation explicit. Every switch updates the live bot state.</p></div></div>
+          <div class="content-grid stack">
+            <article class="card">
+              <div class="card-head"><div><div class="eyebrow">AUTO FEATURES</div><h3>Reaction layers</h3></div><span class="icon-chip">A</span></div>
+              <div class="toggle-list">
+                <label class="toggle-row"><input type="checkbox" data-setting="Unblockables"><span class="toggle-ui"></span><span><b>Dodge bashes / unblockables</b><small>Orange-only dodge, orange + red uses RT</small></span></label>
+                <label class="toggle-row"><input type="checkbox" data-setting="Autoblock"><span class="toggle-ui"></span><span><b>Auto block</b><small>Follow red guard indicators</small></span></label>
+                <label class="toggle-row"><input type="checkbox" data-setting="Lightbash"><span class="toggle-ui"></span><span><b>Bash after dodge</b><small>Guard break follow-up</small></span></label>
+                <label class="toggle-row"><input type="checkbox" data-setting="DodgeH"><span class="toggle-ui"></span><span><b>Heavy after dodge</b><small>Send RT after the evade</small></span></label>
+                <label class="toggle-row"><input type="checkbox" data-setting="DodgeL"><span class="toggle-ui"></span><span><b>Light after dodge</b><small>Send RB after the evade</small></span></label>
+              </div>
+            </article>
+            <article class="card">
+              <div class="card-head"><div><div class="eyebrow">F HOLD</div><h3>Primary reactions</h3></div><span class="icon-chip">F</span></div>
+              <div class="toggle-list">
+                <label class="toggle-row"><input type="checkbox" data-setting="Parry"><span class="toggle-ui"></span><span><b>Auto parry</b><small>Right mouse / RT</small></span></label>
+                <label class="toggle-row"><input type="checkbox" data-setting="Crushing"><span class="toggle-ui"></span><span><b>Auto crushing counter</b><small>Left mouse / RB</small></span></label>
+                <label class="toggle-row"><input type="checkbox" data-setting="Deflect"><span class="toggle-ui"></span><span><b>Auto deflect</b><small>Directional dodge</small></span></label>
+                <label class="toggle-row"><input type="checkbox" data-setting="YourHero"><span class="toggle-ui"></span><span><b>Your hero</b><small>Allow selected hero actions</small></span></label>
+                <label class="toggle-row"><input type="checkbox" data-setting="Nohero"><span class="toggle-ui"></span><span><b>No hero mode</b><small>Force generic actions</small></span></label>
+                <label class="toggle-row"><input type="checkbox" data-setting="Legit"><span class="toggle-ui"></span><span><b>Legit mode</b><small>Throttled, probabilistic reactions</small></span></label>
+              </div>
+            </article>
+            <article class="card compact-card">
+              <div class="card-head"><div><div class="eyebrow">E HOLD</div><h3>Secondary reactions</h3></div><span class="icon-chip">E</span></div>
+              <div class="split-toggles">
+                <label class="toggle-row"><input type="checkbox" data-setting="Parry2"><span class="toggle-ui"></span><span><b>Auto parry</b><small>Secondary hold</small></span></label>
+                <label class="toggle-row"><input type="checkbox" data-setting="Crushing2"><span class="toggle-ui"></span><span><b>Auto CC</b><small>Secondary hold</small></span></label>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" data-view="heroes">
+          <div class="page-heading stack"><div><div class="eyebrow">CONFIGURATION / HEROES</div><h1>Hero profile</h1><p>Select the character you are playing to unlock special counters and evades.</p></div><div class="heading-badge">OPTIONAL</div></div>
+          <div class="hero-grid stack">
+            <article class="card hero-group knights"><div class="group-title"><span class="faction-dot"></span>Knights</div><div class="hero-list">
+              <label><input type="checkbox" data-setting="Warden"><span>Warden</span></label><label><input type="checkbox" data-setting="Peacekeeper"><span>Peacekeeper</span></label><label><input type="checkbox" data-setting="Centurion"><span>Centurion</span></label><label><input type="checkbox" data-setting="Blackprior"><span>Black Prior</span></label><label><input type="checkbox" data-setting="Gryphon"><span>Gryphon</span></label><label><input type="checkbox" data-setting="Conqueror"><span>Conqueror</span></label><label><input type="checkbox" data-setting="Lawbringer"><span>Lawbringer</span></label><label><input type="checkbox" data-setting="Gladiator"><span>Gladiator</span></label><label><input type="checkbox" data-setting="Warmonger"><span>Warmonger</span></label>
+            </div></article>
+            <article class="card hero-group vikings"><div class="group-title"><span class="faction-dot"></span>Vikings</div><div class="hero-list">
+              <label><input type="checkbox" data-setting="Raider"><span>Raider</span></label><label><input type="checkbox" data-setting="Berserker"><span>Berserker</span></label><label><input type="checkbox" data-setting="Highlander"><span>Highlander</span></label><label><input type="checkbox" data-setting="Jormungandr"><span>Jormungandr</span></label><label><input type="checkbox" data-setting="Warlord"><span>Warlord</span></label><label><input type="checkbox" data-setting="Valkyrie"><span>Valkyrie</span></label><label><input type="checkbox" data-setting="Shaman"><span>Shaman</span></label><label><input type="checkbox" data-setting="Varangian"><span>Varangian</span></label><label><input type="checkbox" data-setting="Null"><span>Null</span></label>
+            </div></article>
+            <article class="card hero-group samurai"><div class="group-title"><span class="faction-dot"></span>Samurai</div><div class="hero-list">
+              <label><input type="checkbox" data-setting="Kensei"><span>Kensei</span></label><label><input type="checkbox" data-setting="Orochi"><span>Orochi</span></label><label><input type="checkbox" data-setting="Shinobi"><span>Shinobi</span></label><label><input type="checkbox" data-setting="Hitokiri"><span>Hitokiri</span></label><label><input type="checkbox" data-setting="Sohei"><span>Sohei</span></label><label><input type="checkbox" data-setting="Shugoki"><span>Shugoki</span></label><label><input type="checkbox" data-setting="Nobushi"><span>Nobushi</span></label><label><input type="checkbox" data-setting="Aramusha"><span>Aramusha</span></label><label><input type="checkbox" data-setting="Kyoshin"><span>Kyoshin</span></label>
+            </div></article>
+            <article class="card hero-group wulin"><div class="group-title"><span class="faction-dot"></span>Wu Lin</div><div class="hero-list">
+              <label><input type="checkbox" data-setting="Tiandi"><span>Tiandi</span></label><label><input type="checkbox" data-setting="Nuxia"><span>Nuxia</span></label><label><input type="checkbox" data-setting="Zhanhu"><span>Zhanhu</span></label><label><input type="checkbox" data-setting="Jiangjun"><span>Jiang Jun</span></label><label><input type="checkbox" data-setting="Shaolin"><span>Shaolin</span></label><label><input type="checkbox" data-setting="Juren"><span>Juren</span></label>
+            </div></article>
+            <article class="card hero-group outlanders"><div class="group-title"><span class="faction-dot"></span>Outlanders</div><div class="hero-list">
+              <label><input type="checkbox" data-setting="Pirate"><span>Pirate</span></label><label><input type="checkbox" data-setting="Afeera"><span>Afeera</span></label><label><input type="checkbox" data-setting="Medjay"><span>Medjay</span></label><label><input type="checkbox" data-setting="Khatun"><span>Khatun</span></label><label><input type="checkbox" data-setting="Ocelotl"><span>Ocelotl</span></label><label><input type="checkbox" data-setting="Virtuosa"><span>Virtuosa</span></label>
+            </div></article>
+          </div>
+        </section>
+
+        <section class="view" data-view="timing">
+          <div class="page-heading stack"><div><div class="eyebrow">CONFIGURATION / TIMING</div><h1>Timing and screen</h1><p>Keep these values aligned with the game render and your preferred reaction windows.</p></div></div>
+          <div class="content-grid stack timing-grid">
+            <article class="card">
+              <div class="card-head"><div><div class="eyebrow">SCREEN CALIBRATION</div><h3>Game resolution</h3></div><span class="icon-chip">R</span></div>
+              <div class="field-grid two"><label class="field"><span>Width</span><input type="number" min="1" data-setting="res1"></label><label class="field"><span>Height</span><input type="number" min="1" data-setting="res2"></label></div>
+              <button class="btn btn-secondary full" data-action="resolution">Apply resolution</button>
+              <p class="field-hint">The menu defaults to the primary display. Match the game output exactly.</p>
+            </article>
+            <article class="card">
+              <div class="card-head"><div><div class="eyebrow">REACTION WINDOWS</div><h3>Delays</h3></div><span class="icon-chip">T</span></div>
+              <div class="field-grid two"><label class="field"><span>Evade delay</span><input type="number" min="0" data-setting="Pause"></label><label class="field"><span>Feint check</span><input type="number" min="0" data-setting="Pause1"></label><label class="field"><span>Mouse delay</span><input type="number" min="0" data-setting="Pause2"></label><label class="field"><span>Block delay</span><input type="number" min="0" data-setting="Pause3"></label><label class="field"><span>Left deflect</span><input type="number" min="0" data-setting="Left"></label><label class="field"><span>Right deflect</span><input type="number" min="0" data-setting="Right"></label></div>
+            </article>
+            <article class="card compact-card">
+              <div class="card-head"><div><div class="eyebrow">DIRECTIONAL FOLLOW-UP</div><h3>Evade direction</h3></div><span class="icon-chip">D</span></div>
+              <div class="split-toggles"><label class="toggle-row"><input type="checkbox" data-setting="Leftdodge"><span class="toggle-ui"></span><span><b>Dodge left</b><small>Directional follow-up</small></span></label><label class="toggle-row"><input type="checkbox" data-setting="Rightdodge"><span class="toggle-ui"></span><span><b>Dodge right</b><small>Directional follow-up</small></span></label></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" data-view="guide">
+          <div class="page-heading stack"><div><div class="eyebrow">REFERENCE / GUIDE</div><h1>Quick guide</h1><p>Keep the game and the input bridge in the same frame of reference.</p></div><button class="btn btn-secondary" data-action="howto">Open setup guide</button></div>
+          <div class="guide-grid stack">
+            <article class="card guide-card"><div class="card-head"><div><div class="eyebrow">SETUP</div><h3>Before starting</h3></div><span class="icon-chip">1</span></div><ol><li>Use fullscreen or borderless fullscreen, not windowed mode.</li><li>Match the resolution fields to the game render.</li><li>Set FOV to 81 and contrast to 55.</li><li>Hide physical/source controllers in HidHide and leave the ViGEm output visible.</li><li>Choose features and your hero, then press Start bot.</li></ol></article>
+            <article class="card guide-card"><div class="card-head"><div><div class="eyebrow">CONTROLS</div><h3>Hotkeys and holds</h3></div><span class="icon-chip">2</span></div><div class="hotkey-list"><div><kbd>F2</kbd><span>Dodge automation on/off</span></div><div><kbd>F3</kbd><span>Cycle F-mode action</span></div><div><kbd>F4</kbd><span>Cycle E-mode action</span></div><div><kbd>F6</kbd><span>Pause/resume</span></div><div><kbd>E / F</kbd><span>Hold for parry actions</span></div><div><kbd>LT</kbd><span>Hold for orange automation</span></div></div></article>
+            <article class="card guide-card wide"><div class="card-head"><div><div class="eyebrow">MAPPING</div><h3>Virtual controller path</h3></div><span class="badge badge-success">VIGEM</span></div><div class="mapping-grid"><div><b>RT</b><span>Heavy / parry</span></div><div><b>RB</b><span>Light</span></div><div><b>X</b><span>Guard break</span></div><div><b>A</b><span>Dodge</span></div><div><b>LT</b><span>Orange hold gate</span></div><div><b>Right stick</b><span>Guard direction</span></div></div></article>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="modal-root" id="modal-root" hidden>
+    <div class="modal-backdrop" data-action="close-modal"></div>
+    <section class="modal-panel" role="dialog" aria-modal="true">
+      <div class="modal-head"><div><div class="eyebrow" id="modal-eyebrow">MESSAGE</div><h2 id="modal-title">Message</h2></div><button class="modal-close" data-action="close-modal">x</button></div>
+      <pre class="modal-body" id="modal-body"></pre>
+    </section>
+  </div>
+  <div class="toast-stack" id="toast-stack"></div>
+  <script src="app.js"></script>
+</body>
+</html>

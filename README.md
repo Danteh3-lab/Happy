@@ -1,6 +1,6 @@
-# HappyBot
+# DANBOT
 
-HappyBot is a C#/.NET 10 WinForms rewrite of the original `HappyBot.ahk`. It provides screen-based attack detection, guard automation, parry, deflect, dodge, and hero-specific responses.
+DANBOT by Danteh is a C#/.NET 10 rewrite of the original `HappyBot.ahk`. It provides screen-based attack detection, guard automation, parry, deflect, dodge, and hero-specific responses.
 
 The verified input path is a merged virtual Xbox controller:
 
