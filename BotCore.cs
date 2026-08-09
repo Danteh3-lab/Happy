@@ -234,10 +234,10 @@ public sealed class BotCore
         ScreenWidth = _frame.Width;
         ScreenHeight = _frame.Height;
 
-        if (CurrentPx(X18, Y18, X19, Y19, 5, 131, 65, 10, out _, out _)) Box = 1;
+        if (CurrentPx(X18, Y18, X19, Y19, 5, 131, 65, 0, out _, out _)) Box = 1;
         else Box = 2;
 
-        if (CurrentPx(X8, Y8, X9, Y9, 5, 131, 65, 10, out int ax, out int ay))
+        if (CurrentPx(X8, Y8, X9, Y9, 5, 131, 65, 0, out int ax, out int ay))
         {
             Ax = ax;
             Ay = ay;
@@ -253,7 +253,7 @@ public sealed class BotCore
                           ax - 100 * B55, ay + 97.5 * Y55, ax - 15 * B55, ay + 227.7 * Y55,
                           ax - 117.6 * B55, ay + 10 * Y55, ax + 94.11 * B55, ay + 227.7 * Y55);
         }
-        else if (CurrentPx(X8, Y8, X9, Y9, 255, 255, 10, 10, out ax, out ay))
+        else if (CurrentPx(X8, Y8, X9, Y9, 255, 255, 10, 0, out ax, out ay))
         {
             Ax = ax;
             Ay = ay;
@@ -277,10 +277,10 @@ public sealed class BotCore
 
     private void SearchBot()
     {
-        if (!S.Unblockables) return;
-        if (!CurrentPx(X16, Y16, X17, Y17, 246, 98, 8, 10, out _, out _)) return;
+        if (!S.Unblockables || !FHeld) return;
+        if (!CurrentPx(X16, Y16, X17, Y17, 246, 98, 8, 0, out _, out _)) return;
 
-        if (CurrentPx(X16, Y16, X17, Y17, 255, 34, 28, 10, out _, out _))
+        if (CurrentPx(X16, Y16, X17, Y17, 255, 34, 28, 3, out _, out _))
         {
             S.Ubp = 1;
             _releaseTimer.Change(1000, Timeout.Infinite);
@@ -309,7 +309,7 @@ public sealed class BotCore
         GuardDir = "-";
         AttackIndicator = false;
         if (!S.Autoblock) return;
-        if (!FreshIndicatorPx(255, 49, 41, 15, out int zx, out int zy)) return;
+        if (!FreshIndicatorPx(255, 49, 41, 2, out int zx, out int zy)) return;
         AttackIndicator = true;
 
         if (zx > X4 && zy > Y4) { RGT(); return; }
@@ -331,45 +331,17 @@ public sealed class BotCore
             _frame = ScreenCapture.Capture(_frame);
             ScreenWidth = _frame.Width;
             ScreenHeight = _frame.Height;
-            if (CurrentPx(X16, Y16, X17, Y17, 255, 34, 28, 10, out _, out _)) continue;
+            if (CurrentPx(X16, Y16, X17, Y17, 255, 34, 28, 3, out _, out _)) continue;
 
             Sleep(S.Pause1);
             _frame = ScreenCapture.Capture(_frame);
             ScreenWidth = _frame.Width;
             ScreenHeight = _frame.Height;
-            if (!CurrentPx(X16, Y16, X17, Y17, 246, 98, 8, 10, out _, out _) || !S.Unblockables) continue;
+            if (!CurrentPx(X16, Y16, X17, Y17, 246, 98, 8, 0, out _, out _) || !S.Unblockables) continue;
 
-            if (Input.IsDown(Input.VK_W))
-            {
-                if (S.Ch("Blackprior"))
-                {
-                    Input.KeyTap(Input.VK_NUMPAD9);
-                    Sleep(2300);
-                    return;
-                }
-                Input.Block(true);
-                try
-                {
-                    Input.KeyDown(Input.VK_DOWN);
-                    Input.KeyTap(Input.VK_SPACE);
-                    Input.KeyUp(Input.VK_DOWN);
-                }
-                finally
-                {
-                    Input.Block(false);
-                }
-                Sleep(700);
-                return;
-            }
-
-            if (S.Pbp == 0) Input.MouseClick(Input.VK_RBUTTON);
-            else
-            {
-                Input.KeyDown(Input.VK_DOWN);
-                Input.KeyTap(Input.VK_SPACE);
-                Input.KeyUp(Input.VK_DOWN);
-            }
+            Input.MouseClick(Input.VK_RBUTTON);
             Sleep(700);
+            return;
         }
     }
 

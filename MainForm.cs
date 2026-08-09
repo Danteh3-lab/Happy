@@ -4,7 +4,7 @@ namespace HappyBot;
 
 public sealed class MainForm : Form
 {
-    private const int IdF1 = 1, IdF2 = 2, IdF3 = 3, IdF4 = 4, IdF5 = 5, IdF6 = 6;
+    private const int IdF1 = 1, IdF2 = 2, IdF3 = 3, IdF4 = 4, IdF6 = 6;
 
     private static readonly string[] EditKeys = { "res1", "res2", "Pause", "Pause1", "Pause2", "Pause3", "Left", "Right" };
 
@@ -258,13 +258,19 @@ If you paid for this you have been scammed lmfao. ";
     {
         base.OnHandleCreated(e);
         for (int i = 0; i < 6; i++)
+        {
+            if (i == 4) continue;
             Native.RegisterHotKey(Handle, i + 1, 0, (uint)(0x70 + i));
+        }
     }
 
     protected override void OnHandleDestroyed(EventArgs e)
     {
         for (int i = 0; i < 6; i++)
+        {
+            if (i == 4) continue;
             Native.UnregisterHotKey(Handle, i + 1);
+        }
         base.OnHandleDestroyed(e);
     }
 
@@ -336,10 +342,6 @@ If you paid for this you have been scammed lmfao. ";
                 if (s.NMode == 1) { s.Active9 = 1; s.Active11 = 0; s.Active12 = 0; Sound("buttonclick"); }
                 else if (s.NMode == 2) { s.Active9 = 0; s.Active11 = 1; s.Active12 = 0; Sound("buttonclick"); }
                 else if (s.NMode == 3) { s.Active9 = 0; s.Active11 = 0; s.Active12 = 1; Sound("buttonclick"); s.NMode = 0; }
-                break;
-            case IdF5:
-                if (s.Pbp == 1) { s.Pbp = 0; Sound("buttonclick"); }
-                else { s.Pbp = 1; Sound("buttonunclick"); }
                 break;
             case IdF6:
                 _bot.TogglePause();
@@ -537,7 +539,7 @@ If you paid for this you have been scammed lmfao. ";
         var hotkeys = AddGroup("Hotkeys", Color.White, 545, 10, 160, 150);
         AddText(hotkeys, "[Pause/Resume]  - F6", 555, 30, 150, 20);
         AddText(hotkeys, "[Dodges On/Off]  - F2", 555, 50, 150, 20);
-        AddText(hotkeys, "[Parry Orange On/Off] - F5", 555, 70, 150, 20);
+        AddText(hotkeys, "[Orange Dodge] - tick Dodge", 555, 70, 160, 20);
         AddText(hotkeys, "[Parry/Button 1]  - E", 555, 90, 150, 20);
         AddText(hotkeys, "[Parry/Button 2]  - F", 555, 110, 150, 20);
         AddText(hotkeys, "[Flip/Button]  - W", 555, 130, 150, 20);

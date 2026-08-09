@@ -12,7 +12,6 @@ public sealed class Settings
     public int Left;
     public int Right;
 
-    public int Pbp = 1;
     public int Ubp;
     public int NMode;
     public int Active1 = 1;
