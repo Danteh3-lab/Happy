@@ -127,7 +127,7 @@ Each test sends five inputs after a three-second delay.
 
 ## Legacy Input
 
-`InterceptionInput.cs` and `lib\interception.dll` remain in the source for compatibility with the earlier input path. The verified setup uses ViGEm and does not require the Interception driver.
+The verified setup uses ViGEm and does not require the legacy Interception driver.
 
 ## Notes
 

@@ -14,11 +14,9 @@ internal static class Program
     {
         SetProcessDpiAwarenessContext(DpiAwarenessContextPerMonitorV2);
         if (string.IsNullOrEmpty(Config.Read("HoldButton"))) Config.Write("HoldButton", "LT");
-        InterceptionInput.Init();
         ViGEmInput.Init();
         ApplicationConfiguration.Initialize();
         Application.Run(new MainForm());
         ViGEmInput.Shutdown();
-        InterceptionInput.Shutdown();
     }
 }

@@ -38,6 +38,7 @@
     const indicator = String(state.status.indicator || "NO").toUpperCase();
     const guard = state.status.guard || "-";
     const source = String(state.status.source || "OFF").toUpperCase();
+    const sourceSlot = Number(state.status.sourceSlot);
     const virtual = String(state.status.virtualState || "OFF").toUpperCase();
     const mode = state.status.mode || "ViGEm";
     const loop = Number(state.status.loop || 0);
@@ -56,10 +57,10 @@
     setMetric("metric-indicator", indicator, indicator === "YES");
     setMetric("metric-guard", guard, guard !== "-" && guard !== "UNKNOWN");
     setMetric("metric-mode", mode, mode.toLowerCase() === "vigem");
-    setMetric("metric-source", source, source === "ON");
+    setMetric("metric-source", source === "ON" && sourceSlot >= 0 ? "ON / " + sourceSlot : source, source === "ON");
     setMetric("metric-virtual", virtual, virtual === "ON");
     setMetric("metric-loop", loop + " Hz", loop > 0);
-    $("#sidebar-input").textContent = mode + " / " + (source === "ON" ? "source live" : "idle");
+    $("#sidebar-input").textContent = mode + " / " + (source === "ON" ? "source " + sourceSlot : "idle");
     $("#parry-count").textContent = String(state.status.parryCount || 0) + " parries";
   }
 

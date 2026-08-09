@@ -63,6 +63,10 @@ public sealed class BotCore
 
     public void ScheduleRele() => _releTimer.Change(9000, Timeout.Infinite);
 
+    private static bool IsEHeld() => Input.IsDown(Input.VK_E);
+
+    private static bool IsFHeld() => Input.IsDown(Input.VK_F) || Input.HoldButtonHeld();
+
     private void Loop()
     {
         try
@@ -277,7 +281,7 @@ public sealed class BotCore
 
     private void SearchBot()
     {
-        if (!S.Unblockables || !FHeld) return;
+        if (!S.Unblockables || !IsFHeld()) return;
         if (!CurrentPx(X16, Y16, X17, Y17, 246, 98, 8, 0, out _, out _)) return;
 
         if (CurrentPx(X16, Y16, X17, Y17, 255, 34, 28, 3, out _, out _))
@@ -553,9 +557,9 @@ public sealed class BotCore
         Sleep(S.Pause3);
         Input.KeyTap(Input.VK_NUMPAD8, 60);
 
-        if (EHeld && HasEAction())
+        if (IsEHeld() && HasEAction())
         {
-            while (EHeld)
+            while (IsEHeld())
             {
                 if (!AttackFlashing()) continue;
                 if (!ReactionAllowed()) { while (AttackFlashing()) { } continue; }
@@ -565,9 +569,9 @@ public sealed class BotCore
             }
         }
 
-        if (FHeld && HasFAction())
+        if (IsFHeld() && HasFAction())
         {
-            while (FHeld)
+            while (IsFHeld())
             {
                 if (!AttackFlashing()) continue;
                 if (!ReactionAllowed()) { while (AttackFlashing()) { } continue; }
@@ -622,9 +626,9 @@ public sealed class BotCore
         Sleep(S.Pause3);
         Input.KeyTap(Input.VK_NUMPAD4, 60);
 
-        if (EHeld && HasEAction())
+        if (IsEHeld() && HasEAction())
         {
-            while (EHeld)
+            while (IsEHeld())
             {
                 if (!AttackFlashing()) continue;
                 if (!ReactionAllowed()) { while (AttackFlashing()) { } continue; }
@@ -634,9 +638,9 @@ public sealed class BotCore
             }
         }
 
-        if (FHeld && HasFAction())
+        if (IsFHeld() && HasFAction())
         {
-            while (FHeld)
+            while (IsFHeld())
             {
                 if (!AttackFlashing()) continue;
                 if (!ReactionAllowed()) { while (AttackFlashing()) { } continue; }
@@ -683,9 +687,9 @@ public sealed class BotCore
         Sleep(S.Pause3);
         Input.KeyTap(Input.VK_NUMPAD6, 60);
 
-        if (EHeld && HasEAction())
+        if (IsEHeld() && HasEAction())
         {
-            while (EHeld)
+            while (IsEHeld())
             {
                 if (!AttackFlashing()) continue;
                 if (!ReactionAllowed()) { while (AttackFlashing()) { } continue; }
@@ -695,9 +699,9 @@ public sealed class BotCore
             }
         }
 
-        if (FHeld && HasFAction())
+        if (IsFHeld() && HasFAction())
         {
-            while (FHeld)
+            while (IsFHeld())
             {
                 if (!AttackFlashing()) continue;
                 if (!ReactionAllowed()) { while (AttackFlashing()) { } continue; }

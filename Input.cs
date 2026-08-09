@@ -10,7 +10,6 @@ public static class Input
     private enum InputMode
     {
         Event,
-        Interception,
         SendInput,
         ViGEm
     }
@@ -74,9 +73,7 @@ public static class Input
     public static int LastSendError;
 
     public static string ActiveMode =>
-        RequestedMode == InputMode.Interception && InterceptionInput.IsAvailable
-            ? "Interc"
-            : RequestedMode == InputMode.ViGEm && ViGEmInput.IsAvailable ? "ViGEm"
+        RequestedMode == InputMode.ViGEm && ViGEmInput.IsAvailable ? "ViGEm"
             : RequestedMode == InputMode.SendInput ? "SendInput" : "Event";
 
     public static bool IsElevated()
@@ -101,12 +98,6 @@ public static class Input
             return;
         }
 
-        if (RequestedMode == InputMode.Interception && InterceptionInput.IsAvailable)
-        {
-            ReportSend(InterceptionInput.Key(vk, true));
-            return;
-        }
-
         if (RequestedMode != InputMode.SendInput)
         {
             SendEventKey(vk, false);
@@ -121,12 +112,6 @@ public static class Input
         if (RequestedMode == InputMode.ViGEm && ViGEmInput.IsAvailable)
         {
             ReportSend(ViGEmInput.Key(vk, false));
-            return;
-        }
-
-        if (RequestedMode == InputMode.Interception && InterceptionInput.IsAvailable)
-        {
-            ReportSend(InterceptionInput.Key(vk, false));
             return;
         }
 
@@ -161,14 +146,6 @@ public static class Input
             return;
         }
 
-        if (RequestedMode == InputMode.Interception && InterceptionInput.IsAvailable)
-        {
-            ReportSend(InterceptionInput.MouseClick(vk, true));
-            Thread.Sleep(MouseTapDelayMs);
-            ReportSend(InterceptionInput.MouseClick(vk, false));
-            return;
-        }
-
         if (RequestedMode != InputMode.SendInput)
         {
             SendEventMouse(vk);
@@ -184,7 +161,6 @@ public static class Input
 
     public static void Block(bool on)
     {
-        if (RequestedMode == InputMode.Interception && InterceptionInput.IsAvailable) return;
         if (RequestedMode == InputMode.ViGEm && ViGEmInput.IsAvailable) return;
         Native.BlockInput(on);
     }
@@ -212,7 +188,6 @@ public static class Input
     {
         return Environment.GetEnvironmentVariable("HAPPYBOT_INPUT_MODE")?.Trim().ToLowerInvariant() switch
         {
-            "interception" => InputMode.Interception,
             "vigem" => InputMode.ViGEm,
             "sendinput" => InputMode.SendInput,
             _ => InputMode.Event

@@ -6,7 +6,6 @@ namespace HappyBot;
 
 public static class ViGEmInput
 {
-    private const int SourceSlot = 0;
     private static readonly object Sync = new();
     private static ViGEmClient _client;
     private static IXbox360Controller _controller;
@@ -15,6 +14,8 @@ public static class ViGEmInput
     private static Native.XINPUT_GAMEPAD _source;
     private static Native.XINPUT_GAMEPAD _bot;
     private static bool _sourceConnected;
+    private static int _sourceSlot = -1;
+    private static long _lastRecoveryTick;
 
     public static bool IsAvailable { get; private set; }
     public static bool SourceConnected
@@ -25,10 +26,19 @@ public static class ViGEmInput
         }
     }
 
+    public static int SourceSlot
+    {
+        get
+        {
+            lock (Sync) return _sourceSlot;
+        }
+    }
+
     public static void Init()
     {
         try
         {
+            if (IsAvailable) return;
             _client = new ViGEmClient();
             _controller = _client.CreateXbox360Controller();
             _gamepad = _controller as IVirtualGamepad
@@ -54,6 +64,7 @@ public static class ViGEmInput
             _source = default;
             _bot = default;
             _sourceConnected = false;
+            _sourceSlot = -1;
             try { ApplyLocked(); } catch { }
         }
         try { _controller?.Disconnect(); } catch { }
@@ -62,6 +73,16 @@ public static class ViGEmInput
         _gamepad = null;
         _client = null;
         IsAvailable = false;
+    }
+
+    public static void TryRecover()
+    {
+        if (IsAvailable) return;
+        long now = Environment.TickCount64;
+        if (now - _lastRecoveryTick < 2000) return;
+        _lastRecoveryTick = now;
+        Shutdown();
+        Init();
     }
 
     internal static bool TryGetSourceState(out Native.XINPUT_GAMEPAD state)
@@ -103,12 +124,24 @@ public static class ViGEmInput
 
     private static void PollSource(object _)
     {
-        bool connected = Native.XInputGetState(SourceSlot, out var state) == 0 && OutputSlot() != SourceSlot;
+        int outputSlot = OutputSlot();
+        int sourceSlot = -1;
+        Native.XINPUT_GAMEPAD source = default;
+        for (int slot = 0; slot < 4; slot++)
+        {
+            if (slot == outputSlot) continue;
+            if (Native.XInputGetState(slot, out var state) != 0) continue;
+            sourceSlot = slot;
+            source = state.Gamepad;
+            break;
+        }
+
         lock (Sync)
         {
-            _source = connected ? state.Gamepad : default;
-            _sourceConnected = connected;
-            ApplyLocked();
+            _source = source;
+            _sourceConnected = sourceSlot >= 0;
+            _sourceSlot = sourceSlot;
+            if (!ApplyLocked()) IsAvailable = false;
         }
     }
 
@@ -175,6 +208,7 @@ public static class ViGEmInput
         }
         catch
         {
+            IsAvailable = false;
             return false;
         }
     }

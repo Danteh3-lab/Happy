@@ -73,6 +73,7 @@ public sealed class MainForm : Form
         _statusTimer = new System.Windows.Forms.Timer { Interval = 200 };
         _statusTimer.Tick += (_, _) =>
         {
+            ViGEmInput.TryRecover();
             _bot.FHeld = _fKeyDown || Input.HoldButtonHeld();
             SendStatus();
         };
@@ -125,7 +126,10 @@ public sealed class MainForm : Form
                     break;
                 case "settings":
                     if (root.TryGetProperty("settings", out JsonElement settings))
+                    {
                         ApplySettings(settings);
+                        SendSettings();
+                    }
                     break;
                 case "start":
                     OnStart();
@@ -199,6 +203,7 @@ public sealed class MainForm : Form
             injected = Input.InjectedCount,
             mode = Input.ActiveMode,
             source = ViGEmInput.SourceConnected ? "ON" : "OFF",
+            sourceSlot = ViGEmInput.SourceSlot,
             virtualState = ViGEmInput.IsAvailable ? "ON" : "OFF",
             loop = _bot.LoopHz,
             dodgeEnabled = _bot.S.Active1 == 1,

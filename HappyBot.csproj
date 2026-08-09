@@ -11,10 +11,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="lib\interception.dll" Link="interception.dll" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="Nefarius.ViGEm.Client" Version="1.21.256" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
   </ItemGroup>
