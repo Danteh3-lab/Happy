@@ -343,6 +343,12 @@ public sealed class BotCore
             ScreenHeight = _frame.Height;
             if (!CurrentPx(X16, Y16, X17, Y17, 246, 98, 8, 0, out _, out _) || !S.Unblockables) continue;
 
+            if (!ReactionAllowed())
+            {
+                S.Ubp = 0;
+                return;
+            }
+
             Input.MouseClick(Input.VK_RBUTTON);
             Sleep(700);
             return;
@@ -492,6 +498,38 @@ public sealed class BotCore
 
     private bool HasFAction() => S.Parry || S.Crushing || S.Deflect || HasHeroAction();
 
+    private bool TryWeightedFReaction()
+    {
+        int enabled = (S.Parry ? 1 : 0) + (S.Crushing ? 1 : 0) + (S.Deflect ? 1 : 0);
+        if (enabled < 2) return false;
+
+        int parryWeight = S.Parry ? Math.Max(0, S.ParryWeight) : 0;
+        int crushingWeight = S.Crushing ? Math.Max(0, S.CrushingWeight) : 0;
+        int deflectWeight = S.Deflect ? Math.Max(0, S.DeflectWeight) : 0;
+        int total = parryWeight + crushingWeight + deflectWeight;
+        if (total == 0) return false;
+
+        int roll = Random.Shared.Next(total);
+        if (roll < parryWeight)
+        {
+            SendParry();
+            Sleep(850);
+            return true;
+        }
+        roll -= parryWeight;
+        if (roll < crushingWeight)
+        {
+            Input.MouseClick(Input.VK_LBUTTON);
+            Sleep(1200);
+            return true;
+        }
+
+        if (GuardDir == "LFT") DeflectLeft();
+        else if (GuardDir == "RGT") DeflectRight();
+        else DeflectBack();
+        return true;
+    }
+
     private bool HasHeroAction() =>
         S.YourHero && !S.Nohero &&
         (S.Ch("Warden") || S.Ch("Blackprior") || S.Ch("Warlord") ||
@@ -613,6 +651,7 @@ public sealed class BotCore
                     Sleep(250);
                     return;
                 }
+                if (TryWeightedFReaction()) return;
                 if (S.Parry) { SendParry(); Sleep(850); return; }
                 if (S.Crushing) { Input.MouseClick(Input.VK_LBUTTON); Sleep(1200); return; }
                 if (S.Deflect) { DeflectBack(); return; }
@@ -645,6 +684,7 @@ public sealed class BotCore
                 if (!AttackFlashing()) continue;
                 if (!ReactionAllowed()) { while (AttackFlashing()) { } continue; }
 
+                if (TryWeightedFReaction()) return;
                 if (S.Parry) { SendParry(); Sleep(850); return; }
                 if (YourChar("Blackprior")) { Input.KeyTap(Input.VK_NUMPAD9); Sleep(2000); return; }
                 if (YourChar("Warlord")) { Input.KeyTap(Input.VK_C); Input.MouseClick(Input.VK_LBUTTON); Sleep(250); return; }
@@ -706,6 +746,7 @@ public sealed class BotCore
                 if (!AttackFlashing()) continue;
                 if (!ReactionAllowed()) { while (AttackFlashing()) { } continue; }
 
+                if (TryWeightedFReaction()) return;
                 if (S.Parry) { SendParry(); Sleep(850); return; }
                 if (YourChar("Blackprior")) { Input.KeyTap(Input.VK_NUMPAD9); Sleep(2000); return; }
                 if (YourChar("Warlord")) { Input.KeyTap(Input.VK_C); Input.MouseClick(Input.VK_LBUTTON); Sleep(250); return; }

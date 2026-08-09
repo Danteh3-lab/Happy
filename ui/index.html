@@ -134,6 +134,12 @@
                 <label class="toggle-row"><input type="checkbox" data-setting="Nohero"><span class="toggle-ui"></span><span><b>No hero mode</b><small>Force generic actions</small></span></label>
                 <label class="toggle-row"><input type="checkbox" data-setting="Legit"><span class="toggle-ui"></span><span><b>Legit mode</b><small>Throttled, probabilistic reactions</small></span></label>
               </div>
+              <div class="weight-heading"><span>WEIGHTED MIX</span><small>Used when 2+ primary reactions are enabled</small></div>
+              <div class="weight-grid">
+                <label class="weight-field"><span>Parry</span><input type="number" min="0" data-setting="ParryWeight"></label>
+                <label class="weight-field"><span>Crushing</span><input type="number" min="0" data-setting="CrushingWeight"></label>
+                <label class="weight-field"><span>Deflect</span><input type="number" min="0" data-setting="DeflectWeight"></label>
+              </div>
             </article>
             <article class="card compact-card">
               <div class="card-head"><div><div class="eyebrow">E HOLD</div><h3>Secondary reactions</h3></div><span class="icon-chip">E</span></div>

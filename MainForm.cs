@@ -9,10 +9,14 @@ namespace HappyBot;
 public sealed class MainForm : Form
 {
     private const int IdF1 = 1, IdF2 = 2, IdF3 = 3, IdF4 = 4, IdF6 = 6;
+    private const int PeacekeeperDeflectDelayMs = 100;
+    private int _prevLeftDeflect;
+    private int _prevRightDeflect;
+    private bool _peacekeeperApplied;
     private const int WmNcLButtonDown = 0xA1;
     private const int HtCaption = 0x2;
 
-    private static readonly string[] EditKeys = { "res1", "res2", "Pause", "Pause1", "Pause2", "Pause3", "Left", "Right" };
+    private static readonly string[] EditKeys = { "res1", "res2", "Pause", "Pause1", "Pause2", "Pause3", "Left", "Right", "ParryWeight", "CrushingWeight", "DeflectWeight" };
 
     private static readonly string[] CheckKeys =
     {
@@ -223,7 +227,10 @@ public sealed class MainForm : Form
             ["Pause2"] = s.Pause2,
             ["Pause3"] = s.Pause3,
             ["Left"] = s.Left,
-            ["Right"] = s.Right
+            ["Right"] = s.Right,
+            ["ParryWeight"] = s.ParryWeight,
+            ["CrushingWeight"] = s.CrushingWeight,
+            ["DeflectWeight"] = s.DeflectWeight
         };
         foreach (string key in CheckKeys) values[key] = GetCheck(s, key);
         return values;
@@ -286,10 +293,32 @@ public sealed class MainForm : Form
         s.Pause3 = ReadInt(values, "Pause3", s.Pause3);
         s.Left = ReadInt(values, "Left", s.Left);
         s.Right = ReadInt(values, "Right", s.Right);
+        s.ParryWeight = Math.Max(0, ReadInt(values, "ParryWeight", s.ParryWeight));
+        s.CrushingWeight = Math.Max(0, ReadInt(values, "CrushingWeight", s.CrushingWeight));
+        s.DeflectWeight = Math.Max(0, ReadInt(values, "DeflectWeight", s.DeflectWeight));
         foreach (string key in CheckKeys)
         {
             if (values.TryGetProperty(key, out _))
                 SetCheck(s, key, ReadBool(values, key, GetCheck(s, key)));
+        }
+
+        if (values.TryGetProperty("Peacekeeper", out _))
+        {
+            bool peacekeeperOn = ReadBool(values, "Peacekeeper", false);
+            if (peacekeeperOn && !_peacekeeperApplied)
+            {
+                _prevLeftDeflect = s.Left;
+                _prevRightDeflect = s.Right;
+                s.Left = PeacekeeperDeflectDelayMs;
+                s.Right = PeacekeeperDeflectDelayMs;
+                _peacekeeperApplied = true;
+            }
+            else if (!peacekeeperOn && _peacekeeperApplied)
+            {
+                s.Left = _prevLeftDeflect;
+                s.Right = _prevRightDeflect;
+                _peacekeeperApplied = false;
+            }
         }
     }
 
@@ -418,6 +447,9 @@ public sealed class MainForm : Form
             "Pause3" => s.Pause3.ToString(),
             "Left" => s.Left.ToString(),
             "Right" => s.Right.ToString(),
+            "ParryWeight" => s.ParryWeight.ToString(),
+            "CrushingWeight" => s.CrushingWeight.ToString(),
+            "DeflectWeight" => s.DeflectWeight.ToString(),
             _ => ""
         };
     }
@@ -434,6 +466,9 @@ public sealed class MainForm : Form
             case "Pause3": s.Pause3 = ToInt(value); break;
             case "Left": s.Left = ToInt(value); break;
             case "Right": s.Right = ToInt(value); break;
+            case "ParryWeight": s.ParryWeight = Math.Max(0, ToInt(value)); break;
+            case "CrushingWeight": s.CrushingWeight = Math.Max(0, ToInt(value)); break;
+            case "DeflectWeight": s.DeflectWeight = Math.Max(0, ToInt(value)); break;
         }
     }
 
