@@ -50,6 +50,7 @@ public sealed class MainForm : Form
     private bool _rDown;
     private bool _fKeyDown;
     private bool _webReady;
+    private bool _prevDpadDown;
 
     public MainForm()
     {
@@ -79,6 +80,19 @@ public sealed class MainForm : Form
         {
             ViGEmInput.TryRecover();
             _bot.FHeld = _fKeyDown || Input.HoldButtonHeld();
+
+            bool dpadDown = false;
+            if (ViGEmInput.TryGetSourceState(out var sourceState))
+                dpadDown = (sourceState.wButtons & 0x0002) != 0;
+            if (dpadDown && !_prevDpadDown)
+            {
+                _bot.S.Parry = !_bot.S.Parry;
+                _bot.ParryToggle = _bot.S.Parry;
+                SendSettings();
+                SendToast(_bot.S.Parry ? "Parry ON" : "Parry OFF", _bot.S.Parry ? "success" : "info");
+            }
+            _prevDpadDown = dpadDown;
+
             SendStatus();
         };
         _statusTimer.Start();
@@ -211,7 +225,8 @@ public sealed class MainForm : Form
             virtualState = ViGEmInput.IsAvailable ? "ON" : "OFF",
             loop = _bot.LoopHz,
             dodgeEnabled = _bot.S.Active1 == 1,
-            legit = _bot.S.Legit
+            legit = _bot.S.Legit,
+            parryToggle = _bot.ParryToggle
         };
     }
 
@@ -301,6 +316,7 @@ public sealed class MainForm : Form
             if (values.TryGetProperty(key, out _))
                 SetCheck(s, key, ReadBool(values, key, GetCheck(s, key)));
         }
+        _bot.ParryToggle = s.Parry;
 
         if (values.TryGetProperty("Peacekeeper", out _))
         {

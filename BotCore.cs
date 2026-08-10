@@ -15,6 +15,7 @@ public sealed class BotCore
     public volatile bool AttackIndicator;
     public volatile bool EHeld;
     public volatile bool FHeld;
+    public volatile bool ParryToggle = true;
     public volatile int ParryCount;
     public volatile string GuardDir = "-";
     public volatile bool Flash;
@@ -349,6 +350,12 @@ public sealed class BotCore
                 return;
             }
 
+            if (!ParryToggle)
+            {
+                S.Ubp = 0;
+                return;
+            }
+
             Input.MouseClick(Input.VK_RBUTTON);
             Sleep(700);
             return;
@@ -538,6 +545,7 @@ public sealed class BotCore
 
     private void SendParry()
     {
+        if (!ParryToggle) return;
         Input.MouseClick(Input.VK_RBUTTON);
         ParryCount++;
     }

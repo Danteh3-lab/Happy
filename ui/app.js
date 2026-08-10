@@ -61,7 +61,7 @@
     setMetric("metric-virtual", virtual, virtual === "ON");
     setMetric("metric-loop", loop + " Hz", loop > 0);
     $("#sidebar-input").textContent = mode + " / " + (source === "ON" ? "source " + sourceSlot : "idle");
-    $("#parry-count").textContent = String(state.status.parryCount || 0) + " parries";
+    $("#parry-count").textContent = String(state.status.parryCount || 0) + " parries · P-" + (state.status.parryToggle === false ? "OFF" : "ON");
   }
 
   function setMetric(id, text, good) {
@@ -118,7 +118,7 @@
     handleAction(button.dataset.action);
   }));
   $$('[data-setting]').forEach((control) => {
-    const eventName = control.type === "checkbox" ? "change" : "input";
+    const eventName = control.type === "checkbox" || control.tagName === "SELECT" ? "change" : "input";
     control.addEventListener(eventName, () => {
       if (hydrating) return;
       state.settings[control.dataset.setting] = control.type === "checkbox" ? control.checked : control.value;
