@@ -4,10 +4,6 @@ public sealed class BotCore
 {
     private const int LegitChancePercent = 55;
     private const int LegitCooldownMs = 1200;
-    private const int MarkerVariation = 10;
-    private const int IndicatorVariation = 10;
-    private const int FlashVariation = 12;
-    private const int MinSignalPixels = 2;
     private long _lastReactionTick;
     public readonly Settings S = new();
 
@@ -119,12 +115,12 @@ public sealed class BotCore
         return _frame.PixelSearch(x1, y1, x2, y2, r, g, b, variation, out px, out py);
     }
 
-    private bool CurrentPx(double x1, double y1, double x2, double y2, int r, int g, int b, int variation, out int px, out int py, int minMatches = 1)
+    private bool CurrentPx(double x1, double y1, double x2, double y2, int r, int g, int b, int variation, out int px, out int py)
     {
-        return _frame.PixelSearch(x1, y1, x2, y2, r, g, b, variation, out px, out py, minMatches);
+        return _frame.PixelSearch(x1, y1, x2, y2, r, g, b, variation, out px, out py);
     }
 
-    private bool FreshIndicatorPx(int r, int g, int b, int variation, out int px, out int py, int minMatches = 1)
+    private bool FreshIndicatorPx(int r, int g, int b, int variation, out int px, out int py)
     {
         px = py = 0;
         int left = (int)Math.Floor(Math.Min(X16, X17));
@@ -140,7 +136,7 @@ public sealed class BotCore
         _frame = ScreenCapture.Capture(_frame, new Rectangle(left, top, right - left, bottom - top));
         ScreenWidth = bounds.Width;
         ScreenHeight = bounds.Height;
-        if (!_frame.PixelSearch(0, 0, _frame.Width - 1, _frame.Height - 1, r, g, b, variation, out int localX, out int localY, minMatches))
+        if (!_frame.PixelSearch(0, 0, _frame.Width - 1, _frame.Height - 1, r, g, b, variation, out int localX, out int localY))
             return false;
 
         px = localX + left;
@@ -248,10 +244,10 @@ public sealed class BotCore
         ScreenWidth = _frame.Width;
         ScreenHeight = _frame.Height;
 
-        if (CurrentPx(X18, Y18, X19, Y19, 5, 131, 65, MarkerVariation, out _, out _, MinSignalPixels)) Box = 1;
+        if (CurrentPx(X18, Y18, X19, Y19, 5, 131, 65, 0, out _, out _)) Box = 1;
         else Box = 2;
 
-        if (CurrentPx(X8, Y8, X9, Y9, 5, 131, 65, MarkerVariation, out int ax, out int ay, MinSignalPixels))
+        if (CurrentPx(X8, Y8, X9, Y9, 5, 131, 65, 0, out int ax, out int ay))
         {
             Ax = ax;
             Ay = ay;
@@ -267,7 +263,7 @@ public sealed class BotCore
                           ax - 100 * B55, ay + 97.5 * Y55, ax - 15 * B55, ay + 227.7 * Y55,
                           ax - 117.6 * B55, ay + 10 * Y55, ax + 94.11 * B55, ay + 227.7 * Y55);
         }
-        else if (CurrentPx(X8, Y8, X9, Y9, 255, 255, 10, MarkerVariation, out ax, out ay, MinSignalPixels))
+        else if (CurrentPx(X8, Y8, X9, Y9, 255, 255, 10, 0, out ax, out ay))
         {
             Ax = ax;
             Ay = ay;
@@ -292,9 +288,9 @@ public sealed class BotCore
     private void SearchBot()
     {
         if (!S.Unblockables || !MarkerFound || !IsFHeld()) return;
-        if (!CurrentPx(X16, Y16, X17, Y17, 246, 98, 8, IndicatorVariation, out _, out _, MinSignalPixels)) return;
+        if (!CurrentPx(X16, Y16, X17, Y17, 246, 98, 8, 0, out _, out _)) return;
 
-        if (CurrentPx(X16, Y16, X17, Y17, 255, 34, 28, IndicatorVariation, out _, out _, MinSignalPixels))
+        if (CurrentPx(X16, Y16, X17, Y17, 255, 34, 28, 3, out _, out _))
         {
             S.Ubp = 1;
             _releaseTimer.Change(1000, Timeout.Infinite);
@@ -321,11 +317,11 @@ public sealed class BotCore
     private bool OrangeOwnsReaction()
     {
         if (!S.Unblockables || !MarkerFound || !IsFHeld()) return false;
-        if (!CurrentPx(X16, Y16, X17, Y17, 246, 98, 8, IndicatorVariation, out _, out _, MinSignalPixels))
+        if (!CurrentPx(X16, Y16, X17, Y17, 246, 98, 8, 0, out _, out _))
             return false;
 
         return S.Active1 != 0 ||
-               CurrentPx(X16, Y16, X17, Y17, 255, 34, 28, IndicatorVariation, out _, out _, MinSignalPixels);
+               CurrentPx(X16, Y16, X17, Y17, 255, 34, 28, 3, out _, out _);
     }
 
     private void AutoBlock()
@@ -333,7 +329,7 @@ public sealed class BotCore
         GuardDir = "-";
         AttackIndicator = false;
         if (!S.Autoblock || !MarkerFound) return;
-        if (!FreshIndicatorPx(255, 49, 41, IndicatorVariation, out int zx, out int zy, MinSignalPixels)) return;
+        if (!FreshIndicatorPx(255, 49, 41, 2, out int zx, out int zy)) return;
         AttackIndicator = true;
 
         if (zx > X4 && zy > Y4) { RGT(); return; }
@@ -361,13 +357,13 @@ public sealed class BotCore
             _frame = ScreenCapture.Capture(_frame);
             ScreenWidth = _frame.Width;
             ScreenHeight = _frame.Height;
-            if (CurrentPx(X16, Y16, X17, Y17, 255, 34, 28, IndicatorVariation, out _, out _, MinSignalPixels)) continue;
+            if (CurrentPx(X16, Y16, X17, Y17, 255, 34, 28, 3, out _, out _)) continue;
 
             Sleep(S.Pause1);
             _frame = ScreenCapture.Capture(_frame);
             ScreenWidth = _frame.Width;
             ScreenHeight = _frame.Height;
-            if (!CurrentPx(X16, Y16, X17, Y17, 246, 98, 8, IndicatorVariation, out _, out _, MinSignalPixels) || !S.Unblockables) continue;
+            if (!CurrentPx(X16, Y16, X17, Y17, 246, 98, 8, 0, out _, out _) || !S.Unblockables) continue;
 
             if (!ReactionAllowed())
             {
@@ -503,13 +499,13 @@ public sealed class BotCore
             _frame = ScreenCapture.Capture(_frame);
         ScreenWidth = _frame.Width;
         ScreenHeight = _frame.Height;
-        if (_frame.PixelSearch(0, 0, _frame.Width - 1, _frame.Height - 1, 255, 41, 34, FlashVariation, out _, out _, MinSignalPixels))
+        if (_frame.PixelSearch(0, 0, _frame.Width - 1, _frame.Height - 1, 255, 41, 34, 0, out _, out _))
         {
             Flash = false;
             return false;
         }
 
-        bool lightFlash = _frame.PixelSearch(0, 0, _frame.Width - 1, _frame.Height - 1, 255, 154, 141, FlashVariation, out _, out _, MinSignalPixels);
+        bool lightFlash = _frame.PixelSearch(0, 0, _frame.Width - 1, _frame.Height - 1, 255, 154, 141, 0, out _, out _);
         Flash = lightFlash;
         return Flash;
     }
