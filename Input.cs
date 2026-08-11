@@ -178,6 +178,7 @@ public static class Input
         uint down = vk == VK_LBUTTON ? 0x0002u : 0x0008u;
         uint up = vk == VK_LBUTTON ? 0x0004u : 0x0010u;
         Native.mouse_event(down, 0, 0, 0, UIntPtr.Zero);
+        Thread.Sleep(MouseTapDelayMs);
         Native.mouse_event(up, 0, 0, 0, UIntPtr.Zero);
         LastSendResult = 1;
         LastSendError = 0;

@@ -4,6 +4,10 @@ public sealed class BotCore
 {
     private const int LegitChancePercent = 55;
     private const int LegitCooldownMs = 1200;
+    private const int MarkerVariation = 10;
+    private const int IndicatorVariation = 10;
+    private const int FlashVariation = 12;
+    private const int MinSignalPixels = 2;
     private long _lastReactionTick;
     public readonly Settings S = new();
 
@@ -84,8 +88,14 @@ public sealed class BotCore
                     ScreenWidth = _frame.Width;
                     ScreenHeight = _frame.Height;
                     Calculate();
-                    SearchBot();
-                    AutoBlock();
+                    if (OrangeOwnsReaction())
+                        SearchBot();
+                    else
+                    {
+                        AutoBlock();
+                        if (!GuardOwnsReaction())
+                            SearchBot();
+                    }
                     LoopHz = (int)(1000.0 / Math.Max(1.0, sw.Elapsed.TotalMilliseconds));
                 }
                 catch (OperationCanceledException)
@@ -109,12 +119,12 @@ public sealed class BotCore
         return _frame.PixelSearch(x1, y1, x2, y2, r, g, b, variation, out px, out py);
     }
 
-    private bool CurrentPx(double x1, double y1, double x2, double y2, int r, int g, int b, int variation, out int px, out int py)
+    private bool CurrentPx(double x1, double y1, double x2, double y2, int r, int g, int b, int variation, out int px, out int py, int minMatches = 1)
     {
-        return _frame.PixelSearch(x1, y1, x2, y2, r, g, b, variation, out px, out py);
+        return _frame.PixelSearch(x1, y1, x2, y2, r, g, b, variation, out px, out py, minMatches);
     }
 
-    private bool FreshIndicatorPx(int r, int g, int b, int variation, out int px, out int py)
+    private bool FreshIndicatorPx(int r, int g, int b, int variation, out int px, out int py, int minMatches = 1)
     {
         px = py = 0;
         int left = (int)Math.Floor(Math.Min(X16, X17));
@@ -130,7 +140,7 @@ public sealed class BotCore
         _frame = ScreenCapture.Capture(_frame, new Rectangle(left, top, right - left, bottom - top));
         ScreenWidth = bounds.Width;
         ScreenHeight = bounds.Height;
-        if (!_frame.PixelSearch(0, 0, _frame.Width - 1, _frame.Height - 1, r, g, b, variation, out int localX, out int localY))
+        if (!_frame.PixelSearch(0, 0, _frame.Width - 1, _frame.Height - 1, r, g, b, variation, out int localX, out int localY, minMatches))
             return false;
 
         px = localX + left;
@@ -235,14 +245,13 @@ public sealed class BotCore
 
     private void Calculate()
     {
-        _frame = ScreenCapture.Capture(_frame);
         ScreenWidth = _frame.Width;
         ScreenHeight = _frame.Height;
 
-        if (CurrentPx(X18, Y18, X19, Y19, 5, 131, 65, 0, out _, out _)) Box = 1;
+        if (CurrentPx(X18, Y18, X19, Y19, 5, 131, 65, MarkerVariation, out _, out _, MinSignalPixels)) Box = 1;
         else Box = 2;
 
-        if (CurrentPx(X8, Y8, X9, Y9, 5, 131, 65, 0, out int ax, out int ay))
+        if (CurrentPx(X8, Y8, X9, Y9, 5, 131, 65, MarkerVariation, out int ax, out int ay, MinSignalPixels))
         {
             Ax = ax;
             Ay = ay;
@@ -253,12 +262,12 @@ public sealed class BotCore
                           ax - 200 * B55, ay + 195 * Y55, ax - 30 * B55, ay + 430 * Y55,
                           ax - 200 * B55, ay + 20 * Y55, ax + 160 * B55, ay + 430 * Y55);
             else
-                SetCoords(ax - 100 * B55, ay + 10 * B55, ax + 80 * Y55, ay + 85 * Y55,
+                SetCoords(ax - 100 * B55, ay + 10 * Y55, ax + 80 * B55, ay + 85 * Y55,
                           ax + 2.5 * B55, ay + 97.5 * Y55, ax + 80 * B55, ay + 227.7 * Y55,
                           ax - 100 * B55, ay + 97.5 * Y55, ax - 15 * B55, ay + 227.7 * Y55,
                           ax - 117.6 * B55, ay + 10 * Y55, ax + 94.11 * B55, ay + 227.7 * Y55);
         }
-        else if (CurrentPx(X8, Y8, X9, Y9, 255, 255, 10, 0, out ax, out ay))
+        else if (CurrentPx(X8, Y8, X9, Y9, 255, 255, 10, MarkerVariation, out ax, out ay, MinSignalPixels))
         {
             Ax = ax;
             Ay = ay;
@@ -269,7 +278,7 @@ public sealed class BotCore
                           ax - 175 * B55, ay + 215 * Y55, ax - 5 * B55, ay + 430 * Y55,
                           ax - 175 * B55, ay + 65 * Y55, ax + 185 * B55, ay + 430 * Y55);
             else
-                SetCoords(ax - 87.5 * B55, ay + 35 * B55, ax + 92.5 * Y55, ay + 92.5 * Y55,
+                SetCoords(ax - 87.5 * B55, ay + 35 * Y55, ax + 92.5 * B55, ay + 92.5 * Y55,
                           ax + 15 * B55, ay + 107.5 * Y55, ax + 92.5 * B55, ay + 215 * Y55,
                           ax - 87.5 * B55, ay + 107.5 * Y55, ax - 2.5 * B55, ay + 215 * Y55,
                           ax - 87.5 * B55, ay + 35 * Y55, ax + 92.5 * B55, ay + 215 * Y55);
@@ -282,10 +291,10 @@ public sealed class BotCore
 
     private void SearchBot()
     {
-        if (!S.Unblockables || !IsFHeld()) return;
-        if (!CurrentPx(X16, Y16, X17, Y17, 246, 98, 8, 0, out _, out _)) return;
+        if (!S.Unblockables || !MarkerFound || !IsFHeld()) return;
+        if (!CurrentPx(X16, Y16, X17, Y17, 246, 98, 8, IndicatorVariation, out _, out _, MinSignalPixels)) return;
 
-        if (CurrentPx(X16, Y16, X17, Y17, 255, 34, 28, 3, out _, out _))
+        if (CurrentPx(X16, Y16, X17, Y17, 255, 34, 28, IndicatorVariation, out _, out _, MinSignalPixels))
         {
             S.Ubp = 1;
             _releaseTimer.Change(1000, Timeout.Infinite);
@@ -309,18 +318,34 @@ public sealed class BotCore
         if (S.Ch("Jiangjun")) Dodge7();
     }
 
+    private bool OrangeOwnsReaction()
+    {
+        if (!S.Unblockables || !MarkerFound || !IsFHeld()) return false;
+        if (!CurrentPx(X16, Y16, X17, Y17, 246, 98, 8, IndicatorVariation, out _, out _, MinSignalPixels))
+            return false;
+
+        return S.Active1 != 0 ||
+               CurrentPx(X16, Y16, X17, Y17, 255, 34, 28, IndicatorVariation, out _, out _, MinSignalPixels);
+    }
+
     private void AutoBlock()
     {
         GuardDir = "-";
         AttackIndicator = false;
-        if (!S.Autoblock) return;
-        if (!FreshIndicatorPx(255, 49, 41, 2, out int zx, out int zy)) return;
+        if (!S.Autoblock || !MarkerFound) return;
+        if (!FreshIndicatorPx(255, 49, 41, IndicatorVariation, out int zx, out int zy, MinSignalPixels)) return;
         AttackIndicator = true;
 
         if (zx > X4 && zy > Y4) { RGT(); return; }
         if (zx < X7 && zy > Y4) { LFT(); return; }
         if (zy > Y2 && zy < Y3) { TOP(); return; }
         GuardDir = "UNKNOWN";
+    }
+
+    private bool GuardOwnsReaction()
+    {
+        if (!AttackIndicator || GuardDir is "-" or "UNKNOWN") return false;
+        return (IsEHeld() && HasEAction()) || (IsFHeld() && HasFAction());
     }
 
     private void UbParry()
@@ -336,13 +361,13 @@ public sealed class BotCore
             _frame = ScreenCapture.Capture(_frame);
             ScreenWidth = _frame.Width;
             ScreenHeight = _frame.Height;
-            if (CurrentPx(X16, Y16, X17, Y17, 255, 34, 28, 3, out _, out _)) continue;
+            if (CurrentPx(X16, Y16, X17, Y17, 255, 34, 28, IndicatorVariation, out _, out _, MinSignalPixels)) continue;
 
             Sleep(S.Pause1);
             _frame = ScreenCapture.Capture(_frame);
             ScreenWidth = _frame.Width;
             ScreenHeight = _frame.Height;
-            if (!CurrentPx(X16, Y16, X17, Y17, 246, 98, 8, 0, out _, out _) || !S.Unblockables) continue;
+            if (!CurrentPx(X16, Y16, X17, Y17, 246, 98, 8, IndicatorVariation, out _, out _, MinSignalPixels) || !S.Unblockables) continue;
 
             if (!ReactionAllowed())
             {
@@ -478,13 +503,13 @@ public sealed class BotCore
             _frame = ScreenCapture.Capture(_frame);
         ScreenWidth = _frame.Width;
         ScreenHeight = _frame.Height;
-        if (_frame.PixelSearch(0, 0, _frame.Width - 1, _frame.Height - 1, 255, 41, 34, 0, out _, out _))
+        if (_frame.PixelSearch(0, 0, _frame.Width - 1, _frame.Height - 1, 255, 41, 34, FlashVariation, out _, out _, MinSignalPixels))
         {
             Flash = false;
             return false;
         }
 
-        bool lightFlash = _frame.PixelSearch(0, 0, _frame.Width - 1, _frame.Height - 1, 255, 154, 141, 0, out _, out _);
+        bool lightFlash = _frame.PixelSearch(0, 0, _frame.Width - 1, _frame.Height - 1, 255, 154, 141, FlashVariation, out _, out _, MinSignalPixels);
         Flash = lightFlash;
         return Flash;
     }

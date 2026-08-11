@@ -11,17 +11,19 @@ public sealed class ScreenFrame
     public int Height;
     public int Stride;
 
-    public bool PixelSearch(double x1, double y1, double x2, double y2, int r, int g, int b, int variation, out int px, out int py)
+    public bool PixelSearch(double x1, double y1, double x2, double y2, int r, int g, int b, int variation, out int px, out int py, int minMatches = 1)
     {
         px = 0;
         py = 0;
         if (Width == 0 || Height == 0) return false;
+        minMatches = Math.Max(1, minMatches);
 
         int sx = Math.Clamp((int)Math.Min(x1, x2), 0, Width - 1);
         int ex = Math.Clamp((int)Math.Max(x1, x2), 0, Width - 1);
         int sy = Math.Clamp((int)Math.Min(y1, y2), 0, Height - 1);
         int ey = Math.Clamp((int)Math.Max(y1, y2), 0, Height - 1);
 
+        int matches = 0;
         for (int y = sy; y <= ey; y++)
         {
             int row = y * Stride;
@@ -32,9 +34,12 @@ public sealed class ScreenFrame
                     Math.Abs(Buffer[i + 1] - g) <= variation &&
                     Math.Abs(Buffer[i] - b) <= variation)
                 {
-                    px = x;
-                    py = y;
-                    return true;
+                    if (matches++ == 0)
+                    {
+                        px = x;
+                        py = y;
+                    }
+                    if (matches >= minMatches) return true;
                 }
             }
         }
