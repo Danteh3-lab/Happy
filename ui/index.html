@@ -116,14 +116,15 @@
           <div class="content-grid stack">
             <article class="card">
               <div class="card-head"><div><div class="eyebrow">AUTO FEATURES</div><h3>Reaction layers</h3></div><span class="icon-chip">A</span></div>
-              <div class="toggle-list">
-                <label class="toggle-row"><input type="checkbox" data-setting="Unblockables"><span class="toggle-ui"></span><span><b>Dodge bashes / unblockables</b><small>Orange-only dodge, orange + red uses RT</small></span></label>
+               <div class="toggle-list">
+                 <label class="toggle-row"><input type="checkbox" data-setting="Unblockables"><span class="toggle-ui"></span><span><b>Dodge bashes / unblockables</b><small>Automatic orange dodge; F5 enables orange parry</small></span></label>
                 <label class="toggle-row"><input type="checkbox" data-setting="Autoblock"><span class="toggle-ui"></span><span><b>Auto block</b><small>Follow red guard indicators</small></span></label>
                 <label class="toggle-row"><input type="checkbox" data-setting="Lightbash"><span class="toggle-ui"></span><span><b>Bash after dodge</b><small>Guard break follow-up</small></span></label>
                 <label class="toggle-row"><input type="checkbox" data-setting="DodgeH"><span class="toggle-ui"></span><span><b>Heavy after dodge</b><small>Send RT after the evade</small></span></label>
-                <label class="toggle-row"><input type="checkbox" data-setting="DodgeL"><span class="toggle-ui"></span><span><b>Light after dodge</b><small>Send RB after the evade</small></span></label>
-              </div>
-            </article>
+                 <label class="toggle-row"><input type="checkbox" data-setting="DodgeL"><span class="toggle-ui"></span><span><b>Light after dodge</b><small>Send RB after the evade</small></span></label>
+               </div>
+               <button class="btn btn-secondary full btn-toggle" id="orange-parry-button" data-action="toggle-orange-parry">Orange parry: OFF · F5</button>
+             </article>
             <article class="card">
               <div class="card-head"><div><div class="eyebrow">F HOLD</div><h3>Primary reactions</h3></div><span class="icon-chip">F</span></div>
               <div class="toggle-list">
@@ -132,14 +133,9 @@
                 <label class="toggle-row"><input type="checkbox" data-setting="Deflect"><span class="toggle-ui"></span><span><b>Auto deflect</b><small>Directional dodge</small></span></label>
                 <label class="toggle-row"><input type="checkbox" data-setting="YourHero"><span class="toggle-ui"></span><span><b>Your hero</b><small>Allow selected hero actions</small></span></label>
                 <label class="toggle-row"><input type="checkbox" data-setting="Nohero"><span class="toggle-ui"></span><span><b>No hero mode</b><small>Force generic actions</small></span></label>
-                <label class="toggle-row"><input type="checkbox" data-setting="Legit"><span class="toggle-ui"></span><span><b>Legit mode</b><small>Throttled, probabilistic reactions</small></span></label>
-              </div>
-              <div class="weight-heading"><span>WEIGHTED MIX</span><small>Used when 2+ primary reactions are enabled</small></div>
-              <div class="weight-grid">
-                <label class="weight-field"><span>Parry</span><input type="number" min="0" data-setting="ParryWeight"></label>
-                <label class="weight-field"><span>Crushing</span><input type="number" min="0" data-setting="CrushingWeight"></label>
-                <label class="weight-field"><span>Deflect</span><input type="number" min="0" data-setting="DeflectWeight"></label>
-              </div>
+                 <label class="toggle-row"><input type="checkbox" data-setting="Legit"><span class="toggle-ui"></span><span><b>Legit mode</b><small>Throttled reactions</small></span></label>
+               </div>
+               <div class="weight-heading"><span>DETERMINISTIC ORDER</span><small>Parry, then crushing counter, then deflect</small></div>
             </article>
             <article class="card compact-card">
               <div class="card-head"><div><div class="eyebrow">E HOLD</div><h3>Secondary reactions</h3></div><span class="icon-chip">E</span></div>
@@ -183,7 +179,7 @@
             </article>
             <article class="card">
               <div class="card-head"><div><div class="eyebrow">REACTION WINDOWS</div><h3>Delays</h3></div><span class="icon-chip">T</span></div>
-              <div class="field-grid two"><label class="field"><span>Evade delay</span><input type="number" min="0" data-setting="Pause"></label><label class="field"><span>Feint check</span><input type="number" min="0" data-setting="Pause1"></label><label class="field"><span>Mouse delay</span><input type="number" min="0" data-setting="Pause2"></label><label class="field"><span>Block delay</span><input type="number" min="0" data-setting="Pause3"></label><label class="field"><span>Left deflect</span><input type="number" min="0" data-setting="Left"></label><label class="field"><span>Right deflect</span><input type="number" min="0" data-setting="Right"></label></div>
+              <div class="field-grid two"><label class="field"><span>Evade delay</span><input type="number" min="0" data-setting="Pause"></label><label class="field"><span>Feint check</span><input type="number" min="0" data-setting="Pause1"></label><label class="field"><span>Mouse delay</span><input type="number" min="0" data-setting="Pause2"></label><label class="field"><span>Block delay</span><input type="number" min="0" data-setting="Pause3"></label><label class="field"><span>Parry delay</span><input type="number" min="0" data-setting="ParryDelay"></label><label class="field"><span>Left deflect</span><input type="number" min="0" data-setting="Left"></label><label class="field"><span>Right deflect</span><input type="number" min="0" data-setting="Right"></label></div>
             </article>
             <article class="card compact-card">
               <div class="card-head"><div><div class="eyebrow">DIRECTIONAL FOLLOW-UP</div><h3>Evade direction</h3></div><span class="icon-chip">D</span></div>
@@ -196,8 +192,8 @@
           <div class="page-heading stack"><div><div class="eyebrow">REFERENCE / GUIDE</div><h1>Quick guide</h1><p>Keep the game and the input bridge in the same frame of reference.</p></div><button class="btn btn-secondary" data-action="howto">Open setup guide</button></div>
           <div class="guide-grid stack">
             <article class="card guide-card"><div class="card-head"><div><div class="eyebrow">SETUP</div><h3>Before starting</h3></div><span class="icon-chip">1</span></div><ol><li>Use fullscreen or borderless fullscreen, not windowed mode.</li><li>Match the resolution fields to the game render.</li><li>Set FOV to 81 and contrast to 55.</li><li>Hide physical/source controllers in HidHide and leave the ViGEm output visible.</li><li>Choose features and your hero, then press Start bot.</li></ol></article>
-            <article class="card guide-card"><div class="card-head"><div><div class="eyebrow">CONTROLS</div><h3>Hotkeys and holds</h3></div><span class="icon-chip">2</span></div><div class="hotkey-list"><div><kbd>F2</kbd><span>Dodge automation on/off</span></div><div><kbd>F3</kbd><span>Cycle F-mode action</span></div><div><kbd>F4</kbd><span>Cycle E-mode action</span></div><div><kbd>F6</kbd><span>Pause/resume</span></div><div><kbd>E / F</kbd><span>Hold for parry actions</span></div><div><kbd>LT</kbd><span>Hold for orange automation</span></div><div><kbd>DPAD</kbd><span>Down = parry on/off</span></div></div></article>
-            <article class="card guide-card wide"><div class="card-head"><div><div class="eyebrow">MAPPING</div><h3>Virtual controller path</h3></div><span class="badge badge-success">VIGEM</span></div><div class="mapping-grid"><div><b>RT</b><span>Heavy / parry</span></div><div><b>RB</b><span>Light</span></div><div><b>X</b><span>Guard break</span></div><div><b>A</b><span>Dodge</span></div><div><b>LT</b><span>Orange hold gate</span></div><div><b>Right stick</b><span>Guard direction</span></div></div></article>
+            <article class="card guide-card"><div class="card-head"><div><div class="eyebrow">CONTROLS</div><h3>Hotkeys and holds</h3></div><span class="icon-chip">2</span></div><div class="hotkey-list"><div><kbd>F2</kbd><span>Dodge automation on/off</span></div><div><kbd>F3</kbd><span>Cycle F-mode action</span></div><div><kbd>F4</kbd><span>Cycle E-mode action</span></div><div><kbd>F5</kbd><span>Orange parry on/off</span></div><div><kbd>F6</kbd><span>Pause/resume</span></div><div><kbd>E / F</kbd><span>Hold for parry actions</span></div><div><kbd>LT</kbd><span>Optional alternate F hold</span></div><div><kbd>DPAD</kbd><span>Down = parry on/off</span></div></div></article>
+            <article class="card guide-card wide"><div class="card-head"><div><div class="eyebrow">MAPPING</div><h3>Virtual controller path</h3></div><span class="badge badge-success">VIGEM</span></div><div class="mapping-grid"><div><b>RT</b><span>Heavy / parry</span></div><div><b>RB</b><span>Light</span></div><div><b>X</b><span>Guard break</span></div><div><b>A</b><span>Dodge</span></div><div><b>LT</b><span>Alternate F hold</span></div><div><b>Right stick</b><span>Guard direction</span></div></div></article>
           </div>
         </section>
       </main>

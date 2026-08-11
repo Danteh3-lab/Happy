@@ -16,6 +16,7 @@ public sealed class BotCore
     public volatile bool EHeld;
     public volatile bool FHeld;
     public volatile bool ParryToggle = true;
+    public volatile bool OrangeParry;
     public volatile int ParryCount;
     public volatile string GuardDir = "-";
     public volatile bool Flash;
@@ -84,14 +85,8 @@ public sealed class BotCore
                     ScreenWidth = _frame.Width;
                     ScreenHeight = _frame.Height;
                     Calculate();
-                    if (OrangeOwnsReaction())
-                        SearchBot();
-                    else
-                    {
-                        AutoBlock();
-                        if (!GuardOwnsReaction())
-                            SearchBot();
-                    }
+                    SearchBot();
+                    AutoBlock();
                     LoopHz = (int)(1000.0 / Math.Max(1.0, sw.Elapsed.TotalMilliseconds));
                 }
                 catch (OperationCanceledException)
@@ -287,7 +282,7 @@ public sealed class BotCore
 
     private void SearchBot()
     {
-        if (!S.Unblockables || !MarkerFound || !IsFHeld()) return;
+        if (!S.Unblockables || !MarkerFound) return;
         if (!CurrentPx(X16, Y16, X17, Y17, 246, 98, 8, 0, out _, out _)) return;
 
         if (CurrentPx(X16, Y16, X17, Y17, 255, 34, 28, 3, out _, out _))
@@ -314,16 +309,6 @@ public sealed class BotCore
         if (S.Ch("Jiangjun")) Dodge7();
     }
 
-    private bool OrangeOwnsReaction()
-    {
-        if (!S.Unblockables || !MarkerFound || !IsFHeld()) return false;
-        if (!CurrentPx(X16, Y16, X17, Y17, 246, 98, 8, 0, out _, out _))
-            return false;
-
-        return S.Active1 != 0 ||
-               CurrentPx(X16, Y16, X17, Y17, 255, 34, 28, 3, out _, out _);
-    }
-
     private void AutoBlock()
     {
         GuardDir = "-";
@@ -336,12 +321,6 @@ public sealed class BotCore
         if (zx < X7 && zy > Y4) { LFT(); return; }
         if (zy > Y2 && zy < Y3) { TOP(); return; }
         GuardDir = "UNKNOWN";
-    }
-
-    private bool GuardOwnsReaction()
-    {
-        if (!AttackIndicator || GuardDir is "-" or "UNKNOWN") return false;
-        return (IsEHeld() && HasEAction()) || (IsFHeld() && HasFAction());
     }
 
     private void UbParry()
@@ -364,6 +343,11 @@ public sealed class BotCore
             ScreenWidth = _frame.Width;
             ScreenHeight = _frame.Height;
             if (!CurrentPx(X16, Y16, X17, Y17, 246, 98, 8, 0, out _, out _) || !S.Unblockables) continue;
+            if (S.Active1 == 0)
+            {
+                S.Ubp = 0;
+                return;
+            }
 
             if (!ReactionAllowed())
             {
@@ -371,13 +355,35 @@ public sealed class BotCore
                 return;
             }
 
-            if (!ParryToggle)
+            if (Input.IsDown(Input.VK_W))
             {
-                S.Ubp = 0;
+                if (S.Ch("Blackprior"))
+                {
+                    Input.KeyTap(Input.VK_NUMPAD9);
+                    Sleep(2300);
+                    return;
+                }
+
+                WithBlock(() =>
+                {
+                    Input.KeyDown(Input.VK_DOWN);
+                    Input.KeyTap(Input.VK_SPACE);
+                    Input.KeyUp(Input.VK_DOWN);
+                });
+                Sleep(700);
                 return;
             }
 
-            Input.MouseClick(Input.VK_RBUTTON);
+            if (OrangeParry)
+            {
+                Sleep(S.ParryDelay);
+                Input.MouseClick(Input.VK_RBUTTON);
+                ParryCount++;
+            }
+            else
+            {
+                Input.KeyTap(Input.VK_SPACE);
+            }
             Sleep(700);
             return;
         }
@@ -526,36 +532,40 @@ public sealed class BotCore
 
     private bool HasFAction() => S.Parry || S.Crushing || S.Deflect || HasHeroAction();
 
-    private bool TryWeightedFReaction()
+    private bool TryPrimaryFReaction()
     {
-        int enabled = (S.Parry ? 1 : 0) + (S.Crushing ? 1 : 0) + (S.Deflect ? 1 : 0);
-        if (enabled < 2) return false;
-
-        int parryWeight = S.Parry ? Math.Max(0, S.ParryWeight) : 0;
-        int crushingWeight = S.Crushing ? Math.Max(0, S.CrushingWeight) : 0;
-        int deflectWeight = S.Deflect ? Math.Max(0, S.DeflectWeight) : 0;
-        int total = parryWeight + crushingWeight + deflectWeight;
-        if (total == 0) return false;
-
-        int roll = Random.Shared.Next(total);
-        if (roll < parryWeight)
+        if (S.Parry)
         {
+            if (GuardDir == "TOP" && YourChar("Warden"))
+            {
+                Input.MouseClick(Input.VK_LBUTTON);
+                Sleep(500);
+                Input.MouseClick(Input.VK_LBUTTON);
+                Sleep(850);
+                return true;
+            }
+
             SendParry();
             Sleep(850);
             return true;
         }
-        roll -= parryWeight;
-        if (roll < crushingWeight)
+
+        if (S.Crushing)
         {
             Input.MouseClick(Input.VK_LBUTTON);
             Sleep(1200);
             return true;
         }
 
-        if (GuardDir == "LFT") DeflectLeft();
-        else if (GuardDir == "RGT") DeflectRight();
-        else DeflectBack();
-        return true;
+        if (S.Deflect)
+        {
+            if (GuardDir == "LFT") DeflectLeft();
+            else if (GuardDir == "RGT") DeflectRight();
+            else DeflectBack();
+            return true;
+        }
+
+        return false;
     }
 
     private bool HasHeroAction() =>
@@ -567,6 +577,7 @@ public sealed class BotCore
     private void SendParry()
     {
         if (!ParryToggle) return;
+        Sleep(S.ParryDelay);
         Input.MouseClick(Input.VK_RBUTTON);
         ParryCount++;
     }
@@ -643,14 +654,7 @@ public sealed class BotCore
                 if (!AttackFlashing()) continue;
                 if (!ReactionAllowed()) { while (AttackFlashing()) { } continue; }
 
-                if (YourChar("Warden"))
-                {
-                    Input.MouseClick(Input.VK_LBUTTON);
-                    Sleep(500);
-                    Input.MouseClick(Input.VK_LBUTTON);
-                    Sleep(850);
-                    return;
-                }
+                if (TryPrimaryFReaction()) return;
                 if (YourChar("Blackprior")) { Input.KeyTap(Input.VK_NUMPAD9); Sleep(2000); return; }
                 if (YourChar("Warlord")) { Input.KeyTap(Input.VK_C); Input.MouseClick(Input.VK_LBUTTON); Sleep(250); return; }
                 if (YourChar("Shaman"))
@@ -680,10 +684,6 @@ public sealed class BotCore
                     Sleep(250);
                     return;
                 }
-                if (TryWeightedFReaction()) return;
-                if (S.Parry) { SendParry(); Sleep(850); return; }
-                if (S.Crushing) { Input.MouseClick(Input.VK_LBUTTON); Sleep(1200); return; }
-                if (S.Deflect) { DeflectBack(); return; }
             }
         }
     }
@@ -713,8 +713,7 @@ public sealed class BotCore
                 if (!AttackFlashing()) continue;
                 if (!ReactionAllowed()) { while (AttackFlashing()) { } continue; }
 
-                if (TryWeightedFReaction()) return;
-                if (S.Parry) { SendParry(); Sleep(850); return; }
+                if (TryPrimaryFReaction()) return;
                 if (YourChar("Blackprior")) { Input.KeyTap(Input.VK_NUMPAD9); Sleep(2000); return; }
                 if (YourChar("Warlord")) { Input.KeyTap(Input.VK_C); Input.MouseClick(Input.VK_LBUTTON); Sleep(250); return; }
                 if (YourChar("Shaman"))
@@ -744,8 +743,6 @@ public sealed class BotCore
                     Sleep(250);
                     return;
                 }
-                if (S.Crushing) { Input.MouseClick(Input.VK_LBUTTON); Sleep(1200); return; }
-                if (S.Deflect) { DeflectLeft(); return; }
             }
         }
     }
@@ -775,8 +772,7 @@ public sealed class BotCore
                 if (!AttackFlashing()) continue;
                 if (!ReactionAllowed()) { while (AttackFlashing()) { } continue; }
 
-                if (TryWeightedFReaction()) return;
-                if (S.Parry) { SendParry(); Sleep(850); return; }
+                if (TryPrimaryFReaction()) return;
                 if (YourChar("Blackprior")) { Input.KeyTap(Input.VK_NUMPAD9); Sleep(2000); return; }
                 if (YourChar("Warlord")) { Input.KeyTap(Input.VK_C); Input.MouseClick(Input.VK_LBUTTON); Sleep(250); return; }
                 if (YourChar("Shaman"))
@@ -806,8 +802,6 @@ public sealed class BotCore
                     Sleep(250);
                     return;
                 }
-                if (S.Crushing) { Input.MouseClick(Input.VK_LBUTTON); Sleep(2000); return; }
-                if (S.Deflect) { DeflectRight(); return; }
             }
         }
     }

@@ -8,7 +8,7 @@ namespace HappyBot;
 
 public sealed class MainForm : Form
 {
-    private const int IdF1 = 1, IdF2 = 2, IdF3 = 3, IdF4 = 4, IdF6 = 6;
+    private const int IdF1 = 1, IdF2 = 2, IdF3 = 3, IdF4 = 4, IdF5 = 5, IdF6 = 6;
     private const int PeacekeeperDeflectDelayMs = 100;
     private int _prevLeftDeflect;
     private int _prevRightDeflect;
@@ -16,7 +16,7 @@ public sealed class MainForm : Form
     private const int WmNcLButtonDown = 0xA1;
     private const int HtCaption = 0x2;
 
-    private static readonly string[] EditKeys = { "res1", "res2", "Pause", "Pause1", "Pause2", "Pause3", "Left", "Right", "ParryWeight", "CrushingWeight", "DeflectWeight" };
+    private static readonly string[] EditKeys = { "res1", "res2", "Pause", "Pause1", "Pause2", "Pause3", "ParryDelay", "Left", "Right" };
 
     private static readonly string[] CheckKeys =
     {
@@ -188,6 +188,9 @@ public sealed class MainForm : Form
                 case "drag":
                     DragWindow();
                     break;
+                case "orange-parry":
+                    ToggleOrangeParry();
+                    break;
             }
         }
         catch (Exception ex)
@@ -226,7 +229,8 @@ public sealed class MainForm : Form
             loop = _bot.LoopHz,
             dodgeEnabled = _bot.S.Active1 == 1,
             legit = _bot.S.Legit,
-            parryToggle = _bot.ParryToggle
+            parryToggle = _bot.ParryToggle,
+            orangeParry = _bot.OrangeParry
         };
     }
 
@@ -241,11 +245,9 @@ public sealed class MainForm : Form
             ["Pause1"] = s.Pause1,
             ["Pause2"] = s.Pause2,
             ["Pause3"] = s.Pause3,
+            ["ParryDelay"] = s.ParryDelay,
             ["Left"] = s.Left,
-            ["Right"] = s.Right,
-            ["ParryWeight"] = s.ParryWeight,
-            ["CrushingWeight"] = s.CrushingWeight,
-            ["DeflectWeight"] = s.DeflectWeight
+            ["Right"] = s.Right
         };
         foreach (string key in CheckKeys) values[key] = GetCheck(s, key);
         return values;
@@ -306,11 +308,9 @@ public sealed class MainForm : Form
         s.Pause1 = ReadInt(values, "Pause1", s.Pause1);
         s.Pause2 = ReadInt(values, "Pause2", s.Pause2);
         s.Pause3 = ReadInt(values, "Pause3", s.Pause3);
+        s.ParryDelay = Math.Max(0, ReadInt(values, "ParryDelay", s.ParryDelay));
         s.Left = ReadInt(values, "Left", s.Left);
         s.Right = ReadInt(values, "Right", s.Right);
-        s.ParryWeight = Math.Max(0, ReadInt(values, "ParryWeight", s.ParryWeight));
-        s.CrushingWeight = Math.Max(0, ReadInt(values, "CrushingWeight", s.CrushingWeight));
-        s.DeflectWeight = Math.Max(0, ReadInt(values, "DeflectWeight", s.DeflectWeight));
         foreach (string key in CheckKeys)
         {
             if (values.TryGetProperty(key, out _))
@@ -461,11 +461,9 @@ public sealed class MainForm : Form
             "Pause1" => s.Pause1.ToString(),
             "Pause2" => s.Pause2.ToString(),
             "Pause3" => s.Pause3.ToString(),
+            "ParryDelay" => s.ParryDelay.ToString(),
             "Left" => s.Left.ToString(),
             "Right" => s.Right.ToString(),
-            "ParryWeight" => s.ParryWeight.ToString(),
-            "CrushingWeight" => s.CrushingWeight.ToString(),
-            "DeflectWeight" => s.DeflectWeight.ToString(),
             _ => ""
         };
     }
@@ -480,11 +478,9 @@ public sealed class MainForm : Form
             case "Pause1": s.Pause1 = ToInt(value); break;
             case "Pause2": s.Pause2 = ToInt(value); break;
             case "Pause3": s.Pause3 = ToInt(value); break;
+            case "ParryDelay": s.ParryDelay = Math.Max(0, ToInt(value)); break;
             case "Left": s.Left = ToInt(value); break;
             case "Right": s.Right = ToInt(value); break;
-            case "ParryWeight": s.ParryWeight = Math.Max(0, ToInt(value)); break;
-            case "CrushingWeight": s.CrushingWeight = Math.Max(0, ToInt(value)); break;
-            case "DeflectWeight": s.DeflectWeight = Math.Max(0, ToInt(value)); break;
         }
     }
 
@@ -535,7 +531,6 @@ public sealed class MainForm : Form
         base.OnHandleCreated(e);
         for (int i = 0; i < 6; i++)
         {
-            if (i == 4) continue;
             Native.RegisterHotKey(Handle, i + 1, 0, (uint)(0x70 + i));
         }
     }
@@ -544,7 +539,6 @@ public sealed class MainForm : Form
     {
         for (int i = 0; i < 6; i++)
         {
-            if (i == 4) continue;
             Native.UnregisterHotKey(Handle, i + 1);
         }
         base.OnHandleDestroyed(e);
@@ -621,11 +615,21 @@ public sealed class MainForm : Form
                 else if (s.NMode == 2) { s.Active9 = 0; s.Active11 = 1; s.Active12 = 0; Sound("buttonclick"); }
                 else if (s.NMode == 3) { s.Active9 = 0; s.Active11 = 0; s.Active12 = 1; Sound("buttonclick"); s.NMode = 0; }
                 break;
+            case IdF5:
+                ToggleOrangeParry();
+                break;
             case IdF6:
                 _bot.TogglePause();
                 Sound("buttonclick");
                 break;
         }
+        SendStatus();
+    }
+
+    private void ToggleOrangeParry()
+    {
+        _bot.OrangeParry = !_bot.OrangeParry;
+        SendToast(_bot.OrangeParry ? "Orange parry ON" : "Orange parry OFF", _bot.OrangeParry ? "success" : "info");
         SendStatus();
     }
 
@@ -661,12 +665,12 @@ public sealed class MainForm : Form
         "3) Match the menu resolution to the game render.\n" +
         "4) Use fullscreen or borderless fullscreen, not windowed mode.\n" +
         "5) Hide physical/source controllers with HidHide and leave the ViGEm output visible.\n" +
-        "6) Hold E or F before an attack for parry/counter actions. Hold LT for orange automation.";
+        "6) Hold E or F before an attack for parry/counter actions. Orange handling runs automatically when enabled; F5 toggles orange parry.";
 
     private const string ReadMeText =
         "FEATURES\n\n" +
         "- Screen-aware orange and red indicator detection\n" +
-        "- Orange-only dodge and orange plus red RT parry\n" +
+        "- Orange-only dodge and optional orange plus red RT parry\n" +
         "- Auto block and directional guard\n" +
         "- Hero-specific evades and reactions\n" +
         "- ViGEm source/output merge\n" +

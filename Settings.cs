@@ -9,11 +9,9 @@ public sealed class Settings
     public int Pause1;
     public int Pause2;
     public int Pause3;
+    public int ParryDelay;
     public int Left;
     public int Right;
-    public int ParryWeight = 1;
-    public int CrushingWeight = 1;
-    public int DeflectWeight = 1;
 
     public int Ubp;
     public int NMode;

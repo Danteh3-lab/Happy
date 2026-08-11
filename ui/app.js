@@ -42,6 +42,7 @@
     const virtual = String(state.status.virtualState || "OFF").toUpperCase();
     const mode = state.status.mode || "ViGEm";
     const loop = Number(state.status.loop || 0);
+    const orangeParry = state.status.orangeParry === true;
 
     const top = $("#top-runtime");
     top.innerHTML = '<span class="status-dot ' + (running ? "green" : "") + '"></span> ' + (running ? "RUNNING" : "STANDBY");
@@ -62,6 +63,11 @@
     setMetric("metric-loop", loop + " Hz", loop > 0);
     $("#sidebar-input").textContent = mode + " / " + (source === "ON" ? "source " + sourceSlot : "idle");
     $("#parry-count").textContent = String(state.status.parryCount || 0) + " parries · P-" + (state.status.parryToggle === false ? "OFF" : "ON");
+    const orangeButton = $("#orange-parry-button");
+    if (orangeButton) {
+      orangeButton.textContent = "Orange parry: " + (orangeParry ? "ON" : "OFF") + " · F5";
+      orangeButton.classList.toggle("active", orangeParry);
+    }
   }
 
   function setMetric(id, text, good) {
@@ -110,6 +116,7 @@
     if (action === "minimize") return post("minimize");
     if (action === "close") return post("close");
     if (action === "drag") return post("drag");
+    if (action === "toggle-orange-parry") return post("orange-parry");
   }
 
   $$('[data-view-target]').forEach((button) => button.addEventListener("click", () => selectView(button.dataset.viewTarget)));
