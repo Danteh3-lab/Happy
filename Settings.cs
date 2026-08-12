@@ -39,7 +39,7 @@ public sealed class Settings
     public bool YourHero;
     public bool Legit;
 
-    public readonly Dictionary<string, bool> Chars = new(StringComparer.OrdinalIgnoreCase)
+    public Dictionary<string, bool> Chars = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Warden"] = false, ["Peacekeeper"] = false, ["Centurion"] = false, ["Blackprior"] = false,
         ["Gryphon"] = false, ["Conqueror"] = false, ["Lawbringer"] = false, ["Gladiator"] = false,
@@ -57,4 +57,11 @@ public sealed class Settings
     };
 
     public bool Ch(string name) => Chars.TryGetValue(name, out bool v) && v;
+
+    public Settings Clone()
+    {
+        var copy = (Settings)MemberwiseClone();
+        copy.Chars = new Dictionary<string, bool>(Chars, StringComparer.OrdinalIgnoreCase);
+        return copy;
+    }
 }

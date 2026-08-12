@@ -142,6 +142,19 @@
     const eventName = control.type === "checkbox" || control.tagName === "SELECT" ? "change" : "input";
     control.addEventListener(eventName, () => {
       if (hydrating) return;
+      if (control.type === "checkbox" && control.checked && control.closest(".hero-list")) {
+        $$(".hero-list input[data-setting]").forEach((other) => {
+          if (other === control) return;
+          other.checked = false;
+          state.settings[other.dataset.setting] = false;
+        });
+      }
+      if (control.type === "checkbox" && control.checked && (control.dataset.setting === "Leftdodge" || control.dataset.setting === "Rightdodge")) {
+        const otherName = control.dataset.setting === "Leftdodge" ? "Rightdodge" : "Leftdodge";
+        const other = $(`[data-setting="${otherName}"]`);
+        if (other) other.checked = false;
+        state.settings[otherName] = false;
+      }
       state.settings[control.dataset.setting] = control.type === "checkbox" ? control.checked : control.value;
       sendSettings();
     });

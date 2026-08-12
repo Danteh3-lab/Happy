@@ -4,8 +4,11 @@ public sealed class BotCore
 {
     private const int LegitChancePercent = 55;
     private const int LegitCooldownMs = 1200;
+    private const int VisionStageMinimumMs = 50;
     private long _lastReactionTick;
-    public readonly Settings S = new();
+    private readonly object _settingsSync = new();
+    private Settings _settings = new();
+    public Settings S => Volatile.Read(ref _settings);
 
     public double B55, Y55;
     public double X2, Y2, X3, Y3, X4, Y4, X5, Y5, X6, Y6, X7, Y7;
@@ -22,6 +25,7 @@ public sealed class BotCore
     public volatile bool Flash;
     public volatile int LoopHz;
     public volatile string LastError = "";
+    public volatile bool DodgeEnabled = true;
     public volatile int ScreenWidth;
     public volatile int ScreenHeight;
     public int Ax;
@@ -29,11 +33,13 @@ public sealed class BotCore
     public int Box;
 
     private readonly ManualResetEventSlim _paused = new(true);
-    private readonly CancellationTokenSource _cts = new();
+    private CancellationTokenSource _cts = new();
     private readonly System.Threading.Timer _releaseTimer;
     private readonly System.Threading.Timer _releTimer;
     private readonly System.Threading.Timer _guardReleaseTimer;
     private readonly object _visionSync = new();
+    private readonly object _guardSync = new();
+    private int _ubp;
     private long _guardReleaseTick;
     private long _reactionDisplayUntil;
     private string _markerKind = "NONE";
@@ -48,12 +54,13 @@ public sealed class BotCore
 
     public BotCore()
     {
-        _releaseTimer = new System.Threading.Timer(_ => S.Ubp = 0, null, Timeout.Infinite, Timeout.Infinite);
-        _releTimer = new System.Threading.Timer(_ => S.Active1 = 1, null, Timeout.Infinite, Timeout.Infinite);
+        _releaseTimer = new System.Threading.Timer(_ => Volatile.Write(ref _ubp, 0), null, Timeout.Infinite, Timeout.Infinite);
+        _releTimer = new System.Threading.Timer(_ => DodgeEnabled = true, null, Timeout.Infinite, Timeout.Infinite);
         _guardReleaseTimer = new System.Threading.Timer(_ => ReleaseAutoGuardWhenDue(), null, Timeout.Infinite, Timeout.Infinite);
     }
 
     public bool IsRunning => _thread is { IsAlive: true };
+    public bool IsPaused => !_paused.IsSet;
 
     public void Start()
     {
@@ -66,8 +73,10 @@ public sealed class BotCore
     public void Stop()
     {
         _cts.Cancel();
-        _thread?.Join(2000);
+        _paused.Set();
+        _thread?.Join();
         ReleaseAutoGuard();
+        Input.ReleaseAutomationInputs();
     }
 
     public void TogglePause()
@@ -77,6 +86,16 @@ public sealed class BotCore
     }
 
     public void ScheduleRele() => _releTimer.Change(9000, Timeout.Infinite);
+
+    public void UpdateSettings(Action<Settings> update)
+    {
+        lock (_settingsSync)
+        {
+            Settings next = _settings.Clone();
+            update(next);
+            Volatile.Write(ref _settings, next);
+        }
+    }
 
     public VisionSnapshot GetVisionSnapshot()
     {
@@ -106,6 +125,15 @@ public sealed class BotCore
                     ScreenHeight = _frame.Height;
                     Calculate();
                     UpdateVisionTracking();
+                    if (!Input.IsReady)
+                    {
+                        LastError = "Requested ViGEm input is unavailable; reactions are paused.";
+                        LoopHz = (int)(1000.0 / Math.Max(1.0, sw.Elapsed.TotalMilliseconds));
+                        PublishVision();
+                        Sleep(100);
+                        continue;
+                    }
+                    if (LastError.StartsWith("Requested ViGEm input", StringComparison.Ordinal)) LastError = "";
                     SearchBot();
                     AutoBlock();
                     LoopHz = (int)(1000.0 / Math.Max(1.0, sw.Elapsed.TotalMilliseconds));
@@ -227,21 +255,35 @@ public sealed class BotCore
         return f.SamplePixel(x, y, out int r, out int g, out int b) ? $"RGB({r},{g},{b})" : "off-screen";
     }
 
-    private static void Sleep(int ms) => Thread.Sleep(ms);
+    private void Sleep(int ms)
+    {
+        if (ms <= 0) return;
+        if (_cts.Token.WaitHandle.WaitOne(ms)) _cts.Token.ThrowIfCancellationRequested();
+    }
+
+    private bool ReactionActive() => !_cts.IsCancellationRequested && _paused.IsSet && Input.IsReady;
 
     private void SetAutoGuard(int key)
     {
-        ReleaseAutoGuard();
-        int holdMs = Math.Max(60, S.GuardHold);
-        Interlocked.Exchange(ref _guardReleaseTick, Environment.TickCount64 + holdMs);
-        Input.KeyDown(key);
-        _guardReleaseTimer.Change(holdMs, Timeout.Infinite);
+        lock (_guardSync)
+        {
+            ReleaseAutoGuardLocked();
+            int holdMs = Math.Max(60, S.GuardHold);
+            _guardReleaseTick = Environment.TickCount64 + holdMs;
+            Input.KeyDown(key);
+            _guardReleaseTimer.Change(holdMs, Timeout.Infinite);
+        }
     }
 
     private void ReleaseAutoGuard()
     {
+        lock (_guardSync) ReleaseAutoGuardLocked();
+    }
+
+    private void ReleaseAutoGuardLocked()
+    {
         _guardReleaseTimer?.Change(Timeout.Infinite, Timeout.Infinite);
-        Interlocked.Exchange(ref _guardReleaseTick, 0);
+        _guardReleaseTick = 0;
         Input.KeyUp(Input.VK_NUMPAD4);
         Input.KeyUp(Input.VK_NUMPAD6);
         Input.KeyUp(Input.VK_NUMPAD8);
@@ -249,14 +291,17 @@ public sealed class BotCore
 
     private void ReleaseAutoGuardWhenDue()
     {
-        long remaining = Interlocked.Read(ref _guardReleaseTick) - Environment.TickCount64;
-        if (remaining > 0)
+        lock (_guardSync)
         {
-            _guardReleaseTimer.Change((int)Math.Min(remaining, int.MaxValue), Timeout.Infinite);
-            return;
-        }
+            long remaining = _guardReleaseTick - Environment.TickCount64;
+            if (remaining > 0)
+            {
+                _guardReleaseTimer.Change((int)Math.Min(remaining, int.MaxValue), Timeout.Infinite);
+                return;
+            }
 
-        ReleaseAutoGuard();
+            ReleaseAutoGuardLocked();
+        }
     }
 
     private static void WithBlock(Action action)
@@ -313,9 +358,16 @@ public sealed class BotCore
         PublishVision();
     }
 
-    private void SetVisionReady(string hold)
+    private long SetVisionReady(string hold)
     {
         SetVisionReaction("PARRY READY", hold + " hold + flash gate", DirectionName(GuardDir), 900);
+        return Environment.TickCount64;
+    }
+
+    private static void KeepVisionStageVisible(long started)
+    {
+        long remaining = VisionStageMinimumMs - (Environment.TickCount64 - started);
+        if (remaining > 0) Thread.Sleep((int)remaining);
     }
 
     private static string DirectionName(string direction) => direction switch
@@ -331,12 +383,14 @@ public sealed class BotCore
         var anchorScan = RectangleF.FromLTRB((float)X8, (float)Y8, (float)X9, (float)Y9);
         var combatRoi = RectangleF.FromLTRB((float)Math.Min(X16, X17), (float)Math.Min(Y16, Y17),
             (float)Math.Max(X16, X17), (float)Math.Max(Y16, Y17));
-        var topZone = RectangleF.FromLTRB((float)Math.Min(X2, X3), (float)Math.Min(Y2, Y3),
-            (float)Math.Max(X2, X3), (float)Math.Max(Y2, Y3));
-        var rightZone = RectangleF.FromLTRB((float)Math.Min(X4, X5), (float)Math.Min(Y4, Y5),
-            (float)Math.Max(X4, X5), (float)Math.Max(Y4, Y5));
-        var leftZone = RectangleF.FromLTRB((float)Math.Min(X6, X7), (float)Math.Min(Y6, Y7),
-            (float)Math.Max(X6, X7), (float)Math.Max(Y6, Y7));
+        // AutoBlock searches only inside CombatRoi, then applies these exact
+        // half-plane thresholds. Clip the visual zones to that same ROI.
+        var topZone = RectangleF.FromLTRB(combatRoi.Left, Math.Max(combatRoi.Top, (float)Math.Min(Y2, Y3)),
+            combatRoi.Right, Math.Min(combatRoi.Bottom, (float)Math.Max(Y2, Y3)));
+        var rightZone = RectangleF.FromLTRB(Math.Max(combatRoi.Left, (float)X4), Math.Max(combatRoi.Top, (float)Y4),
+            combatRoi.Right, combatRoi.Bottom);
+        var leftZone = RectangleF.FromLTRB(combatRoi.Left, Math.Max(combatRoi.Top, (float)Y4),
+            Math.Min(combatRoi.Right, (float)X7), combatRoi.Bottom);
 
         var snapshot = new VisionSnapshot
         {
@@ -423,14 +477,14 @@ public sealed class BotCore
         {
             _indicatorX = rx;
             _indicatorY = ry;
-            S.Ubp = 1;
+            Volatile.Write(ref _ubp, 1);
             _releaseTimer.Change(1000, Timeout.Infinite);
             SetVisionReaction("ORANGE PARRY WINDOW", "Red feint indicator detected", "", 900);
             UbParry();
             return;
         }
 
-        if (S.Active1 == 0) return;
+        if (!DodgeEnabled) return;
 
         if (S.Nohero)
         {
@@ -469,11 +523,11 @@ public sealed class BotCore
     {
         if (!S.Unblockables)
         {
-            S.Ubp = 0;
+            Volatile.Write(ref _ubp, 0);
             return;
         }
 
-        while (S.Ubp == 1)
+        while (ReactionActive() && Volatile.Read(ref _ubp) == 1)
         {
             _frame = ScreenCapture.Capture(_frame);
             ScreenWidth = _frame.Width;
@@ -481,19 +535,20 @@ public sealed class BotCore
             if (CurrentPx(X16, Y16, X17, Y17, 255, 34, 28, 3, out _, out _)) continue;
 
             Sleep(S.Pause1);
+            if (!ReactionActive()) return;
             _frame = ScreenCapture.Capture(_frame);
             ScreenWidth = _frame.Width;
             ScreenHeight = _frame.Height;
             if (!CurrentPx(X16, Y16, X17, Y17, 246, 98, 8, 0, out _, out _) || !S.Unblockables) continue;
-            if (S.Active1 == 0)
+            if (!DodgeEnabled)
             {
-                S.Ubp = 0;
+                Volatile.Write(ref _ubp, 0);
                 return;
             }
 
             if (!ReactionAllowed())
             {
-                S.Ubp = 0;
+                Volatile.Write(ref _ubp, 0);
                 return;
             }
 
@@ -521,9 +576,16 @@ public sealed class BotCore
             if (OrangeParry)
             {
                 SetVisionReaction("ORANGE PARRY READY", "Feint check passed", "", 900);
+                long readyTick = Environment.TickCount64;
                 Sleep(S.ParryDelay);
-                Input.MouseClick(Input.VK_RBUTTON);
+                if (!ReactionActive()) return;
+                if (!Input.MouseClick(Input.VK_RBUTTON))
+                {
+                    SetVisionReaction("ORANGE PARRY FAILED", "RT input was not delivered", "", 1300);
+                    return;
+                }
                 ParryCount++;
+                KeepVisionStageVisible(readyTick);
                 SetVisionReaction("ORANGE PARRY SENT", "RT input sent", "", 1300);
             }
             else
@@ -534,6 +596,8 @@ public sealed class BotCore
             Sleep(700);
             return;
         }
+
+        Volatile.Write(ref _ubp, 0);
     }
 
     private void Dodge1()
@@ -543,6 +607,7 @@ public sealed class BotCore
         if (S.Unblockables)
         {
             Sleep(S.Pause);
+            if (!ReactionActive()) return;
             if (Input.IsDown(Input.VK_W))
             {
                 Input.KeyTap(Input.VK_NUMPAD9);
@@ -550,13 +615,14 @@ public sealed class BotCore
                 Sleep(2000);
                 return;
             }
-            Input.KeyTap(Input.VK_SPACE);
-            SetVisionReaction("ORANGE DODGE SENT", "Black Prior dodge response", "", 1300);
+            string direction = SendConfiguredDodge();
+            SetVisionReaction("ORANGE DODGE SENT", $"Black Prior {direction} dodge response", "", 1300);
         }
 
         if (S.DodgeL)
         {
             Sleep(S.Pause2);
+            if (!ReactionActive()) return;
             Input.MouseClick(Input.VK_LBUTTON);
         }
 
@@ -569,6 +635,7 @@ public sealed class BotCore
             (S.Ch("Nobushi") || S.Ch("Shaman") || S.Ch("Orochi") || S.Ch("Jiangjun")))) return;
 
         Sleep(S.Pause);
+        if (!ReactionActive()) return;
         if (Input.IsDown(Input.VK_W))
         {
             WithBlock(() =>
@@ -582,24 +649,27 @@ public sealed class BotCore
             return;
         }
 
-        Input.KeyTap(Input.VK_SPACE);
-        SetVisionReaction("ORANGE DODGE SENT", "Generic dodge response", "", 1300);
+        string direction = SendConfiguredDodge();
+        SetVisionReaction("ORANGE DODGE SENT", $"Generic {direction} dodge response", "", 1300);
 
         if (S.DodgeL)
         {
             Sleep(S.Pause2);
+            if (!ReactionActive()) return;
             Input.MouseClick(Input.VK_LBUTTON);
         }
 
         if (S.DodgeH)
         {
             Sleep(S.Pause2);
+            if (!ReactionActive()) return;
             Input.MouseClick(Input.VK_RBUTTON);
         }
 
         if (S.Lightbash)
         {
             Sleep(S.Pause2);
+            if (!ReactionActive()) return;
             Input.KeyTap(Input.VK_NUMPAD5);
             Sleep(700);
         }
@@ -607,10 +677,30 @@ public sealed class BotCore
         Sleep(700);
     }
 
+    private string SendConfiguredDodge()
+    {
+        Settings settings = S;
+        if (!settings.Leftdodge && !settings.Rightdodge)
+        {
+            Input.KeyTap(Input.VK_SPACE);
+            return "neutral";
+        }
+
+        int direction = settings.Leftdodge ? Input.VK_LEFT : Input.VK_RIGHT;
+        WithBlock(() =>
+        {
+            Input.KeyDown(direction);
+            try { Input.KeyTap(Input.VK_SPACE); }
+            finally { Input.KeyUp(direction); }
+        });
+        return settings.Leftdodge ? "left" : "right";
+    }
+
     private void Dodge4()
     {
         if (!S.Unblockables || S.Nohero || !S.Ch("Nobushi")) return;
         Sleep(S.Pause2);
+        if (!ReactionActive()) return;
         Input.KeyTap(Input.VK_C);
         SetVisionReaction("ORANGE RESPONSE SENT", "Nobushi hero response", "", 1300);
     }
@@ -619,6 +709,7 @@ public sealed class BotCore
     {
         if (!S.Unblockables || S.Nohero || !S.Ch("Shaman")) return;
         Sleep(S.Pause2);
+        if (!ReactionActive()) return;
         Input.KeyDown(Input.VK_SPACE);
         Input.KeyTap(Input.VK_NUMPAD5);
         Input.KeyUp(Input.VK_SPACE);
@@ -630,6 +721,7 @@ public sealed class BotCore
     {
         if (!S.Unblockables || S.Nohero || !S.Ch("Orochi")) return;
         Sleep(S.Pause2);
+        if (!ReactionActive()) return;
         Input.KeyTap(Input.VK_SPACE);
         Input.KeyTap(Input.VK_NUMPAD9);
         SetVisionReaction("ORANGE RESPONSE SENT", "Orochi hero response", "", 1300);
@@ -640,6 +732,7 @@ public sealed class BotCore
     {
         if (!S.Unblockables || S.Nohero || !S.Ch("Jiangjun")) return;
         Sleep(S.Pause2);
+        if (!ReactionActive()) return;
         Input.KeyDown(Input.VK_C);
         Sleep(250);
         Input.MouseClick(Input.VK_LBUTTON);
@@ -701,8 +794,7 @@ public sealed class BotCore
                 return true;
             }
 
-            SetVisionReady("F");
-            SendParry();
+            SendParry("F");
             Sleep(850);
             return true;
         }
@@ -728,20 +820,31 @@ public sealed class BotCore
 
     private bool HasHeroAction() =>
         S.YourHero && !S.Nohero &&
-        (S.Ch("Warden") || S.Ch("Blackprior") || S.Ch("Warlord") ||
+        (S.Ch("Blackprior") || S.Ch("Warlord") ||
          S.Ch("Shaman") || S.Ch("Varangian") || S.Ch("Orochi") ||
          S.Ch("Nobushi") || S.Ch("Aramusha") || S.Ch("Jiangjun"));
 
-    private void SendParry()
+    private void SendParry(string hold)
     {
         if (!ParryToggle)
         {
             SetVisionReaction("PARRY BLOCKED", "Parry toggle is off", DirectionName(GuardDir), 900);
             return;
         }
+        long readyTick = SetVisionReady(hold);
         Sleep(S.ParryDelay);
-        Input.MouseClick(Input.VK_RBUTTON);
+        if (!ReactionActive())
+        {
+            SetVisionReaction("PARRY CANCELLED", "Bot paused before input", DirectionName(GuardDir), 900);
+            return;
+        }
+        if (!Input.MouseClick(Input.VK_RBUTTON))
+        {
+            SetVisionReaction("PARRY FAILED", "RT input was not delivered", DirectionName(GuardDir), 1300);
+            return;
+        }
         ParryCount++;
+        KeepVisionStageVisible(readyTick);
         SetVisionReaction("PARRY SENT", "RT input sent", DirectionName(GuardDir), 1300);
     }
 
@@ -763,6 +866,7 @@ public sealed class BotCore
 
     private void DeflectLeft()
     {
+        bool sent = false;
         WithBlock(() =>
         {
             Input.KeyUp(Input.VK_W);
@@ -770,16 +874,20 @@ public sealed class BotCore
             Input.KeyUp(Input.VK_A);
             Input.KeyUp(Input.VK_D);
             Sleep(S.Left);
+            if (!ReactionActive()) return;
             Input.KeyDown(Input.VK_LEFT);
             Input.KeyTap(Input.VK_SPACE);
             Input.KeyUp(Input.VK_LEFT);
+            sent = true;
         });
+        if (!sent) return;
         SetVisionReaction("DEFLECT SENT", "Left directional evade", DirectionName(GuardDir), 1300);
         Sleep(700);
     }
 
     private void DeflectRight()
     {
+        bool sent = false;
         WithBlock(() =>
         {
             Input.KeyUp(Input.VK_W);
@@ -787,70 +895,122 @@ public sealed class BotCore
             Input.KeyUp(Input.VK_A);
             Input.KeyUp(Input.VK_D);
             Sleep(S.Right);
+            if (!ReactionActive()) return;
             Input.KeyDown(Input.VK_RIGHT);
             Input.KeyTap(Input.VK_SPACE);
             Input.KeyUp(Input.VK_RIGHT);
+            sent = true;
         });
+        if (!sent) return;
         SetVisionReaction("DEFLECT SENT", "Right directional evade", DirectionName(GuardDir), 1300);
         Sleep(700);
+    }
+
+    private bool TryHeroFReaction(string direction)
+    {
+        if (YourChar("Blackprior"))
+        {
+            Input.KeyTap(Input.VK_NUMPAD9);
+            SetVisionReaction("HERO RESPONSE SENT", "Black Prior full block", direction, 1300);
+            Sleep(2000);
+            return true;
+        }
+        if (YourChar("Warlord"))
+        {
+            Input.KeyTap(Input.VK_C);
+            Input.MouseClick(Input.VK_LBUTTON);
+            SetVisionReaction("HERO RESPONSE SENT", "Warlord counter", direction, 1300);
+            Sleep(250);
+            return true;
+        }
+        if (YourChar("Shaman"))
+        {
+            Input.KeyTap(Input.VK_SPACE);
+            Input.KeyTap(Input.VK_NUMPAD5);
+            SetVisionReaction("HERO RESPONSE SENT", "Shaman evade and guard break", direction, 1300);
+            Sleep(2000);
+            return true;
+        }
+        if (YourChar("Varangian"))
+        {
+            Input.KeyTap(Input.VK_C);
+            Input.MouseClick(Input.VK_RBUTTON);
+            SetVisionReaction("HERO RESPONSE SENT", "Varangian counter", direction, 1300);
+            Sleep(2000);
+            return true;
+        }
+        if (YourChar("Orochi"))
+        {
+            Input.KeyTap(Input.VK_SPACE);
+            Input.KeyTap(Input.VK_NUMPAD9);
+            SetVisionReaction("HERO RESPONSE SENT", "Orochi evade response", direction, 1300);
+            Sleep(500);
+            return true;
+        }
+        if (YourChar("Nobushi"))
+        {
+            Input.KeyTap(Input.VK_C);
+            SetVisionReaction("HERO RESPONSE SENT", "Nobushi stance response", direction, 1300);
+            Sleep(250);
+            return true;
+        }
+        if (YourChar("Aramusha"))
+        {
+            Input.KeyTap(Input.VK_C);
+            Input.MouseClick(Input.VK_RBUTTON);
+            SetVisionReaction("HERO RESPONSE SENT", "Aramusha counter", direction, 1300);
+            Sleep(850);
+            return true;
+        }
+        if (!YourChar("Jiangjun")) return false;
+
+        Input.KeyDown(Input.VK_C);
+        try
+        {
+            Sleep(250);
+            Input.MouseClick(Input.VK_LBUTTON);
+            Input.MouseClick(Input.VK_RBUTTON);
+        }
+        finally
+        {
+            Input.KeyUp(Input.VK_C);
+        }
+        SetVisionReaction("HERO RESPONSE SENT", "Jiang Jun counter", direction, 1300);
+        Sleep(250);
+        return true;
     }
 
     private void TOP()
     {
         GuardDir = "TOP";
         Sleep(S.Pause3);
+        if (!ReactionActive()) return;
         SetAutoGuard(Input.VK_NUMPAD8);
         SetVisionReaction("GUARD", "Top red indicator detected", "TOP", 900);
 
         if (IsEHeld() && HasEAction())
         {
-            while (IsEHeld())
+            while (ReactionActive() && IsEHeld())
             {
                 if (!AttackFlashing()) continue;
-                if (!ReactionAllowed()) { SetVisionReaction("PARRY SKIPPED", "Legit mode gate", "TOP", 900); while (AttackFlashing()) { } continue; }
+                if (!ReactionAllowed()) { SetVisionReaction("PARRY SKIPPED", "Legit mode gate", "TOP", 900); while (ReactionActive() && AttackFlashing()) { } continue; }
 
-                if (S.Parry2) { SetVisionReady("E"); SendParry(); Sleep(850); return; }
+                if (S.Parry2) { SendParry("E"); Sleep(850); return; }
                 if (S.Crushing2) { Input.MouseClick(Input.VK_LBUTTON); SetVisionReaction("CRUSHING SENT", "E hold + flash gate", "TOP", 1300); Sleep(1200); return; }
             }
         }
 
+        if (!ReactionActive()) return;
+
         if (IsFHeld() && HasFAction())
         {
-            while (IsFHeld())
+            while (ReactionActive() && IsFHeld())
             {
                 if (!AttackFlashing()) continue;
-                if (!ReactionAllowed()) { SetVisionReaction("PARRY SKIPPED", "Legit mode gate", "TOP", 900); while (AttackFlashing()) { } continue; }
+                if (!ReactionAllowed()) { SetVisionReaction("PARRY SKIPPED", "Legit mode gate", "TOP", 900); while (ReactionActive() && AttackFlashing()) { } continue; }
 
                 if (TryPrimaryFReaction()) return;
-                if (YourChar("Blackprior")) { Input.KeyTap(Input.VK_NUMPAD9); Sleep(2000); return; }
-                if (YourChar("Warlord")) { Input.KeyTap(Input.VK_C); Input.MouseClick(Input.VK_LBUTTON); Sleep(250); return; }
-                if (YourChar("Shaman"))
-                {
-                    Input.KeyTap(Input.VK_SPACE);
-                    Input.KeyTap(Input.VK_NUMPAD5);
-                    Sleep(2000);
-                    return;
-                }
-                if (YourChar("Varangian")) { Input.KeyTap(Input.VK_C); Input.MouseClick(Input.VK_RBUTTON); Sleep(2000); return; }
-                if (YourChar("Orochi"))
-                {
-                    Input.KeyTap(Input.VK_SPACE);
-                    Input.KeyTap(Input.VK_NUMPAD9);
-                    Sleep(500);
-                    return;
-                }
-                if (YourChar("Nobushi")) { Input.KeyTap(Input.VK_C); Sleep(250); return; }
-                if (YourChar("Aramusha")) { Input.KeyTap(Input.VK_C); Input.MouseClick(Input.VK_RBUTTON); Sleep(850); return; }
-                if (YourChar("Jiangjun"))
-                {
-                    Input.KeyDown(Input.VK_C);
-                    Sleep(250);
-                    Input.MouseClick(Input.VK_LBUTTON);
-                    Input.MouseClick(Input.VK_RBUTTON);
-                    Input.KeyUp(Input.VK_C);
-                    Sleep(250);
-                    return;
-                }
+                if (TryHeroFReaction("TOP")) return;
             }
         }
     }
@@ -859,58 +1019,33 @@ public sealed class BotCore
     {
         GuardDir = "LFT";
         Sleep(S.Pause3);
+        if (!ReactionActive()) return;
         SetAutoGuard(Input.VK_NUMPAD4);
         SetVisionReaction("GUARD", "Left red indicator detected", "LEFT", 900);
 
         if (IsEHeld() && HasEAction())
         {
-            while (IsEHeld())
+            while (ReactionActive() && IsEHeld())
             {
                 if (!AttackFlashing()) continue;
-                if (!ReactionAllowed()) { SetVisionReaction("PARRY SKIPPED", "Legit mode gate", "LEFT", 900); while (AttackFlashing()) { } continue; }
+                if (!ReactionAllowed()) { SetVisionReaction("PARRY SKIPPED", "Legit mode gate", "LEFT", 900); while (ReactionActive() && AttackFlashing()) { } continue; }
 
-                if (S.Parry2) { SetVisionReady("E"); SendParry(); Sleep(850); return; }
+                if (S.Parry2) { SendParry("E"); Sleep(850); return; }
                 if (S.Crushing2) { Input.MouseClick(Input.VK_LBUTTON); SetVisionReaction("CRUSHING SENT", "E hold + flash gate", "LEFT", 1300); Sleep(1200); return; }
             }
         }
 
+        if (!ReactionActive()) return;
+
         if (IsFHeld() && HasFAction())
         {
-            while (IsFHeld())
+            while (ReactionActive() && IsFHeld())
             {
                 if (!AttackFlashing()) continue;
-                if (!ReactionAllowed()) { SetVisionReaction("PARRY SKIPPED", "Legit mode gate", "LEFT", 900); while (AttackFlashing()) { } continue; }
+                if (!ReactionAllowed()) { SetVisionReaction("PARRY SKIPPED", "Legit mode gate", "LEFT", 900); while (ReactionActive() && AttackFlashing()) { } continue; }
 
                 if (TryPrimaryFReaction()) return;
-                if (YourChar("Blackprior")) { Input.KeyTap(Input.VK_NUMPAD9); Sleep(2000); return; }
-                if (YourChar("Warlord")) { Input.KeyTap(Input.VK_C); Input.MouseClick(Input.VK_LBUTTON); Sleep(250); return; }
-                if (YourChar("Shaman"))
-                {
-                    Input.KeyTap(Input.VK_SPACE);
-                    Input.KeyTap(Input.VK_NUMPAD5);
-                    Sleep(2000);
-                    return;
-                }
-                if (YourChar("Varangian")) { Input.KeyTap(Input.VK_C); Input.MouseClick(Input.VK_RBUTTON); Sleep(2000); return; }
-                if (YourChar("Orochi"))
-                {
-                    Input.KeyTap(Input.VK_SPACE);
-                    Input.KeyTap(Input.VK_NUMPAD9);
-                    Sleep(500);
-                    return;
-                }
-                if (YourChar("Nobushi")) { Input.KeyTap(Input.VK_C); Sleep(250); return; }
-                if (YourChar("Aramusha")) { Input.KeyTap(Input.VK_C); Input.MouseClick(Input.VK_RBUTTON); Sleep(850); return; }
-                if (YourChar("Jiangjun"))
-                {
-                    Input.KeyDown(Input.VK_C);
-                    Sleep(250);
-                    Input.MouseClick(Input.VK_LBUTTON);
-                    Input.MouseClick(Input.VK_RBUTTON);
-                    Input.KeyUp(Input.VK_C);
-                    Sleep(250);
-                    return;
-                }
+                if (TryHeroFReaction("LEFT")) return;
             }
         }
     }
@@ -919,58 +1054,33 @@ public sealed class BotCore
     {
         GuardDir = "RGT";
         Sleep(S.Pause3);
+        if (!ReactionActive()) return;
         SetAutoGuard(Input.VK_NUMPAD6);
         SetVisionReaction("GUARD", "Right red indicator detected", "RIGHT", 900);
 
         if (IsEHeld() && HasEAction())
         {
-            while (IsEHeld())
+            while (ReactionActive() && IsEHeld())
             {
                 if (!AttackFlashing()) continue;
-                if (!ReactionAllowed()) { SetVisionReaction("PARRY SKIPPED", "Legit mode gate", "RIGHT", 900); while (AttackFlashing()) { } continue; }
+                if (!ReactionAllowed()) { SetVisionReaction("PARRY SKIPPED", "Legit mode gate", "RIGHT", 900); while (ReactionActive() && AttackFlashing()) { } continue; }
 
-                if (S.Parry2) { SetVisionReady("E"); SendParry(); Sleep(850); return; }
+                if (S.Parry2) { SendParry("E"); Sleep(850); return; }
                 if (S.Crushing2) { Input.MouseClick(Input.VK_LBUTTON); SetVisionReaction("CRUSHING SENT", "E hold + flash gate", "RIGHT", 1300); Sleep(1200); return; }
             }
         }
 
+        if (!ReactionActive()) return;
+
         if (IsFHeld() && HasFAction())
         {
-            while (IsFHeld())
+            while (ReactionActive() && IsFHeld())
             {
                 if (!AttackFlashing()) continue;
-                if (!ReactionAllowed()) { SetVisionReaction("PARRY SKIPPED", "Legit mode gate", "RIGHT", 900); while (AttackFlashing()) { } continue; }
+                if (!ReactionAllowed()) { SetVisionReaction("PARRY SKIPPED", "Legit mode gate", "RIGHT", 900); while (ReactionActive() && AttackFlashing()) { } continue; }
 
                 if (TryPrimaryFReaction()) return;
-                if (YourChar("Blackprior")) { Input.KeyTap(Input.VK_NUMPAD9); Sleep(2000); return; }
-                if (YourChar("Warlord")) { Input.KeyTap(Input.VK_C); Input.MouseClick(Input.VK_LBUTTON); Sleep(250); return; }
-                if (YourChar("Shaman"))
-                {
-                    Input.KeyTap(Input.VK_SPACE);
-                    Input.KeyTap(Input.VK_NUMPAD5);
-                    Sleep(2000);
-                    return;
-                }
-                if (YourChar("Varangian")) { Input.KeyTap(Input.VK_C); Input.MouseClick(Input.VK_RBUTTON); Sleep(2000); return; }
-                if (YourChar("Orochi"))
-                {
-                    Input.KeyTap(Input.VK_SPACE);
-                    Input.KeyTap(Input.VK_NUMPAD9);
-                    Sleep(500);
-                    return;
-                }
-                if (YourChar("Nobushi")) { Input.KeyTap(Input.VK_C); Sleep(250); return; }
-                if (YourChar("Aramusha")) { Input.KeyTap(Input.VK_C); Input.MouseClick(Input.VK_RBUTTON); Sleep(850); return; }
-                if (YourChar("Jiangjun"))
-                {
-                    Input.KeyDown(Input.VK_C);
-                    Sleep(250);
-                    Input.MouseClick(Input.VK_LBUTTON);
-                    Input.MouseClick(Input.VK_RBUTTON);
-                    Input.KeyUp(Input.VK_C);
-                    Sleep(250);
-                    return;
-                }
+                if (TryHeroFReaction("RIGHT")) return;
             }
         }
     }

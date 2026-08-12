@@ -67,6 +67,8 @@ public sealed class VisionOverlayForm : Form
 
     public bool TryShowOverlay()
     {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041)) return false;
+
         EnsureScreenBounds();
         if (!Visible) Show();
 

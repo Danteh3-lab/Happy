@@ -73,8 +73,10 @@ public static class Input
     public static int LastSendError;
 
     public static string ActiveMode =>
-        RequestedMode == InputMode.ViGEm && ViGEmInput.IsAvailable ? "ViGEm"
+        RequestedMode == InputMode.ViGEm ? (ViGEmInput.IsAvailable ? "ViGEm" : "ViGEm unavailable")
             : RequestedMode == InputMode.SendInput ? "SendInput" : "Event";
+
+    public static bool IsReady => RequestedMode != InputMode.ViGEm || ViGEmInput.IsAvailable;
 
     public static bool IsElevated()
     {
@@ -92,9 +94,9 @@ public static class Input
 
     public static void KeyDown(int vk)
     {
-        if (RequestedMode == InputMode.ViGEm && ViGEmInput.IsAvailable)
+        if (RequestedMode == InputMode.ViGEm)
         {
-            ReportSend(ViGEmInput.Key(vk, true));
+            ReportSend(ViGEmInput.IsAvailable && ViGEmInput.Key(vk, true));
             return;
         }
 
@@ -109,9 +111,9 @@ public static class Input
 
     public static void KeyUp(int vk)
     {
-        if (RequestedMode == InputMode.ViGEm && ViGEmInput.IsAvailable)
+        if (RequestedMode == InputMode.ViGEm)
         {
-            ReportSend(ViGEmInput.Key(vk, false));
+            ReportSend(ViGEmInput.IsAvailable && ViGEmInput.Key(vk, false));
             return;
         }
 
@@ -136,33 +138,73 @@ public static class Input
         KeyUp(vk);
     }
 
-    public static void MouseClick(int vk)
+    public static bool MouseClick(int vk)
     {
-        if (RequestedMode == InputMode.ViGEm && ViGEmInput.IsAvailable)
+        if (RequestedMode == InputMode.ViGEm)
         {
-            ReportSend(ViGEmInput.MouseClick(vk, true));
+            if (!ViGEmInput.IsAvailable)
+            {
+                ReportSend(false);
+                return false;
+            }
+
+            bool downSent = ViGEmInput.MouseClick(vk, true);
+            ReportSend(downSent);
             Thread.Sleep(MouseTapDelayMs);
-            ReportSend(ViGEmInput.MouseClick(vk, false));
-            return;
+            bool upSent = ViGEmInput.MouseClick(vk, false);
+            ReportSend(upSent);
+            return downSent && upSent;
         }
 
         if (RequestedMode != InputMode.SendInput)
         {
             SendEventMouse(vk);
-            return;
+            return true;
         }
 
         uint down = vk == VK_LBUTTON ? 0x0002u : 0x0008u;
         uint up = vk == VK_LBUTTON ? 0x0004u : 0x0010u;
-        SendMouse(down);
+        bool downOk = SendMouse(down) > 0;
         Thread.Sleep(MouseTapDelayMs);
-        SendMouse(up);
+        bool upOk = SendMouse(up) > 0;
+        return downOk && upOk;
     }
 
     public static void Block(bool on)
     {
-        if (RequestedMode == InputMode.ViGEm && ViGEmInput.IsAvailable) return;
+        if (RequestedMode == InputMode.ViGEm) return;
         Native.BlockInput(on);
+    }
+
+    public static void ReleaseAutomationInputs()
+    {
+        int[] keys =
+        {
+            VK_SPACE, VK_LEFT, VK_UP, VK_RIGHT, VK_DOWN, VK_C,
+            VK_NUMPAD3, VK_NUMPAD4, VK_NUMPAD5, VK_NUMPAD6, VK_NUMPAD8, VK_NUMPAD9
+        };
+        foreach (int key in keys) KeyUp(key);
+
+        if (RequestedMode == InputMode.ViGEm)
+        {
+            if (ViGEmInput.IsAvailable)
+            {
+                ReportSend(ViGEmInput.MouseClick(VK_LBUTTON, false));
+                ReportSend(ViGEmInput.MouseClick(VK_RBUTTON, false));
+            }
+        }
+        else if (RequestedMode == InputMode.SendInput)
+        {
+            SendMouse(0x0004u);
+            SendMouse(0x0010u);
+        }
+        else
+        {
+            Native.mouse_event(0x0004u, 0, 0, 0, UIntPtr.Zero);
+            Native.mouse_event(0x0010u, 0, 0, 0, UIntPtr.Zero);
+        }
+
+        Native.BlockInput(false);
     }
 
     private static void SendEventKey(int vk, bool up)
@@ -230,7 +272,7 @@ public static class Input
         if (sent > 0) InjectedCount++;
     }
 
-    private static void SendMouse(uint flags)
+    private static uint SendMouse(uint flags)
     {
         var input = new Native.INPUT
         {
@@ -247,5 +289,6 @@ public static class Input
         LastSendResult = sent;
         LastSendError = sent == 0 ? Marshal.GetLastWin32Error() : 0;
         if (sent > 0) InjectedCount++;
+        return sent;
     }
 }

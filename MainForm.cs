@@ -10,6 +10,7 @@ public sealed class MainForm : Form
 {
     private const int IdF1 = 1, IdF2 = 2, IdF3 = 3, IdF4 = 4, IdF5 = 5, IdF6 = 6, IdF7 = 7;
     private const int PeacekeeperDeflectDelayMs = 100;
+    private const int MaxDelayMs = 10000;
     private int _prevLeftDeflect;
     private int _prevRightDeflect;
     private bool _peacekeeperApplied;
@@ -28,6 +29,8 @@ public sealed class MainForm : Form
         "Tiandi", "Nuxia", "Zhanhu", "Jiangjun", "Shaolin", "Juren",
         "Pirate", "Afeera", "Medjay", "Khatun", "Ocelotl", "Virtuosa"
     };
+
+    private static readonly string[] HeroKeys = new Settings().Chars.Keys.ToArray();
 
     private static readonly (string Name, Action Press)[] Tests =
     {
@@ -65,8 +68,11 @@ public sealed class MainForm : Form
         MinimumSize = new Size(900, 620);
 
         var screen = Screen.PrimaryScreen.Bounds;
-        _bot.S.Res1 = screen.Width.ToString();
-        _bot.S.Res2 = screen.Height.ToString();
+        _bot.UpdateSettings(s =>
+        {
+            s.Res1 = screen.Width.ToString();
+            s.Res2 = screen.Height.ToString();
+        });
         ApplyResolution(screen.Width, screen.Height);
 
         _visionOverlay = new VisionOverlayForm(_bot.GetVisionSnapshot);
@@ -91,10 +97,11 @@ public sealed class MainForm : Form
                 dpadDown = (sourceState.wButtons & 0x0002) != 0;
             if (dpadDown && !_prevDpadDown)
             {
-                _bot.S.Parry = !_bot.S.Parry;
-                _bot.ParryToggle = _bot.S.Parry;
+                bool enabled = false;
+                _bot.UpdateSettings(s => enabled = s.Parry = !s.Parry);
+                _bot.ParryToggle = enabled;
                 SendSettings();
-                SendToast(_bot.S.Parry ? "Parry ON" : "Parry OFF", _bot.S.Parry ? "success" : "info");
+                SendToast(enabled ? "Auto parry ON" : "Auto parry OFF", enabled ? "success" : "info");
             }
             _prevDpadDown = dpadDown;
 
@@ -238,7 +245,7 @@ public sealed class MainForm : Form
             sourceSlot = ViGEmInput.SourceSlot,
             virtualState = ViGEmInput.IsAvailable ? "ON" : "OFF",
             loop = _bot.LoopHz,
-            dodgeEnabled = _bot.S.Active1 == 1,
+            dodgeEnabled = _bot.DodgeEnabled,
             legit = _bot.S.Legit,
             parryToggle = _bot.ParryToggle,
             orangeParry = _bot.OrangeParry,
@@ -296,8 +303,8 @@ public sealed class MainForm : Form
         {
             case "DodgeL": s.DodgeL = value; break;
             case "DodgeH": s.DodgeH = value; break;
-            case "Leftdodge": s.Leftdodge = value; break;
-            case "Rightdodge": s.Rightdodge = value; break;
+            case "Leftdodge": s.Leftdodge = value; if (value) s.Rightdodge = false; break;
+            case "Rightdodge": s.Rightdodge = value; if (value) s.Leftdodge = false; break;
             case "Unblockables": s.Unblockables = value; break;
             case "Autoblock": s.Autoblock = value; break;
             case "Lightbash": s.Lightbash = value; break;
@@ -315,42 +322,57 @@ public sealed class MainForm : Form
 
     private void ApplySettings(JsonElement values)
     {
-        var s = _bot.S;
-        s.Res1 = ReadString(values, "res1", s.Res1);
-        s.Res2 = ReadString(values, "res2", s.Res2);
-        s.Pause = ReadInt(values, "Pause", s.Pause);
-        s.Pause1 = ReadInt(values, "Pause1", s.Pause1);
-        s.Pause2 = ReadInt(values, "Pause2", s.Pause2);
-        s.Pause3 = ReadInt(values, "Pause3", s.Pause3);
-        s.ParryDelay = Math.Max(0, ReadInt(values, "ParryDelay", s.ParryDelay));
-        s.GuardHold = Math.Max(60, ReadInt(values, "GuardHold", s.GuardHold));
-        s.Left = ReadInt(values, "Left", s.Left);
-        s.Right = ReadInt(values, "Right", s.Right);
-        foreach (string key in CheckKeys)
+        bool parryChanged = values.TryGetProperty("Parry", out _);
+        bool parryEnabled = _bot.S.Parry;
+        _bot.UpdateSettings(s =>
         {
-            if (values.TryGetProperty(key, out _))
-                SetCheck(s, key, ReadBool(values, key, GetCheck(s, key)));
-        }
-        _bot.ParryToggle = s.Parry;
+            s.Res1 = ReadString(values, "res1", s.Res1);
+            s.Res2 = ReadString(values, "res2", s.Res2);
+            s.Pause = ClampDelay(ReadInt(values, "Pause", s.Pause));
+            s.Pause1 = ClampDelay(ReadInt(values, "Pause1", s.Pause1));
+            s.Pause2 = ClampDelay(ReadInt(values, "Pause2", s.Pause2));
+            s.Pause3 = ClampDelay(ReadInt(values, "Pause3", s.Pause3));
+            s.ParryDelay = ClampDelay(ReadInt(values, "ParryDelay", s.ParryDelay));
+            s.GuardHold = Math.Clamp(ReadInt(values, "GuardHold", s.GuardHold), 60, MaxDelayMs);
+            s.Left = ClampDelay(ReadInt(values, "Left", s.Left));
+            s.Right = ClampDelay(ReadInt(values, "Right", s.Right));
+            foreach (string key in CheckKeys)
+            {
+                if (values.TryGetProperty(key, out _))
+                    SetCheck(s, key, ReadBool(values, key, GetCheck(s, key)));
+            }
 
-        if (values.TryGetProperty("Peacekeeper", out _))
-        {
-            bool peacekeeperOn = ReadBool(values, "Peacekeeper", false);
-            if (peacekeeperOn && !_peacekeeperApplied)
+            NormalizeHeroSelection(s);
+            if (values.TryGetProperty("Peacekeeper", out _))
             {
-                _prevLeftDeflect = s.Left;
-                _prevRightDeflect = s.Right;
-                s.Left = PeacekeeperDeflectDelayMs;
-                s.Right = PeacekeeperDeflectDelayMs;
-                _peacekeeperApplied = true;
+                bool peacekeeperOn = s.Ch("Peacekeeper");
+                if (peacekeeperOn && !_peacekeeperApplied)
+                {
+                    _prevLeftDeflect = s.Left;
+                    _prevRightDeflect = s.Right;
+                    s.Left = PeacekeeperDeflectDelayMs;
+                    s.Right = PeacekeeperDeflectDelayMs;
+                    _peacekeeperApplied = true;
+                }
+                else if (!peacekeeperOn && _peacekeeperApplied)
+                {
+                    s.Left = _prevLeftDeflect;
+                    s.Right = _prevRightDeflect;
+                    _peacekeeperApplied = false;
+                }
             }
-            else if (!peacekeeperOn && _peacekeeperApplied)
-            {
-                s.Left = _prevLeftDeflect;
-                s.Right = _prevRightDeflect;
-                _peacekeeperApplied = false;
-            }
-        }
+            parryEnabled = s.Parry;
+        });
+        if (parryChanged) _bot.ParryToggle = parryEnabled;
+    }
+
+    private static int ClampDelay(int value) => Math.Clamp(value, 0, MaxDelayMs);
+
+    private static void NormalizeHeroSelection(Settings s)
+    {
+        string selected = HeroKeys.FirstOrDefault(s.Ch);
+        if (selected == null) return;
+        foreach (string hero in HeroKeys) s.Chars[hero] = hero.Equals(selected, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string ReadString(JsonElement values, string key, string fallback)
@@ -387,6 +409,12 @@ public sealed class MainForm : Form
 
     private void OnStart()
     {
+        if (!Input.IsReady)
+        {
+            SendToast("ViGEm input is unavailable. Reconnect the virtual controller before starting.", "error");
+            return;
+        }
+
         if (!TryReadResolution(out int width, out int height))
         {
             SendToast("Set a valid resolution before starting.", "error");
@@ -414,6 +442,12 @@ public sealed class MainForm : Form
 
     private void OnTestInput()
     {
+        if (_bot.IsRunning && !_bot.IsPaused)
+        {
+            SendToast("Pause the bot before testing input.", "error");
+            return;
+        }
+
         (string name, Action press) = Tests[_testMode];
         _testMode = (_testMode + 1) % Tests.Length;
         _testCts.Cancel();
@@ -447,22 +481,42 @@ public sealed class MainForm : Form
 
     private void OnLoad()
     {
-        foreach (string key in EditKeys)
+        bool parryEnabled = false;
+        _bot.UpdateSettings(s =>
         {
-            string value = Config.Read(key);
-            if (value.Length == 0) continue;
-            SetEdit(_bot.S, key, value);
-        }
-        foreach (string key in CheckKeys)
-            SetCheck(_bot.S, key, Config.Read(key) == "1");
+            foreach (string key in EditKeys)
+            {
+                string value = Config.Read(key);
+                if (value.Length == 0) continue;
+                SetEdit(s, key, value);
+            }
+            foreach (string key in CheckKeys)
+                SetCheck(s, key, Config.Read(key) == "1");
+            NormalizeHeroSelection(s);
+            if (s.Ch("Peacekeeper"))
+            {
+                _prevLeftDeflect = s.Left;
+                _prevRightDeflect = s.Right;
+                s.Left = PeacekeeperDeflectDelayMs;
+                s.Right = PeacekeeperDeflectDelayMs;
+                _peacekeeperApplied = true;
+            }
+            else
+            {
+                _peacekeeperApplied = false;
+            }
+            parryEnabled = s.Parry;
+        });
+        _bot.ParryToggle = parryEnabled;
         SendSettings();
         SendToast("Settings loaded.", "success");
     }
 
     private void OnSave()
     {
-        foreach (string key in EditKeys) Config.Write(key, GetEdit(_bot.S, key));
-        foreach (string key in CheckKeys) Config.Write(key, GetCheck(_bot.S, key) ? "1" : "0");
+        Settings s = _bot.S;
+        foreach (string key in EditKeys) Config.Write(key, GetEdit(s, key));
+        foreach (string key in CheckKeys) Config.Write(key, GetCheck(s, key) ? "1" : "0");
         SendToast("Settings saved.", "success");
     }
 
@@ -490,14 +544,14 @@ public sealed class MainForm : Form
         {
             case "res1": s.Res1 = value; break;
             case "res2": s.Res2 = value; break;
-            case "Pause": s.Pause = ToInt(value); break;
-            case "Pause1": s.Pause1 = ToInt(value); break;
-            case "Pause2": s.Pause2 = ToInt(value); break;
-            case "Pause3": s.Pause3 = ToInt(value); break;
-            case "ParryDelay": s.ParryDelay = Math.Max(0, ToInt(value)); break;
-            case "GuardHold": s.GuardHold = Math.Max(60, ToInt(value)); break;
-            case "Left": s.Left = ToInt(value); break;
-            case "Right": s.Right = ToInt(value); break;
+            case "Pause": s.Pause = ClampDelay(ToInt(value)); break;
+            case "Pause1": s.Pause1 = ClampDelay(ToInt(value)); break;
+            case "Pause2": s.Pause2 = ClampDelay(ToInt(value)); break;
+            case "Pause3": s.Pause3 = ClampDelay(ToInt(value)); break;
+            case "ParryDelay": s.ParryDelay = ClampDelay(ToInt(value)); break;
+            case "GuardHold": s.GuardHold = Math.Clamp(ToInt(value), 60, MaxDelayMs); break;
+            case "Left": s.Left = ClampDelay(ToInt(value)); break;
+            case "Right": s.Right = ClampDelay(ToInt(value)); break;
         }
     }
 
@@ -604,7 +658,7 @@ public sealed class MainForm : Form
         {
             if (down && !_rDown)
             {
-                _bot.S.Active1 = 0;
+                _bot.DodgeEnabled = false;
                 _bot.ScheduleRele();
             }
             _rDown = down;
@@ -613,26 +667,41 @@ public sealed class MainForm : Form
 
     private void HandleHotkey(int id)
     {
-        var s = _bot.S;
         switch (id)
         {
             case IdF1:
-                if (s.Pause == 0) { s.Pause = 80; Sound("buttonclick"); }
-                else { s.Pause = 0; Sound("buttonunclick"); }
+                _bot.UpdateSettings(next => next.Pause = next.Pause == 0 ? 80 : 0);
+                SendSettings();
+                Sound(_bot.S.Pause == 0 ? "buttonunclick" : "buttonclick");
                 break;
             case IdF2:
-                if (s.Active1 == 1) { s.Active1 = 0; Sound("buttonunclick"); }
-                else { s.Active1 = 1; Sound("buttonclick"); }
+                _bot.DodgeEnabled = !_bot.DodgeEnabled;
+                Sound(_bot.DodgeEnabled ? "buttonclick" : "buttonunclick");
                 break;
             case IdF3:
-                if (s.Active3 == 1) { s.Active3 = 0; s.Active4 = 1; Sound("buttonclick"); }
-                else if (s.Active4 == 1) { s.Active3 = 1; s.Active4 = 0; Sound("buttonclick"); }
+                string fMode = "Parry";
+                _bot.UpdateSettings(next =>
+                {
+                    if (next.Parry) { next.Parry = false; next.Crushing = true; next.Deflect = false; fMode = "Crushing counter"; }
+                    else if (next.Crushing) { next.Parry = false; next.Crushing = false; next.Deflect = true; fMode = "Deflect"; }
+                    else { next.Parry = true; next.Crushing = false; next.Deflect = false; fMode = "Parry"; }
+                    _bot.ParryToggle = next.Parry;
+                });
+                SendSettings();
+                SendToast($"F-mode: {fMode}", "info");
+                Sound("buttonclick");
                 break;
             case IdF4:
-                s.NMode++;
-                if (s.NMode == 1) { s.Active9 = 1; s.Active11 = 0; s.Active12 = 0; Sound("buttonclick"); }
-                else if (s.NMode == 2) { s.Active9 = 0; s.Active11 = 1; s.Active12 = 0; Sound("buttonclick"); }
-                else if (s.NMode == 3) { s.Active9 = 0; s.Active11 = 0; s.Active12 = 1; Sound("buttonclick"); s.NMode = 0; }
+                string eMode = "Parry";
+                _bot.UpdateSettings(next =>
+                {
+                    if (next.Parry2) { next.Parry2 = false; next.Crushing2 = true; eMode = "Crushing counter"; }
+                    else if (next.Crushing2) { next.Parry2 = false; next.Crushing2 = false; eMode = "Off"; }
+                    else { next.Parry2 = true; next.Crushing2 = false; eMode = "Parry"; }
+                });
+                SendSettings();
+                SendToast($"E-mode: {eMode}", "info");
+                Sound("buttonclick");
                 break;
             case IdF5:
                 ToggleOrangeParry();
