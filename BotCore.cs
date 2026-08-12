@@ -32,6 +32,8 @@ public sealed class BotCore
     private readonly CancellationTokenSource _cts = new();
     private readonly System.Threading.Timer _releaseTimer;
     private readonly System.Threading.Timer _releTimer;
+    private readonly System.Threading.Timer _guardReleaseTimer;
+    private long _guardReleaseTick;
     private ScreenFrame _frame = new();
     private Thread _thread;
 
@@ -39,6 +41,7 @@ public sealed class BotCore
     {
         _releaseTimer = new System.Threading.Timer(_ => S.Ubp = 0, null, Timeout.Infinite, Timeout.Infinite);
         _releTimer = new System.Threading.Timer(_ => S.Active1 = 1, null, Timeout.Infinite, Timeout.Infinite);
+        _guardReleaseTimer = new System.Threading.Timer(_ => ReleaseAutoGuardWhenDue(), null, Timeout.Infinite, Timeout.Infinite);
     }
 
     public bool IsRunning => _thread is { IsAlive: true };
@@ -55,6 +58,7 @@ public sealed class BotCore
     {
         _cts.Cancel();
         _thread?.Join(2000);
+        ReleaseAutoGuard();
     }
 
     public void TogglePause()
@@ -206,6 +210,36 @@ public sealed class BotCore
     }
 
     private static void Sleep(int ms) => Thread.Sleep(ms);
+
+    private void SetAutoGuard(int key)
+    {
+        ReleaseAutoGuard();
+        int holdMs = Math.Max(60, S.GuardHold);
+        Interlocked.Exchange(ref _guardReleaseTick, Environment.TickCount64 + holdMs);
+        Input.KeyDown(key);
+        _guardReleaseTimer.Change(holdMs, Timeout.Infinite);
+    }
+
+    private void ReleaseAutoGuard()
+    {
+        _guardReleaseTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+        Interlocked.Exchange(ref _guardReleaseTick, 0);
+        Input.KeyUp(Input.VK_NUMPAD4);
+        Input.KeyUp(Input.VK_NUMPAD6);
+        Input.KeyUp(Input.VK_NUMPAD8);
+    }
+
+    private void ReleaseAutoGuardWhenDue()
+    {
+        long remaining = Interlocked.Read(ref _guardReleaseTick) - Environment.TickCount64;
+        if (remaining > 0)
+        {
+            _guardReleaseTimer.Change((int)Math.Min(remaining, int.MaxValue), Timeout.Infinite);
+            return;
+        }
+
+        ReleaseAutoGuard();
+    }
 
     private static void WithBlock(Action action)
     {
@@ -633,7 +667,7 @@ public sealed class BotCore
     {
         GuardDir = "TOP";
         Sleep(S.Pause3);
-        Input.KeyTap(Input.VK_NUMPAD8, 60);
+        SetAutoGuard(Input.VK_NUMPAD8);
 
         if (IsEHeld() && HasEAction())
         {
@@ -692,7 +726,7 @@ public sealed class BotCore
     {
         GuardDir = "LFT";
         Sleep(S.Pause3);
-        Input.KeyTap(Input.VK_NUMPAD4, 60);
+        SetAutoGuard(Input.VK_NUMPAD4);
 
         if (IsEHeld() && HasEAction())
         {
@@ -751,7 +785,7 @@ public sealed class BotCore
     {
         GuardDir = "RGT";
         Sleep(S.Pause3);
-        Input.KeyTap(Input.VK_NUMPAD6, 60);
+        SetAutoGuard(Input.VK_NUMPAD6);
 
         if (IsEHeld() && HasEAction())
         {

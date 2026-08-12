@@ -10,6 +10,7 @@ public sealed class Settings
     public int Pause2;
     public int Pause3;
     public int ParryDelay;
+    public int GuardHold = 750;
     public int Left;
     public int Right;
 

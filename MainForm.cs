@@ -16,7 +16,7 @@ public sealed class MainForm : Form
     private const int WmNcLButtonDown = 0xA1;
     private const int HtCaption = 0x2;
 
-    private static readonly string[] EditKeys = { "res1", "res2", "Pause", "Pause1", "Pause2", "Pause3", "ParryDelay", "Left", "Right" };
+    private static readonly string[] EditKeys = { "res1", "res2", "Pause", "Pause1", "Pause2", "Pause3", "ParryDelay", "GuardHold", "Left", "Right" };
 
     private static readonly string[] CheckKeys =
     {
@@ -246,6 +246,7 @@ public sealed class MainForm : Form
             ["Pause2"] = s.Pause2,
             ["Pause3"] = s.Pause3,
             ["ParryDelay"] = s.ParryDelay,
+            ["GuardHold"] = s.GuardHold,
             ["Left"] = s.Left,
             ["Right"] = s.Right
         };
@@ -309,6 +310,7 @@ public sealed class MainForm : Form
         s.Pause2 = ReadInt(values, "Pause2", s.Pause2);
         s.Pause3 = ReadInt(values, "Pause3", s.Pause3);
         s.ParryDelay = Math.Max(0, ReadInt(values, "ParryDelay", s.ParryDelay));
+        s.GuardHold = Math.Max(60, ReadInt(values, "GuardHold", s.GuardHold));
         s.Left = ReadInt(values, "Left", s.Left);
         s.Right = ReadInt(values, "Right", s.Right);
         foreach (string key in CheckKeys)
@@ -462,6 +464,7 @@ public sealed class MainForm : Form
             "Pause2" => s.Pause2.ToString(),
             "Pause3" => s.Pause3.ToString(),
             "ParryDelay" => s.ParryDelay.ToString(),
+            "GuardHold" => s.GuardHold.ToString(),
             "Left" => s.Left.ToString(),
             "Right" => s.Right.ToString(),
             _ => ""
@@ -479,6 +482,7 @@ public sealed class MainForm : Form
             case "Pause2": s.Pause2 = ToInt(value); break;
             case "Pause3": s.Pause3 = ToInt(value); break;
             case "ParryDelay": s.ParryDelay = Math.Max(0, ToInt(value)); break;
+            case "GuardHold": s.GuardHold = Math.Max(60, ToInt(value)); break;
             case "Left": s.Left = ToInt(value); break;
             case "Right": s.Right = ToInt(value); break;
         }
