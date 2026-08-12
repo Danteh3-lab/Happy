@@ -8,7 +8,7 @@ namespace HappyBot;
 
 public sealed class MainForm : Form
 {
-    private const int IdF1 = 1, IdF2 = 2, IdF3 = 3, IdF4 = 4, IdF5 = 5, IdF6 = 6;
+    private const int IdF1 = 1, IdF2 = 2, IdF3 = 3, IdF4 = 4, IdF5 = 5, IdF6 = 6, IdF7 = 7;
     private const int PeacekeeperDeflectDelayMs = 100;
     private int _prevLeftDeflect;
     private int _prevRightDeflect;
@@ -43,6 +43,7 @@ public sealed class MainForm : Form
     private readonly BotCore _bot = new();
     private readonly KeyboardHook _hook;
     private readonly WebView2 _webView;
+    private readonly VisionOverlayForm _visionOverlay;
     private readonly System.Windows.Forms.Timer _statusTimer;
     private CancellationTokenSource _testCts = new();
     private int _testMode;
@@ -51,6 +52,8 @@ public sealed class MainForm : Form
     private bool _fKeyDown;
     private bool _webReady;
     private bool _prevDpadDown;
+    private bool _visionOverlayVisible;
+    private bool _showAnchorScan = true;
 
     public MainForm()
     {
@@ -65,6 +68,8 @@ public sealed class MainForm : Form
         _bot.S.Res1 = screen.Width.ToString();
         _bot.S.Res2 = screen.Height.ToString();
         ApplyResolution(screen.Width, screen.Height);
+
+        _visionOverlay = new VisionOverlayForm(_bot.GetVisionSnapshot);
 
         _webView = new WebView2
         {
@@ -191,6 +196,12 @@ public sealed class MainForm : Form
                 case "orange-parry":
                     ToggleOrangeParry();
                     break;
+                case "vision-overlay":
+                    ToggleVisionOverlay();
+                    break;
+                case "anchor-scan":
+                    ToggleAnchorScan();
+                    break;
             }
         }
         catch (Exception ex)
@@ -230,7 +241,9 @@ public sealed class MainForm : Form
             dodgeEnabled = _bot.S.Active1 == 1,
             legit = _bot.S.Legit,
             parryToggle = _bot.ParryToggle,
-            orangeParry = _bot.OrangeParry
+            orangeParry = _bot.OrangeParry,
+            visionOverlay = _visionOverlayVisible,
+            anchorScan = _showAnchorScan
         };
     }
 
@@ -528,12 +541,13 @@ public sealed class MainForm : Form
         _bot.Y18 = (height / 1080.0) * 300;
         _bot.X19 = (width / 1920.0) * 820;
         _bot.Y19 = (height / 1080.0) * 510;
+        _bot.RefreshVisionSnapshot();
     }
 
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
-        for (int i = 0; i < 6; i++)
+        for (int i = 0; i < 7; i++)
         {
             Native.RegisterHotKey(Handle, i + 1, 0, (uint)(0x70 + i));
         }
@@ -541,7 +555,7 @@ public sealed class MainForm : Form
 
     protected override void OnHandleDestroyed(EventArgs e)
     {
-        for (int i = 0; i < 6; i++)
+        for (int i = 0; i < 7; i++)
         {
             Native.UnregisterHotKey(Handle, i + 1);
         }
@@ -554,6 +568,7 @@ public sealed class MainForm : Form
         _testCts.Cancel();
         _bot.Stop();
         _hook.Dispose();
+        _visionOverlay.Dispose();
         _webView.Dispose();
         base.OnFormClosing(e);
     }
@@ -626,6 +641,9 @@ public sealed class MainForm : Form
                 _bot.TogglePause();
                 Sound("buttonclick");
                 break;
+            case IdF7:
+                ToggleVisionOverlay();
+                return;
         }
         SendStatus();
     }
@@ -634,6 +652,35 @@ public sealed class MainForm : Form
     {
         _bot.OrangeParry = !_bot.OrangeParry;
         SendToast(_bot.OrangeParry ? "Orange parry ON" : "Orange parry OFF", _bot.OrangeParry ? "success" : "info");
+        SendStatus();
+    }
+
+    private void ToggleVisionOverlay()
+    {
+        if (_visionOverlayVisible)
+        {
+            _visionOverlay.HideOverlay();
+            _visionOverlayVisible = false;
+            SendToast("Vision overlay hidden.", "info");
+        }
+        else if (_visionOverlay.TryShowOverlay())
+        {
+            _visionOverlayVisible = true;
+            SendToast("Vision overlay enabled. Press F7 to hide it.", "success");
+        }
+        else
+        {
+            _visionOverlayVisible = false;
+            SendToast("Vision overlay could not be excluded from screen capture, so it stayed off.", "error");
+        }
+        SendStatus();
+    }
+
+    private void ToggleAnchorScan()
+    {
+        _showAnchorScan = !_showAnchorScan;
+        _visionOverlay.SetAnchorScanVisible(_showAnchorScan);
+        SendToast(_showAnchorScan ? "Anchor scan shown." : "Anchor scan hidden.", "info");
         SendStatus();
     }
 
@@ -669,7 +716,8 @@ public sealed class MainForm : Form
         "3) Match the menu resolution to the game render.\n" +
         "4) Use fullscreen or borderless fullscreen, not windowed mode.\n" +
         "5) Hide physical/source controllers with HidHide and leave the ViGEm output visible.\n" +
-        "6) Hold E or F before an attack for parry/counter actions. Orange handling runs automatically when enabled; F5 toggles orange parry.";
+        "6) Hold E or F before an attack for parry/counter actions. Orange handling runs automatically when enabled; F5 toggles orange parry.\n" +
+        "7) F7 toggles the diagnostic vision overlay. It is click-through and does not change bot behavior.";
 
     private const string ReadMeText =
         "FEATURES\n\n" +
@@ -679,5 +727,6 @@ public sealed class MainForm : Form
         "- Hero-specific evades and reactions\n" +
         "- ViGEm source/output merge\n" +
         "- Configurable reaction delays\n" +
+        "- F7 anchor-following vision overlay\n" +
         "\nDANBOT by Danteh. The UI is a WebView2 shell over the existing C# bot core.";
 }

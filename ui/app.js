@@ -43,6 +43,8 @@
     const mode = state.status.mode || "ViGEm";
     const loop = Number(state.status.loop || 0);
     const orangeParry = state.status.orangeParry === true;
+    const visionOverlay = state.status.visionOverlay === true;
+    const anchorScan = state.status.anchorScan !== false;
 
     const top = $("#top-runtime");
     top.innerHTML = '<span class="status-dot ' + (running ? "green" : "") + '"></span> ' + (running ? "RUNNING" : "STANDBY");
@@ -67,6 +69,16 @@
     if (orangeButton) {
       orangeButton.textContent = "Orange parry: " + (orangeParry ? "ON" : "OFF") + " · F5";
       orangeButton.classList.toggle("active", orangeParry);
+    }
+    const visionButton = $("#vision-overlay-button");
+    if (visionButton) {
+      visionButton.textContent = "Vision overlay: " + (visionOverlay ? "ON" : "OFF") + " - F7";
+      visionButton.classList.toggle("active", visionOverlay);
+    }
+    const anchorScanButton = $("#anchor-scan-button");
+    if (anchorScanButton) {
+      anchorScanButton.textContent = "Anchor scan: " + (anchorScan ? "ON" : "OFF");
+      anchorScanButton.classList.toggle("active", anchorScan);
     }
   }
 
@@ -117,6 +129,8 @@
     if (action === "close") return post("close");
     if (action === "drag") return post("drag");
     if (action === "toggle-orange-parry") return post("orange-parry");
+    if (action === "vision-overlay") return post("vision-overlay");
+    if (action === "anchor-scan") return post("anchor-scan");
   }
 
   $$('[data-view-target]').forEach((button) => button.addEventListener("click", () => selectView(button.dataset.viewTarget)));

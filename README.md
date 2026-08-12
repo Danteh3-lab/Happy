@@ -109,6 +109,10 @@ Important feature switches:
 - **Your Hero** enables hero-specific F/LT counters.
 - **No Hero** suppresses hero-specific behavior.
 
+## Vision Overlay
+
+Press **F7** or use **Vision overlay** on the Overview page to show DANBOT's diagnostic HUD. The overlay is click-through and displays the real anchor scan area, the green/yellow anchor, the derived combat and guard regions, and the live reaction stage (for example, `LEFT → GUARD`, `LEFT → PARRY READY`, then `LEFT → PARRY SENT`). It is hidden by default and does not change detection or input behavior.
+
 The status line exposes the active settings as `P1`, `P2`, and `U`. `F:DOWN` confirms the configured hold button is detected.
 
 ## Test Input
