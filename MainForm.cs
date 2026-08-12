@@ -209,6 +209,12 @@ public sealed class MainForm : Form
                 case "anchor-scan":
                     ToggleAnchorScan();
                     break;
+                case "telemetry":
+                    ToggleTelemetry(root.TryGetProperty("label", out JsonElement label) ? label.GetString() ?? "Other" : "Other");
+                    break;
+                case "export-telemetry":
+                    ExportTelemetry();
+                    break;
             }
         }
         catch (Exception ex)
@@ -229,6 +235,7 @@ public sealed class MainForm : Form
 
     private object StatusSnapshot()
     {
+        TelemetryStatus telemetry = _bot.Telemetry;
         return new
         {
             running = _bot.IsRunning,
@@ -250,7 +257,15 @@ public sealed class MainForm : Form
             parryToggle = _bot.ParryToggle,
             orangeParry = _bot.OrangeParry,
             visionOverlay = _visionOverlayVisible,
-            anchorScan = _showAnchorScan
+            anchorScan = _showAnchorScan,
+            telemetry = new
+            {
+                recording = telemetry.Recording,
+                label = telemetry.Label,
+                durationSeconds = (int)telemetry.Duration.TotalSeconds,
+                failures = telemetry.Failures,
+                dropped = telemetry.DroppedItems
+            }
         };
     }
 
@@ -620,6 +635,7 @@ public sealed class MainForm : Form
     {
         _statusTimer.Stop();
         _testCts.Cancel();
+        _bot.StopTelemetry();
         _bot.Stop();
         _hook.Dispose();
         _visionOverlay.Dispose();
@@ -751,6 +767,29 @@ public sealed class MainForm : Form
         _visionOverlay.SetAnchorScanVisible(_showAnchorScan);
         SendToast(_showAnchorScan ? "Anchor scan shown." : "Anchor scan hidden.", "info");
         SendStatus();
+    }
+
+    private void ToggleTelemetry(string label)
+    {
+        if (_bot.Telemetry.Recording)
+        {
+            _bot.StopTelemetry();
+            SendToast("Telemetry saved locally.", "success");
+        }
+        else
+        {
+            _bot.StartTelemetry(label);
+            SendToast($"Telemetry recording: {label}.", "info");
+        }
+        SendStatus();
+    }
+
+    private void ExportTelemetry()
+    {
+        if (_bot.ExportTelemetry(this, out string result))
+            SendToast("Telemetry ZIP exported.", "success");
+        else
+            SendToast(result, "info");
     }
 
     private static void Sound(string name)

@@ -25,4 +25,13 @@ public sealed class VisionSnapshot
     public string ReactionReason { get; init; } = "Waiting for an anchor";
     public bool Flash { get; init; }
     public int LoopHz { get; init; }
+    public int Box { get; init; }
+    public long AnchorAgeMs { get; init; }
+    public long GuardRemainingMs { get; init; }
+    public long ReactionWaitMs { get; init; }
+    public long CandidateId { get; init; }
+    public long CandidateAgeMs { get; init; }
+    public long CandidateLastValidAgeMs { get; init; }
+    public string ActionWorkerState { get; init; } = "IDLE";
+    public bool TelemetryRecording { get; init; }
 }

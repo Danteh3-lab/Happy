@@ -34,6 +34,24 @@ public static class ViGEmInput
         }
     }
 
+    public static InputBridgeSnapshot GetDiagnostics()
+    {
+        lock (Sync)
+        {
+            bool botRightStick = _bot.sThumbRX != 0 || _bot.sThumbRY != 0;
+            return new InputBridgeSnapshot(
+                IsAvailable,
+                _sourceConnected,
+                _sourceSlot,
+                _source.sThumbRX,
+                _source.sThumbRY,
+                _bot.sThumbRX,
+                _bot.sThumbRY,
+                botRightStick ? _bot.sThumbRX : _source.sThumbRX,
+                botRightStick ? _bot.sThumbRY : _source.sThumbRY);
+        }
+    }
+
     public static void Init()
     {
         try
@@ -232,3 +250,7 @@ public static class ViGEmInput
         return 0;
     }
 }
+
+public sealed record InputBridgeSnapshot(bool Available, bool SourceConnected, int SourceSlot,
+    short SourceRightX, short SourceRightY, short BotRightX, short BotRightY,
+    short MergedRightX, short MergedRightY);

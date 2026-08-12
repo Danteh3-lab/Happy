@@ -74,7 +74,50 @@ public sealed class ScreenFrame
         }
         return count;
     }
+
+    /// <summary>
+    /// The same match predicate as PixelSearch, with compact diagnostic data for
+    /// telemetry. It does not influence the detector beyond supplying its result.
+    /// </summary>
+    public ColorProbe ProbeColor(int r, int g, int b, int variation, int max = 100)
+    {
+        int firstX = -1;
+        int firstY = -1;
+        int count = 0;
+        int closestDistance = int.MaxValue;
+        int closestR = 0, closestG = 0, closestB = 0;
+        if (Width == 0 || Height == 0) return new ColorProbe(0, -1, -1, "n/a", -1);
+
+        for (int y = 0; y < Height; y++)
+        {
+            int row = y * Stride;
+            for (int x = 0; x < Width; x++)
+            {
+                int i = row + x * 4;
+                int pixelB = Buffer[i];
+                int pixelG = Buffer[i + 1];
+                int pixelR = Buffer[i + 2];
+                int distance = Math.Abs(pixelR - r) + Math.Abs(pixelG - g) + Math.Abs(pixelB - b);
+                if (distance < closestDistance)
+                {
+                    closestDistance = distance;
+                    closestR = pixelR;
+                    closestG = pixelG;
+                    closestB = pixelB;
+                }
+                if (count < max && Math.Abs(pixelR - r) <= variation &&
+                    Math.Abs(pixelG - g) <= variation && Math.Abs(pixelB - b) <= variation)
+                {
+                    if (count == 0) { firstX = x; firstY = y; }
+                    count++;
+                }
+            }
+        }
+        return new ColorProbe(count, firstX, firstY, $"{closestR},{closestG},{closestB}", closestDistance);
+    }
 }
+
+public sealed record ColorProbe(int MatchCount, int FirstX, int FirstY, string ClosestRgb, int ClosestDistance);
 
 public static class ScreenCapture
 {

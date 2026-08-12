@@ -45,6 +45,8 @@
     const orangeParry = state.status.orangeParry === true;
     const visionOverlay = state.status.visionOverlay === true;
     const anchorScan = state.status.anchorScan !== false;
+    const telemetry = state.status.telemetry || {};
+    const telemetryRecording = telemetry.recording === true;
 
     const top = $("#top-runtime");
     top.innerHTML = '<span class="status-dot ' + (running ? "green" : "") + '"></span> ' + (running ? "RUNNING" : "STANDBY");
@@ -79,6 +81,18 @@
     if (anchorScanButton) {
       anchorScanButton.textContent = "Anchor scan: " + (anchorScan ? "ON" : "OFF");
       anchorScanButton.classList.toggle("active", anchorScan);
+    }
+    const telemetryButton = $("#telemetry-button");
+    if (telemetryButton) {
+      telemetryButton.textContent = "Telemetry: " + (telemetryRecording ? "ON" : "OFF");
+      telemetryButton.classList.toggle("active", telemetryRecording);
+    }
+    const telemetryStatus = $("#telemetry-status");
+    if (telemetryStatus) {
+      const seconds = Number(telemetry.durationSeconds || 0);
+      telemetryStatus.textContent = telemetryRecording
+        ? "Telemetry " + (telemetry.label || "Other") + " · " + seconds + "s · " + Number(telemetry.failures || 0) + " failures · " + Number(telemetry.dropped || 0) + " dropped"
+        : "Telemetry OFF";
     }
   }
 
@@ -131,6 +145,8 @@
     if (action === "toggle-orange-parry") return post("orange-parry");
     if (action === "vision-overlay") return post("vision-overlay");
     if (action === "anchor-scan") return post("anchor-scan");
+    if (action === "telemetry") return post("telemetry", { label: $("#telemetry-label").value });
+    if (action === "export-telemetry") return post("export-telemetry");
   }
 
   $$('[data-view-target]').forEach((button) => button.addEventListener("click", () => selectView(button.dataset.viewTarget)));
