@@ -17,7 +17,7 @@ public sealed class MainForm : Form
     private const int WmNcLButtonDown = 0xA1;
     private const int HtCaption = 0x2;
 
-    private static readonly string[] EditKeys = { "res1", "res2", "Pause", "Pause1", "Pause2", "Pause3", "ParryDelay", "GuardHold", "Left", "Right" };
+    private static readonly string[] EditKeys = { "res1", "res2", "Pause", "Pause1", "Pause2", "Pause3", "ParryDelay", "LegitParryChance", "GuardHold", "Left", "Right" };
 
     private static readonly string[] CheckKeys =
     {
@@ -281,6 +281,7 @@ public sealed class MainForm : Form
             ["Pause2"] = s.Pause2,
             ["Pause3"] = s.Pause3,
             ["ParryDelay"] = s.ParryDelay,
+            ["LegitParryChance"] = s.LegitParryChance,
             ["GuardHold"] = s.GuardHold,
             ["Left"] = s.Left,
             ["Right"] = s.Right
@@ -348,6 +349,7 @@ public sealed class MainForm : Form
             s.Pause2 = ClampDelay(ReadInt(values, "Pause2", s.Pause2));
             s.Pause3 = ClampDelay(ReadInt(values, "Pause3", s.Pause3));
             s.ParryDelay = ClampDelay(ReadInt(values, "ParryDelay", s.ParryDelay));
+            s.LegitParryChance = Math.Clamp(ReadInt(values, "LegitParryChance", s.LegitParryChance), 0, 100);
             s.GuardHold = Math.Clamp(ReadInt(values, "GuardHold", s.GuardHold), 60, MaxDelayMs);
             s.Left = ClampDelay(ReadInt(values, "Left", s.Left));
             s.Right = ClampDelay(ReadInt(values, "Right", s.Right));
@@ -546,6 +548,7 @@ public sealed class MainForm : Form
             "Pause2" => s.Pause2.ToString(),
             "Pause3" => s.Pause3.ToString(),
             "ParryDelay" => s.ParryDelay.ToString(),
+            "LegitParryChance" => s.LegitParryChance.ToString(),
             "GuardHold" => s.GuardHold.ToString(),
             "Left" => s.Left.ToString(),
             "Right" => s.Right.ToString(),
@@ -564,6 +567,7 @@ public sealed class MainForm : Form
             case "Pause2": s.Pause2 = ClampDelay(ToInt(value)); break;
             case "Pause3": s.Pause3 = ClampDelay(ToInt(value)); break;
             case "ParryDelay": s.ParryDelay = ClampDelay(ToInt(value)); break;
+            case "LegitParryChance": s.LegitParryChance = Math.Clamp(ToInt(value), 0, 100); break;
             case "GuardHold": s.GuardHold = Math.Clamp(ToInt(value), 60, MaxDelayMs); break;
             case "Left": s.Left = ClampDelay(ToInt(value)); break;
             case "Right": s.Right = ClampDelay(ToInt(value)); break;

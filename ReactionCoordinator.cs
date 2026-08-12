@@ -19,6 +19,42 @@ internal enum ReactionCommandKind
     Hero
 }
 
+/// <summary>Provides a testable 0-99 roll for legitimate parry selection.</summary>
+internal interface IParryRollSource
+{
+    int NextPercent();
+}
+
+internal sealed class RandomParryRollSource : IParryRollSource
+{
+    public static readonly RandomParryRollSource Instance = new();
+
+    private RandomParryRollSource() { }
+
+    public int NextPercent() => Random.Shared.Next(100);
+}
+
+/// <summary>One immutable parry-or-block choice for an accepted flash candidate.</summary>
+internal sealed record ParryDecision(
+    long CandidateId,
+    string Hold,
+    CombatDirection Direction,
+    int ChancePercent,
+    int? Roll,
+    bool ShouldParry,
+    bool LegitEnabled)
+{
+    public string Outcome => ShouldParry ? "PARRY" : "BLOCK";
+
+    public static ParryDecision Create(ReactionCommand command, bool legitEnabled, int chancePercent, IParryRollSource rolls)
+    {
+        int chance = Math.Clamp(chancePercent, 0, 100);
+        int? roll = legitEnabled ? Math.Clamp(rolls.NextPercent(), 0, 99) : null;
+        bool shouldParry = !legitEnabled || roll.GetValueOrDefault() < chance;
+        return new ParryDecision(command.CandidateId, command.Hold, command.Direction, chance, roll, shouldParry, legitEnabled);
+    }
+}
+
 /// <summary>
 /// Immutable result of one full capture/detection pass. The coordinator never
 /// captures the screen itself, so its candidate lifecycle is deterministic.

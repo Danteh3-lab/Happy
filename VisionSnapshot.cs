@@ -33,5 +33,6 @@ public sealed class VisionSnapshot
     public long CandidateAgeMs { get; init; }
     public long CandidateLastValidAgeMs { get; init; }
     public string ActionWorkerState { get; init; } = "IDLE";
+    public string LegitParryStatus { get; init; } = "LEGIT OFF";
     public bool TelemetryRecording { get; init; }
 }

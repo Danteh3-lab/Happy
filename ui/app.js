@@ -27,6 +27,13 @@
       else control.value = value;
     });
     hydrating = false;
+    syncLegitChanceControl();
+  }
+
+  function syncLegitChanceControl() {
+    const chance = $('[data-setting="LegitParryChance"]');
+    if (!chance) return;
+    chance.disabled = state.settings.Legit !== true;
   }
 
   function updateStatus(status) {
@@ -172,6 +179,7 @@
         state.settings[otherName] = false;
       }
       state.settings[control.dataset.setting] = control.type === "checkbox" ? control.checked : control.value;
+      if (control.dataset.setting === "Legit") syncLegitChanceControl();
       sendSettings();
     });
   });

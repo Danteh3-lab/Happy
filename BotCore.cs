@@ -2,10 +2,7 @@ namespace HappyBot;
 
 public sealed class BotCore
 {
-    private const int LegitChancePercent = 55;
-    private const int LegitCooldownMs = 1200;
     private const int VisionStageMinimumMs = 50;
-    private long _lastReactionTick;
     private readonly object _settingsSync = new();
     private Settings _settings = new();
     public Settings S => Volatile.Read(ref _settings);
@@ -42,6 +39,7 @@ public sealed class BotCore
     private readonly object _actionSync = new();
     private readonly TelemetryRecorder _telemetry = new();
     private readonly ReactionCoordinator _reactionCoordinator = new();
+    private readonly IParryRollSource _parryRolls;
     private int _ubp;
     private long _guardReleaseTick;
     private long _guardPressedTick;
@@ -74,12 +72,18 @@ public sealed class BotCore
     private string _reactionState = "SEARCHING";
     private string _reactionReason = "Waiting for an anchor";
     private string _reactionDirection = "";
+    private ParryDecision _latestParryDecision;
     private VisionSnapshot _vision = new();
     private ScreenFrame _frame = new();
     private Thread _thread;
 
-    public BotCore()
+    public BotCore() : this(RandomParryRollSource.Instance)
     {
+    }
+
+    internal BotCore(IParryRollSource parryRolls)
+    {
+        _parryRolls = parryRolls ?? throw new ArgumentNullException(nameof(parryRolls));
         _releaseTimer = new System.Threading.Timer(_ => Volatile.Write(ref _ubp, 0), null, Timeout.Infinite, Timeout.Infinite);
         _releTimer = new System.Threading.Timer(_ => DodgeEnabled = true, null, Timeout.Infinite, Timeout.Infinite);
         _guardReleaseTimer = new System.Threading.Timer(_ => ReleaseAutoGuardWhenDue(), null, Timeout.Infinite, Timeout.Infinite);
@@ -136,7 +140,7 @@ public sealed class BotCore
     public void StartTelemetry(string label)
     {
         _telemetry.Start(label);
-        _telemetry.Record("runtime-settings", new { resolution = new { S.Res1, S.Res2 }, S.GuardHold, S.Pause3, S.ParryDelay });
+        _telemetry.Record("runtime-settings", new { resolution = new { S.Res1, S.Res2 }, S.GuardHold, S.Pause3, S.ParryDelay, S.Legit, S.LegitParryChance });
     }
 
     public void StopTelemetry() => _telemetry.Stop();
@@ -330,6 +334,26 @@ public sealed class BotCore
         {
             RecordTelemetry("flash-accepted", new { candidateId = tick.Command.CandidateId, direction = tick.Command.Direction.ToString(), kind = tick.Command.Kind.ToString() });
             _telemetry.CaptureRoi("flash-accepted", observation.CombatRoi);
+            if (tick.Command.Kind == ReactionCommandKind.Parry)
+            {
+                ParryDecision decision = ParryDecision.Create(tick.Command, S.Legit, S.LegitParryChance, _parryRolls);
+                _latestParryDecision = decision;
+                RecordTelemetry("legit-parry-decision", new
+                {
+                    candidateId = decision.CandidateId,
+                    hold = decision.Hold,
+                    direction = decision.Direction.ToString(),
+                    chancePercent = decision.ChancePercent,
+                    roll = decision.Roll,
+                    outcome = decision.Outcome,
+                    legitEnabled = decision.LegitEnabled
+                });
+                if (!decision.ShouldParry)
+                {
+                    SetVisionReaction("BLOCK ONLY", $"Legit {decision.ChancePercent}% roll {decision.Roll}: block", DirectionName(decision.Direction), 1100);
+                    return;
+                }
+            }
             QueueDirectionalAction(tick.Command);
         }
     }
@@ -353,11 +377,6 @@ public sealed class BotCore
 
     private void QueueDirectionalAction(ReactionCommand command)
     {
-        if (!ReactionAllowed())
-        {
-            SetVisionReaction("PARRY SKIPPED", "Legit mode gate", DirectionName(command.Direction), 900);
-            return;
-        }
         lock (_actionSync)
         {
             if (!_actionTask.IsCompleted) return;
@@ -1055,6 +1074,18 @@ public sealed class BotCore
         _ => ""
     };
 
+    private string LegitParryStatus
+    {
+        get
+        {
+            if (!S.Legit) return "LEGIT OFF";
+            ParryDecision decision = _latestParryDecision;
+            return decision == null
+                ? $"LEGIT {S.LegitParryChance}% WAIT"
+                : $"LEGIT {decision.ChancePercent}% {decision.Outcome}";
+        }
+    }
+
     private void PublishVision()
     {
         ReactionCandidate candidate = _reactionCoordinator.CurrentCandidate;
@@ -1098,6 +1129,7 @@ public sealed class BotCore
             CandidateAgeMs = candidate == null ? 0 : Math.Max(0, now - candidate.StartedMs),
             CandidateLastValidAgeMs = candidate == null ? 0 : Math.Max(0, now - candidate.LastValidMs),
             ActionWorkerState = _actionState,
+            LegitParryStatus = LegitParryStatus,
             TelemetryRecording = _telemetry.IsRecording
         };
         lock (_visionSync) _vision = snapshot;
@@ -1280,12 +1312,6 @@ public sealed class BotCore
             ScreenHeight = _frame.Height;
             if (!CurrentPx(X16, Y16, X17, Y17, 246, 98, 8, 0, out _, out _) || !S.Unblockables) continue;
             if (!DodgeEnabled)
-            {
-                Volatile.Write(ref _ubp, 0);
-                return;
-            }
-
-            if (!ReactionAllowed())
             {
                 Volatile.Write(ref _ubp, 0);
                 return;
@@ -1521,16 +1547,6 @@ public sealed class BotCore
 
     private bool HasEAction() => S.Parry2 || S.Crushing2;
 
-    private bool ReactionAllowed()
-    {
-        if (!S.Legit) return true;
-        long now = Environment.TickCount64;
-        if (now - _lastReactionTick < LegitCooldownMs) return false;
-        if (Random.Shared.Next(100) >= LegitChancePercent) return false;
-        _lastReactionTick = now;
-        return true;
-    }
-
     private bool HasFAction() => S.Parry || S.Crushing || S.Deflect || HasHeroAction();
 
     private bool TryPrimaryFReaction()
@@ -1747,8 +1763,6 @@ public sealed class BotCore
             while (ReactionActive() && IsEHeld())
             {
                 if (!AttackFlashing()) continue;
-                if (!ReactionAllowed()) { SetVisionReaction("PARRY SKIPPED", "Legit mode gate", "TOP", 900); while (ReactionActive() && AttackFlashing()) { } continue; }
-
                 if (S.Parry2) { SendParry("E"); Sleep(850); return; }
                 if (S.Crushing2) { Input.MouseClick(Input.VK_LBUTTON); SetVisionReaction("CRUSHING SENT", "E hold + flash gate", "TOP", 1300); Sleep(1200); return; }
             }
@@ -1763,8 +1777,6 @@ public sealed class BotCore
             while (ReactionActive() && IsFHeld())
             {
                 if (!AttackFlashing()) continue;
-                if (!ReactionAllowed()) { SetVisionReaction("PARRY SKIPPED", "Legit mode gate", "TOP", 900); while (ReactionActive() && AttackFlashing()) { } continue; }
-
                 if (TryPrimaryFReaction()) return;
                 if (TryHeroFReaction("TOP")) return;
             }
@@ -1786,8 +1798,6 @@ public sealed class BotCore
             while (ReactionActive() && IsEHeld())
             {
                 if (!AttackFlashing()) continue;
-                if (!ReactionAllowed()) { SetVisionReaction("PARRY SKIPPED", "Legit mode gate", "LEFT", 900); while (ReactionActive() && AttackFlashing()) { } continue; }
-
                 if (S.Parry2) { SendParry("E"); Sleep(850); return; }
                 if (S.Crushing2) { Input.MouseClick(Input.VK_LBUTTON); SetVisionReaction("CRUSHING SENT", "E hold + flash gate", "LEFT", 1300); Sleep(1200); return; }
             }
@@ -1802,8 +1812,6 @@ public sealed class BotCore
             while (ReactionActive() && IsFHeld())
             {
                 if (!AttackFlashing()) continue;
-                if (!ReactionAllowed()) { SetVisionReaction("PARRY SKIPPED", "Legit mode gate", "LEFT", 900); while (ReactionActive() && AttackFlashing()) { } continue; }
-
                 if (TryPrimaryFReaction()) return;
                 if (TryHeroFReaction("LEFT")) return;
             }
@@ -1825,8 +1833,6 @@ public sealed class BotCore
             while (ReactionActive() && IsEHeld())
             {
                 if (!AttackFlashing()) continue;
-                if (!ReactionAllowed()) { SetVisionReaction("PARRY SKIPPED", "Legit mode gate", "RIGHT", 900); while (ReactionActive() && AttackFlashing()) { } continue; }
-
                 if (S.Parry2) { SendParry("E"); Sleep(850); return; }
                 if (S.Crushing2) { Input.MouseClick(Input.VK_LBUTTON); SetVisionReaction("CRUSHING SENT", "E hold + flash gate", "RIGHT", 1300); Sleep(1200); return; }
             }
@@ -1841,8 +1847,6 @@ public sealed class BotCore
             while (ReactionActive() && IsFHeld())
             {
                 if (!AttackFlashing()) continue;
-                if (!ReactionAllowed()) { SetVisionReaction("PARRY SKIPPED", "Legit mode gate", "RIGHT", 900); while (ReactionActive() && AttackFlashing()) { } continue; }
-
                 if (TryPrimaryFReaction()) return;
                 if (TryHeroFReaction("RIGHT")) return;
             }

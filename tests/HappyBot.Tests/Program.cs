@@ -14,6 +14,11 @@ static class Program
             CandidateTimesOutAndRequiresClear();
             LatestDirectionReplacesCandidate();
             ReleasedHoldDoesNotIssueReaction();
+            LegitPercentageUsesBoundaryRolls();
+            LegitOffAlwaysParriesWithoutRolling();
+            FAndEParriesBothUsePercentage();
+            FailedLegitDecisionLeavesCandidateAvailableForGuard();
+            AutoBlockOffDoesNotArmCandidate();
             Console.WriteLine("ReactionCoordinator tests passed.");
             return 0;
         }
@@ -89,6 +94,53 @@ static class Program
         Require(flash.Command is null && flash.Candidate is { Consumed: false }, "flash with released hold should remain unconsumed");
     }
 
+    private static void LegitPercentageUsesBoundaryRolls()
+    {
+        ReactionCommand command = new(17, ReactionCommandKind.Parry, "F", CombatDirection.Left);
+        ParryDecision zero = ParryDecision.Create(command, true, 0, new FixedRollSource(0));
+        ParryDecision full = ParryDecision.Create(command, true, 100, new FixedRollSource(99));
+        ParryDecision success = ParryDecision.Create(command, true, 55, new FixedRollSource(54));
+        ParryDecision blocked = ParryDecision.Create(command, true, 55, new FixedRollSource(55));
+        Require(!zero.ShouldParry && zero.Outcome == "BLOCK", "0% must always block");
+        Require(full.ShouldParry && full.Outcome == "PARRY", "100% must always parry");
+        Require(success.ShouldParry, "roll below chance must parry");
+        Require(!blocked.ShouldParry, "roll equal to chance must block");
+    }
+
+    private static void LegitOffAlwaysParriesWithoutRolling()
+    {
+        ReactionCommand command = new(18, ReactionCommandKind.Parry, "F", CombatDirection.Top);
+        var rolls = new FixedRollSource(99);
+        ParryDecision decision = ParryDecision.Create(command, false, 0, rolls);
+        Require(decision.ShouldParry && decision.Roll is null && rolls.Calls == 0, "Legit off must bypass the percentage roll");
+    }
+
+    private static void FAndEParriesBothUsePercentage()
+    {
+        ParryDecision f = ParryDecision.Create(new ReactionCommand(19, ReactionCommandKind.Parry, "F", CombatDirection.Left), true, 50, new FixedRollSource(49));
+        ParryDecision e = ParryDecision.Create(new ReactionCommand(20, ReactionCommandKind.Parry, "E", CombatDirection.Right), true, 50, new FixedRollSource(50));
+        Require(f.ShouldParry && f.Hold == "F", "F parry should use percentage decision");
+        Require(!e.ShouldParry && e.Hold == "E", "E parry should use percentage decision");
+    }
+
+    private static void FailedLegitDecisionLeavesCandidateAvailableForGuard()
+    {
+        var coordinator = new ReactionCoordinator();
+        CoordinatorTick armed = coordinator.Tick(Observation(1, CombatDirection.Right), ReactionCommandKind.None, "");
+        CoordinatorTick flash = coordinator.Tick(Observation(50, CombatDirection.Right, flash: true), ReactionCommandKind.Parry, "F");
+        ParryDecision decision = ParryDecision.Create(flash.Command!, true, 0, new FixedRollSource(0));
+        CoordinatorTick guarded = coordinator.Tick(Observation(1000, CombatDirection.Right), ReactionCommandKind.None, "");
+        Require(!decision.ShouldParry && armed.Candidate.Id == guarded.Candidate.Id && guarded.Candidate.Direction == CombatDirection.Right,
+            "a blocked parry decision must leave the live candidate available for guard renewal");
+    }
+
+    private static void AutoBlockOffDoesNotArmCandidate()
+    {
+        var coordinator = new ReactionCoordinator();
+        CoordinatorTick tick = coordinator.Tick(Observation(1, CombatDirection.Left, hasThreat: false, flash: true), ReactionCommandKind.Parry, "F");
+        Require(tick.Candidate is null && tick.Command is null && tick.IgnoredStaleFlash, "without Auto block threat input, no candidate or parry may be produced");
+    }
+
     private static CombatObservation Observation(long ms, CombatDirection direction, bool hasThreat = true, bool flash = false) =>
         new(ms, hasThreat, new Point(900, 400), 2, new Rectangle(700, 400, 360, 450), hasThreat,
             new Point(900, 550), direction, false, flash, false, false, false, true, true, true);
@@ -96,5 +148,16 @@ static class Program
     private static void Require(bool condition, string message)
     {
         if (!condition) throw new InvalidOperationException(message);
+    }
+
+    private sealed class FixedRollSource(int value) : IParryRollSource
+    {
+        public int Calls { get; private set; }
+
+        public int NextPercent()
+        {
+            Calls++;
+            return value;
+        }
     }
 }

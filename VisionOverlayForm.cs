@@ -154,7 +154,7 @@ public sealed class VisionOverlayForm : Form
         if (state.Contains("PARRY", StringComparison.OrdinalIgnoreCase)) return Red;
         if (state.Contains("ORANGE", StringComparison.OrdinalIgnoreCase) || state.Contains("DODGE", StringComparison.OrdinalIgnoreCase)) return Orange;
         if (state.Contains("GUARD", StringComparison.OrdinalIgnoreCase)) return Green;
-        if (state.Contains("SKIPPED", StringComparison.OrdinalIgnoreCase)) return Yellow;
+        if (state.Contains("SKIPPED", StringComparison.OrdinalIgnoreCase) || state.Contains("BLOCK ONLY", StringComparison.OrdinalIgnoreCase)) return Yellow;
         return Cyan;
     }
 
@@ -171,7 +171,7 @@ public sealed class VisionOverlayForm : Form
         string mode = s.Running ? "LIVE" : "IDLE";
         string line = $"DANBOT // VISION    {mode}    {s.LoopHz} FPS";
         DrawChip(g, new Point(16, 16), line, s.Running ? Green : Cyan);
-        string diagnostics = $"BOX {s.Box}   ANCHOR {s.AnchorAgeMs}ms   GUARD {s.GuardRemainingMs}ms   CAND {s.CandidateId}/{s.CandidateAgeMs}ms   {s.ActionWorkerState}   TELEMETRY {(s.TelemetryRecording ? "ON" : "OFF")}";
+        string diagnostics = $"BOX {s.Box}   ANCHOR {s.AnchorAgeMs}ms   GUARD {s.GuardRemainingMs}ms   CAND {s.CandidateId}/{s.CandidateAgeMs}ms   {s.ActionWorkerState}   {s.LegitParryStatus}   TELEMETRY {(s.TelemetryRecording ? "ON" : "OFF")}";
         DrawChip(g, new Point(16, 43), diagnostics, s.TelemetryRecording ? Green : CyanDim);
     }
 
