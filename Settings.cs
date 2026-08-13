@@ -39,6 +39,7 @@ public sealed class Settings
     public bool Nohero;
     public bool YourHero;
     public bool Legit;
+    public bool BulwarkFallback;
 
     public Dictionary<string, bool> Chars = new(StringComparer.OrdinalIgnoreCase)
     {

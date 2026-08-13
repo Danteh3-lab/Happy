@@ -17,6 +17,8 @@ static class Program
             LegitPercentageUsesBoundaryRolls();
             LegitOffAlwaysParriesWithoutRolling();
             FAndEParriesBothUsePercentage();
+            FailedFParryCanResolveToBulwark();
+            BulwarkFallbackEligibilityIsStrict();
             FailedLegitDecisionLeavesCandidateAvailableForGuard();
             AutoBlockOffDoesNotArmCandidate();
             FullFrameScreenCoordinatesPreserveRoiDetection();
@@ -133,6 +135,30 @@ static class Program
         CoordinatorTick guarded = coordinator.Tick(Observation(1000, CombatDirection.Right), ReactionCommandKind.None, "");
         Require(!decision.ShouldParry && armed.Candidate.Id == guarded.Candidate.Id && guarded.Candidate.Direction == CombatDirection.Right,
             "a blocked parry decision must leave the live candidate available for guard renewal");
+    }
+
+    private static void FailedFParryCanResolveToBulwark()
+    {
+        ReactionCommand command = new(21, ReactionCommandKind.Parry, "F", CombatDirection.Left);
+        ParryResolution failed = ParryResolution.Create(command, true, 55, new FixedRollSource(55), true, true);
+        ParryResolution passed = ParryResolution.Create(command, true, 55, new FixedRollSource(54), true, true);
+        Require(failed.Outcome == ParryOutcome.Bulwark, "failed eligible F roll should resolve to Bulwark");
+        Require(passed.Outcome == ParryOutcome.Parry, "successful roll must remain a normal parry");
+    }
+
+    private static void BulwarkFallbackEligibilityIsStrict()
+    {
+        ReactionCommand f = new(22, ReactionCommandKind.Parry, "F", CombatDirection.Right);
+        ReactionCommand e = new(23, ReactionCommandKind.Parry, "E", CombatDirection.Right);
+        Require(ParryResolution.Create(f, true, 0, new FixedRollSource(0), false, true).Outcome == ParryOutcome.Block,
+            "fallback toggle off must remain guard-only");
+        Require(ParryResolution.Create(f, true, 0, new FixedRollSource(0), true, false).Outcome == ParryOutcome.Block,
+            "ineligible hero or input must remain guard-only");
+        Require(ParryResolution.Create(e, true, 0, new FixedRollSource(0), true, true).Outcome == ParryOutcome.Block,
+            "E path must remain guard-only");
+        Require(ParryResolution.Create(f, false, 0, new FixedRollSource(99), true, true).Outcome == ParryOutcome.Parry,
+            "Legit off must always use the normal parry path");
+        Require(!new Settings().BulwarkFallback, "existing configurations must default fallback to off");
     }
 
     private static void AutoBlockOffDoesNotArmCandidate()

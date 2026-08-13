@@ -22,7 +22,7 @@ public sealed class MainForm : Form
     private static readonly string[] CheckKeys =
     {
         "DodgeL", "DodgeH", "Leftdodge", "Rightdodge", "Unblockables", "Autoblock", "Lightbash",
-        "Parry", "Crushing", "Deflect", "Parry2", "Crushing2", "Nohero", "YourHero", "Legit",
+        "Parry", "Crushing", "Deflect", "Parry2", "Crushing2", "Nohero", "YourHero", "Legit", "BulwarkFallback",
         "Warden", "Peacekeeper", "Centurion", "Blackprior", "Gryphon", "Conqueror", "Lawbringer", "Gladiator", "Warmonger",
         "Raider", "Berserker", "Highlander", "Jormungandr", "Warlord", "Valkyrie", "Shaman", "Varangian", "Null",
         "Kensei", "Orochi", "Shinobi", "Hitokiri", "Sohei", "Shugoki", "Nobushi", "Aramusha", "Kyoshin",
@@ -295,6 +295,7 @@ public sealed class MainForm : Form
             "Nohero" => s.Nohero,
             "YourHero" => s.YourHero,
             "Legit" => s.Legit,
+            "BulwarkFallback" => s.BulwarkFallback,
             _ => s.Ch(key)
         };
     }
@@ -318,6 +319,7 @@ public sealed class MainForm : Form
             case "Nohero": s.Nohero = value; break;
             case "YourHero": s.YourHero = value; break;
             case "Legit": s.Legit = value; break;
+            case "BulwarkFallback": s.BulwarkFallback = value; break;
             default: s.Chars[key] = value; break;
         }
     }

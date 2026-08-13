@@ -3,6 +3,7 @@ namespace HappyBot;
 public sealed class BotCore
 {
     private const int VisionStageMinimumMs = 50;
+    private const int BulwarkSettleMs = 50;
     private readonly object _settingsSync = new();
     private Settings _settings = new();
     public Settings S => Volatile.Read(ref _settings);
@@ -73,6 +74,7 @@ public sealed class BotCore
     private string _reactionReason = "Waiting for an anchor";
     private string _reactionDirection = "";
     private ParryDecision _latestParryDecision;
+    private ParryOutcome? _latestParryOutcome;
     private VisionSnapshot _vision = new();
     private ScreenFrame _frame = new();
     private Thread _thread;
@@ -140,7 +142,7 @@ public sealed class BotCore
     public void StartTelemetry(string label)
     {
         _telemetry.Start(label);
-        _telemetry.Record("runtime-settings", new { resolution = new { S.Res1, S.Res2 }, S.GuardHold, S.Pause3, S.ParryDelay, S.Legit, S.LegitParryChance });
+        _telemetry.Record("runtime-settings", new { resolution = new { S.Res1, S.Res2 }, S.GuardHold, S.Pause3, S.ParryDelay, S.Legit, S.LegitParryChance, S.BulwarkFallback });
     }
 
     public void StopTelemetry() => _telemetry.Stop();
@@ -336,8 +338,12 @@ public sealed class BotCore
             _telemetry.CaptureRoi("flash-accepted", observation.CombatRoi);
             if (tick.Command.Kind == ReactionCommandKind.Parry)
             {
-                ParryDecision decision = ParryDecision.Create(tick.Command, S.Legit, S.LegitParryChance, _parryRolls);
+                bool bulwarkEligible = S.Autoblock && S.Parry && S.Legit && YourChar("Blackprior") && Input.CanSendBulwark;
+                ParryResolution resolution = ParryResolution.Create(tick.Command, S.Legit, S.LegitParryChance, _parryRolls,
+                    S.BulwarkFallback, bulwarkEligible);
+                ParryDecision decision = resolution.Decision;
                 _latestParryDecision = decision;
+                _latestParryOutcome = resolution.Outcome;
                 RecordTelemetry("legit-parry-decision", new
                 {
                     candidateId = decision.CandidateId,
@@ -345,10 +351,18 @@ public sealed class BotCore
                     direction = decision.Direction.ToString(),
                     chancePercent = decision.ChancePercent,
                     roll = decision.Roll,
-                    outcome = decision.Outcome,
-                    legitEnabled = decision.LegitEnabled
+                    outcome = resolution.Outcome.ToString().ToUpperInvariant(),
+                    legitEnabled = decision.LegitEnabled,
+                    bulwarkFallbackEnabled = S.BulwarkFallback,
+                    bulwarkEligible
                 });
-                if (!decision.ShouldParry)
+                if (resolution.Outcome == ParryOutcome.Bulwark)
+                {
+                    SetVisionReaction("BULWARK FALLBACK", $"Legit {decision.ChancePercent}% roll {decision.Roll}: flip", DirectionName(decision.Direction), 1100);
+                    QueueDirectionalAction(tick.Command with { Kind = ReactionCommandKind.Bulwark });
+                    return;
+                }
+                if (resolution.Outcome == ParryOutcome.Block)
                 {
                     SetVisionReaction("BLOCK ONLY", $"Legit {decision.ChancePercent}% roll {decision.Roll}: block", DirectionName(decision.Direction), 1100);
                     return;
@@ -427,6 +441,10 @@ public sealed class BotCore
             {
                 await ExecuteHeroActionAsync(command, token);
             }
+            else if (command.Kind == ReactionCommandKind.Bulwark)
+            {
+                await ExecuteBulwarkCounterAsync(command, token, "legit-fallback");
+            }
             _actionState = "COOLDOWN";
             await Task.Delay(150, token);
         }
@@ -475,9 +493,14 @@ public sealed class BotCore
     private async Task ExecuteHeroActionAsync(ReactionCommand command, CancellationToken token)
     {
         if (!CanCommitAction(command, token)) return;
+        if (YourChar("Blackprior"))
+        {
+            await ExecuteBulwarkCounterAsync(command, token, "hero-flash");
+            return;
+        }
+
         _actionCommitted = true;
-        if (YourChar("Blackprior")) Input.KeyTap(Input.VK_NUMPAD9);
-        else if (YourChar("Warlord")) { Input.KeyTap(Input.VK_C); Input.MouseClick(Input.VK_LBUTTON); }
+        if (YourChar("Warlord")) { Input.KeyTap(Input.VK_C); Input.MouseClick(Input.VK_LBUTTON); }
         else if (YourChar("Shaman")) { Input.KeyTap(Input.VK_SPACE); Input.KeyTap(Input.VK_NUMPAD5); }
         else if (YourChar("Varangian")) { Input.KeyTap(Input.VK_C); Input.MouseClick(Input.VK_RBUTTON); }
         else if (YourChar("Orochi")) { Input.KeyTap(Input.VK_SPACE); Input.KeyTap(Input.VK_NUMPAD9); }
@@ -499,6 +522,40 @@ public sealed class BotCore
         }
         else return;
         SetVisionReaction("HERO RESPONSE SENT", "F hold + flash gate", DirectionName(command.Direction), 1300);
+    }
+
+    private async Task ExecuteBulwarkCounterAsync(ReactionCommand command, CancellationToken token, string path)
+    {
+        if (!CanCommitAction(command, token)) return;
+        _actionState = "BULWARK STANCE";
+        SetVisionReaction("BULWARK READY", "RS down -> 50ms -> RB", DirectionName(command.Direction), 900);
+        RecordTelemetry("bulwark-ready", new { candidateId = command.CandidateId, path, bridge = ViGEmInput.GetDiagnostics() });
+        if (!Input.BeginBulwarkStance())
+        {
+            SetVisionReaction("BULWARK FAILED", "Controller input was not delivered; guard remains active", DirectionName(command.Direction), 1300);
+            RecordTelemetry("bulwark-failed", new { candidateId = command.CandidateId, path, reason = "stance-input", bridge = ViGEmInput.GetDiagnostics() });
+            return;
+        }
+        try
+        {
+            await Task.Delay(BulwarkSettleMs, token);
+            if (!CanCommitAction(command, token)) return;
+            _actionCommitted = true;
+            if (Input.MouseClick(Input.VK_LBUTTON))
+            {
+                SetVisionReaction("BULWARK SENT", "RS down + RB counter", DirectionName(command.Direction), 1300);
+                RecordTelemetry("bulwark-sent", new { candidateId = command.CandidateId, path, bridge = ViGEmInput.GetDiagnostics() });
+            }
+            else
+            {
+                SetVisionReaction("BULWARK FAILED", "RB input was not delivered; guard remains active", DirectionName(command.Direction), 1300);
+                RecordTelemetry("bulwark-failed", new { candidateId = command.CandidateId, path, reason = "right-shoulder", bridge = ViGEmInput.GetDiagnostics() });
+            }
+        }
+        finally
+        {
+            Input.EndBulwarkStance();
+        }
     }
 
     private void ProcessOrangeObservation(CombatObservation observation)
@@ -563,8 +620,9 @@ public sealed class BotCore
             }
             else
             {
-                await SendOrangeDodgeSequenceAsync(token);
-                SetVisionReaction("ORANGE DODGE SENT", afterFeint ? "Orange parry is disabled" : "Orange indicator detected", "", 1300);
+                bool handledByBulwark = await SendOrangeDodgeSequenceAsync(token);
+                if (!handledByBulwark)
+                    SetVisionReaction("ORANGE DODGE SENT", afterFeint ? "Orange parry is disabled" : "Orange indicator detected", "", 1300);
             }
             _actionState = "COOLDOWN";
             await Task.Delay(150, token);
@@ -584,12 +642,39 @@ public sealed class BotCore
         }
     }
 
-    private async Task SendOrangeDodgeSequenceAsync(CancellationToken token)
+    private async Task<bool> SendOrangeDodgeSequenceAsync(CancellationToken token)
     {
-        if (S.Ch("Blackprior") && Input.IsDown(Input.VK_W))
+        if (S.Ch("Blackprior") && Input.MovingForwardHeld())
         {
-            Input.KeyTap(Input.VK_NUMPAD9);
-            return;
+            _actionState = "BULWARK STANCE";
+            SetVisionReaction("BULWARK READY", "Orange response: RS down -> 50ms -> RB", "", 900);
+            RecordTelemetry("bulwark-ready", new { candidateId = 0, path = "orange", bridge = ViGEmInput.GetDiagnostics() });
+            if (!Input.BeginBulwarkStance())
+            {
+                SetVisionReaction("BULWARK FAILED", "Controller input was not delivered", "", 1300);
+                RecordTelemetry("bulwark-failed", new { candidateId = 0, path = "orange", reason = "stance-input", bridge = ViGEmInput.GetDiagnostics() });
+                return true;
+            }
+            try
+            {
+                await Task.Delay(BulwarkSettleMs, token);
+                if (!ReactionActive()) return true;
+                if (Input.MouseClick(Input.VK_LBUTTON))
+                {
+                    SetVisionReaction("BULWARK SENT", "Orange response: RS down + RB", "", 1300);
+                    RecordTelemetry("bulwark-sent", new { candidateId = 0, path = "orange", bridge = ViGEmInput.GetDiagnostics() });
+                }
+                else
+                {
+                    SetVisionReaction("BULWARK FAILED", "RB input was not delivered", "", 1300);
+                    RecordTelemetry("bulwark-failed", new { candidateId = 0, path = "orange", reason = "right-shoulder", bridge = ViGEmInput.GetDiagnostics() });
+                }
+            }
+            finally
+            {
+                Input.EndBulwarkStance();
+            }
+            return true;
         }
 
         if (Input.IsDown(Input.VK_W))
@@ -600,7 +685,7 @@ public sealed class BotCore
                 Input.KeyTap(Input.VK_SPACE);
                 Input.KeyUp(Input.VK_DOWN);
             });
-            return;
+            return false;
         }
 
         SendConfiguredDodge();
@@ -620,11 +705,11 @@ public sealed class BotCore
             Input.KeyTap(Input.VK_NUMPAD5);
         }
 
-        if (S.Nohero) return;
+        if (S.Nohero) return false;
         if (S.Ch("Nobushi")) Input.KeyTap(Input.VK_C);
         if (S.Ch("Shaman")) { Input.KeyTap(Input.VK_SPACE); Input.KeyTap(Input.VK_NUMPAD5); }
         if (S.Ch("Orochi")) { Input.KeyTap(Input.VK_SPACE); Input.KeyTap(Input.VK_NUMPAD9); }
-        if (!S.Ch("Jiangjun")) return;
+        if (!S.Ch("Jiangjun")) return false;
         Input.KeyDown(Input.VK_C);
         try
         {
@@ -636,6 +721,7 @@ public sealed class BotCore
         {
             Input.KeyUp(Input.VK_C);
         }
+        return false;
     }
 
     private void CancelPendingAction(string reason, bool force = false)
@@ -1038,7 +1124,8 @@ public sealed class BotCore
             state.Contains("PARRY BLOCKED", StringComparison.OrdinalIgnoreCase) ||
             state.Contains("CRUSHING SENT", StringComparison.OrdinalIgnoreCase) ||
             state.Contains("DEFLECT SENT", StringComparison.OrdinalIgnoreCase) ||
-            state.Contains("HERO RESPONSE SENT", StringComparison.OrdinalIgnoreCase))
+            state.Contains("HERO RESPONSE SENT", StringComparison.OrdinalIgnoreCase) ||
+            state.Contains("BULWARK", StringComparison.OrdinalIgnoreCase))
         {
             _telemetry.CaptureRoi("reaction-" + state, CombatRoiRectangle());
             EndReactionWait("reaction-finished");
@@ -1082,7 +1169,7 @@ public sealed class BotCore
             ParryDecision decision = _latestParryDecision;
             return decision == null
                 ? $"LEGIT {S.LegitParryChance}% WAIT"
-                : $"LEGIT {decision.ChancePercent}% {decision.Outcome}";
+                : $"LEGIT {decision.ChancePercent}% {(_latestParryOutcome?.ToString() ?? decision.Outcome).ToUpperInvariant()}";
         }
     }
 

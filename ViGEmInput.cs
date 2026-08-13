@@ -13,6 +13,11 @@ public static class ViGEmInput
     private static System.Threading.Timer _sourceTimer;
     private static Native.XINPUT_GAMEPAD _source;
     private static Native.XINPUT_GAMEPAD _bot;
+    // A short-lived stance may need the right stick without destroying the
+    // continuous guard state held in _bot. It takes precedence only while set.
+    private static bool _rightStickOverrideActive;
+    private static short _rightStickOverrideX;
+    private static short _rightStickOverrideY;
     private static bool _sourceConnected;
     private static int _sourceSlot = -1;
     private static long _lastRecoveryTick;
@@ -34,11 +39,21 @@ public static class ViGEmInput
         }
     }
 
+    public static bool IsRightStickOverrideActive
+    {
+        get
+        {
+            lock (Sync) return _rightStickOverrideActive;
+        }
+    }
+
     public static InputBridgeSnapshot GetDiagnostics()
     {
         lock (Sync)
         {
             bool botRightStick = _bot.sThumbRX != 0 || _bot.sThumbRY != 0;
+            short mergedRightX = _rightStickOverrideActive ? _rightStickOverrideX : botRightStick ? _bot.sThumbRX : _source.sThumbRX;
+            short mergedRightY = _rightStickOverrideActive ? _rightStickOverrideY : botRightStick ? _bot.sThumbRY : _source.sThumbRY;
             return new InputBridgeSnapshot(
                 IsAvailable,
                 _sourceConnected,
@@ -47,8 +62,8 @@ public static class ViGEmInput
                 _source.sThumbRY,
                 _bot.sThumbRX,
                 _bot.sThumbRY,
-                botRightStick ? _bot.sThumbRX : _source.sThumbRX,
-                botRightStick ? _bot.sThumbRY : _source.sThumbRY);
+                mergedRightX,
+                mergedRightY);
         }
     }
 
@@ -81,6 +96,9 @@ public static class ViGEmInput
         {
             _source = default;
             _bot = default;
+            _rightStickOverrideActive = false;
+            _rightStickOverrideX = 0;
+            _rightStickOverrideY = 0;
             _sourceConnected = false;
             _sourceSlot = -1;
             try { ApplyLocked(); } catch { }
@@ -138,6 +156,33 @@ public static class ViGEmInput
             Input.VK_RBUTTON => Slider(Xbox360Slider.RightTrigger, down ? (byte)255 : (byte)0),
             _ => true
         };
+    }
+
+    /// <summary>
+    /// Temporarily owns the right stick without clearing the bot's current
+    /// guard. Clearing the override immediately exposes that guard again.
+    /// </summary>
+    public static bool SetRightStickOverride(short x, short y)
+    {
+        if (!IsAvailable) return false;
+        lock (Sync)
+        {
+            _rightStickOverrideActive = true;
+            _rightStickOverrideX = x;
+            _rightStickOverrideY = y;
+            return ApplyLocked();
+        }
+    }
+
+    public static bool ClearRightStickOverride()
+    {
+        lock (Sync)
+        {
+            _rightStickOverrideActive = false;
+            _rightStickOverrideX = 0;
+            _rightStickOverrideY = 0;
+            return ApplyLocked();
+        }
     }
 
     private static void PollSource(object _)
@@ -214,13 +259,14 @@ public static class ViGEmInput
         {
             bool botLeftStick = _bot.sThumbLX != 0 || _bot.sThumbLY != 0;
             bool botRightStick = _bot.sThumbRX != 0 || _bot.sThumbRY != 0;
+            bool useRightOverride = _rightStickOverrideActive;
             _controller.SetButtonsFull((ushort)(_source.wButtons | _bot.wButtons));
             _controller.SetSliderValue(Xbox360Slider.LeftTrigger, Math.Max(_source.bLeftTrigger, _bot.bLeftTrigger));
             _controller.SetSliderValue(Xbox360Slider.RightTrigger, Math.Max(_source.bRightTrigger, _bot.bRightTrigger));
             _controller.SetAxisValue(Xbox360Axis.LeftThumbX, botLeftStick ? _bot.sThumbLX : _source.sThumbLX);
             _controller.SetAxisValue(Xbox360Axis.LeftThumbY, botLeftStick ? _bot.sThumbLY : _source.sThumbLY);
-            _controller.SetAxisValue(Xbox360Axis.RightThumbX, botRightStick ? _bot.sThumbRX : _source.sThumbRX);
-            _controller.SetAxisValue(Xbox360Axis.RightThumbY, botRightStick ? _bot.sThumbRY : _source.sThumbRY);
+            _controller.SetAxisValue(Xbox360Axis.RightThumbX, useRightOverride ? _rightStickOverrideX : botRightStick ? _bot.sThumbRX : _source.sThumbRX);
+            _controller.SetAxisValue(Xbox360Axis.RightThumbY, useRightOverride ? _rightStickOverrideY : botRightStick ? _bot.sThumbRY : _source.sThumbRY);
             _gamepad.SubmitReport();
             return true;
         }

@@ -68,6 +68,16 @@ public static class Input
         }
     }
 
+    /// <summary>
+    /// Uses the physical controller's forwarded left-stick state when the
+    /// controller bridge is active. Keyboard modes keep the existing W gate.
+    /// </summary>
+    public static bool MovingForwardHeld()
+    {
+        if (RequestedMode != InputMode.ViGEm) return IsDown(VK_W);
+        return ViGEmInput.TryGetSourceState(out var state) && state.sThumbLY >= 12000;
+    }
+
     public static long InjectedCount;
     public static uint LastSendResult = 1;
     public static int LastSendError;
@@ -77,6 +87,8 @@ public static class Input
             : RequestedMode == InputMode.SendInput ? "SendInput" : "Event";
 
     public static bool IsReady => RequestedMode != InputMode.ViGEm || ViGEmInput.IsAvailable;
+
+    public static bool CanSendBulwark => RequestedMode == InputMode.ViGEm && ViGEmInput.IsAvailable;
 
     public static bool IsElevated()
     {
@@ -176,8 +188,35 @@ public static class Input
         Native.BlockInput(on);
     }
 
+    /// <summary>
+    /// Black Prior's Bulwark Stance is controller-native: right stick down.
+    /// This is deliberately unavailable outside the ViGEm controller bridge;
+    /// no keyboard fallback can faithfully represent this controller input.
+    /// </summary>
+    public static bool BeginBulwarkStance()
+    {
+        if (RequestedMode != InputMode.ViGEm || !ViGEmInput.IsAvailable)
+        {
+            ReportSend(false);
+            return false;
+        }
+
+        bool sent = ViGEmInput.SetRightStickOverride(0, -32767);
+        ReportSend(sent);
+        return sent;
+    }
+
+    public static void EndBulwarkStance()
+    {
+        if (RequestedMode != InputMode.ViGEm) return;
+        ReportSend(ViGEmInput.ClearRightStickOverride());
+    }
+
     public static void ReleaseAutomationInputs()
     {
+        if (RequestedMode == InputMode.ViGEm)
+            EndBulwarkStance();
+
         int[] keys =
         {
             VK_SPACE, VK_LEFT, VK_UP, VK_RIGHT, VK_DOWN, VK_C,

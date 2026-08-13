@@ -14,9 +14,17 @@ internal enum ReactionCommandKind
 {
     None,
     Parry,
+    Bulwark,
     Crushing,
     Deflect,
     Hero
+}
+
+internal enum ParryOutcome
+{
+    Parry,
+    Bulwark,
+    Block
 }
 
 /// <summary>Provides a testable 0-99 roll for legitimate parry selection.</summary>
@@ -52,6 +60,27 @@ internal sealed record ParryDecision(
         int? roll = legitEnabled ? Math.Clamp(rolls.NextPercent(), 0, 99) : null;
         bool shouldParry = !legitEnabled || roll.GetValueOrDefault() < chance;
         return new ParryDecision(command.CandidateId, command.Hold, command.Direction, chance, roll, shouldParry, legitEnabled);
+    }
+}
+
+/// <summary>Combines the percentage roll with an optional F-path Bulwark fallback.</summary>
+internal sealed record ParryResolution(ParryDecision Decision, ParryOutcome Outcome)
+{
+    public static ParryResolution Create(
+        ReactionCommand command,
+        bool legitEnabled,
+        int chancePercent,
+        IParryRollSource rolls,
+        bool bulwarkFallbackEnabled,
+        bool bulwarkEligible)
+    {
+        ParryDecision decision = ParryDecision.Create(command, legitEnabled, chancePercent, rolls);
+        ParryOutcome outcome = decision.ShouldParry
+            ? ParryOutcome.Parry
+            : bulwarkFallbackEnabled && bulwarkEligible && command.Hold == "F"
+                ? ParryOutcome.Bulwark
+                : ParryOutcome.Block;
+        return new ParryResolution(decision, outcome);
     }
 }
 
