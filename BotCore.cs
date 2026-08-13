@@ -212,12 +212,12 @@ public sealed class BotCore
 
     private bool Px(double x1, double y1, double x2, double y2, int r, int g, int b, int variation, out int px, out int py)
     {
-        return _frame.PixelSearch(x1, y1, x2, y2, r, g, b, variation, out px, out py);
+        return _frame.ScreenPixelSearch(x1, y1, x2, y2, r, g, b, variation, out px, out py);
     }
 
     private bool CurrentPx(double x1, double y1, double x2, double y2, int r, int g, int b, int variation, out int px, out int py)
     {
-        return _frame.PixelSearch(x1, y1, x2, y2, r, g, b, variation, out px, out py);
+        return _frame.ScreenPixelSearch(x1, y1, x2, y2, r, g, b, variation, out px, out py);
     }
 
     private CombatObservation CaptureCombatObservation()
@@ -241,13 +241,12 @@ public sealed class BotCore
             return new CombatObservation(now, true, new Point(Ax, Ay), Box, roi, false,
                 new Point(-1, -1), CombatDirection.None, false, false, false, false, eHeld, fHeld, ltHeld, Input.IsReady);
 
-        CaptureCombatRoi(roi.Left, roi.Top, roi.Width, roi.Height);
-        bool red = _frame.PixelSearch(0, 0, _frame.Width - 1, _frame.Height - 1, 255, 49, 41, 2, out int localX, out int localY);
-        bool darkRed = _frame.PixelSearch(0, 0, _frame.Width - 1, _frame.Height - 1, 255, 41, 34, 0, out _, out _);
-        bool lightFlash = _frame.PixelSearch(0, 0, _frame.Width - 1, _frame.Height - 1, 255, 154, 141, 0, out _, out _);
-        bool orange = _frame.PixelSearch(0, 0, _frame.Width - 1, _frame.Height - 1, 246, 98, 8, 0, out _, out _);
-        bool orangeFeint = _frame.PixelSearch(0, 0, _frame.Width - 1, _frame.Height - 1, 255, 34, 28, 3, out _, out _);
-        Point indicator = red ? new Point(localX + roi.Left, localY + roi.Top) : new Point(-1, -1);
+        bool red = _frame.ScreenPixelSearch(roi.Left, roi.Top, roi.Right - 1, roi.Bottom - 1, 255, 49, 41, 2, out int indicatorX, out int indicatorY);
+        bool darkRed = _frame.ScreenPixelSearch(roi.Left, roi.Top, roi.Right - 1, roi.Bottom - 1, 255, 41, 34, 0, out _, out _);
+        bool lightFlash = _frame.ScreenPixelSearch(roi.Left, roi.Top, roi.Right - 1, roi.Bottom - 1, 255, 154, 141, 0, out _, out _);
+        bool orange = _frame.ScreenPixelSearch(roi.Left, roi.Top, roi.Right - 1, roi.Bottom - 1, 246, 98, 8, 0, out _, out _);
+        bool orangeFeint = _frame.ScreenPixelSearch(roi.Left, roi.Top, roi.Right - 1, roi.Bottom - 1, 255, 34, 28, 3, out _, out _);
+        Point indicator = red ? new Point(indicatorX, indicatorY) : new Point(-1, -1);
         CombatDirection direction = red ? ClassifyDirection(indicator.X, indicator.Y) : CombatDirection.None;
 
         AttackIndicator = red;
@@ -256,7 +255,8 @@ public sealed class BotCore
         Flash = lightFlash;
         if (_telemetry.IsRecording)
         {
-            ColorProbe probe = _frame.ProbeColor(255, 49, 41, 2);
+            ColorProbe probe = _frame.ProbeColor(roi.Left - _frame.OriginX, roi.Top - _frame.OriginY,
+                roi.Right - 1 - _frame.OriginX, roi.Bottom - 1 - _frame.OriginY, 255, 49, 41, 2);
             _lastRedMatchCount = probe.MatchCount;
             _lastClosestRed = probe.ClosestRgb;
         }

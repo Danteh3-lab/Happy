@@ -54,7 +54,6 @@ public sealed class MainForm : Form
     private bool _rDown;
     private bool _fKeyDown;
     private bool _webReady;
-    private bool _prevDpadDown;
     private bool _visionOverlayVisible;
     private bool _showAnchorScan = true;
 
@@ -91,19 +90,6 @@ public sealed class MainForm : Form
         {
             ViGEmInput.TryRecover();
             _bot.FHeld = _fKeyDown || Input.HoldButtonHeld();
-
-            bool dpadDown = false;
-            if (ViGEmInput.TryGetSourceState(out var sourceState))
-                dpadDown = (sourceState.wButtons & 0x0002) != 0;
-            if (dpadDown && !_prevDpadDown)
-            {
-                bool enabled = false;
-                _bot.UpdateSettings(s => enabled = s.Parry = !s.Parry);
-                _bot.ParryToggle = enabled;
-                SendSettings();
-                SendToast(enabled ? "Auto parry ON" : "Auto parry OFF", enabled ? "success" : "info");
-            }
-            _prevDpadDown = dpadDown;
 
             SendStatus();
         };

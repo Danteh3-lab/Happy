@@ -10,6 +10,8 @@ public sealed class ScreenFrame
     public int Width;
     public int Height;
     public int Stride;
+    public int OriginX;
+    public int OriginY;
 
     public bool PixelSearch(double x1, double y1, double x2, double y2, int r, int g, int b, int variation, out int px, out int py)
     {
@@ -39,6 +41,16 @@ public sealed class ScreenFrame
             }
         }
         return false;
+    }
+
+    /// <summary>Searches using primary-screen coordinates and returns screen coordinates.</summary>
+    public bool ScreenPixelSearch(double x1, double y1, double x2, double y2, int r, int g, int b, int variation, out int px, out int py)
+    {
+        if (!PixelSearch(x1 - OriginX, y1 - OriginY, x2 - OriginX, y2 - OriginY, r, g, b, variation, out px, out py))
+            return false;
+        px += OriginX;
+        py += OriginY;
+        return true;
     }
 
     public bool SamplePixel(int x, int y, out int r, out int g, out int b)
@@ -79,7 +91,10 @@ public sealed class ScreenFrame
     /// The same match predicate as PixelSearch, with compact diagnostic data for
     /// telemetry. It does not influence the detector beyond supplying its result.
     /// </summary>
-    public ColorProbe ProbeColor(int r, int g, int b, int variation, int max = 100)
+    public ColorProbe ProbeColor(int r, int g, int b, int variation, int max = 100) =>
+        ProbeColor(0, 0, Width - 1, Height - 1, r, g, b, variation, max);
+
+    public ColorProbe ProbeColor(double x1, double y1, double x2, double y2, int r, int g, int b, int variation, int max = 100)
     {
         int firstX = -1;
         int firstY = -1;
@@ -88,10 +103,14 @@ public sealed class ScreenFrame
         int closestR = 0, closestG = 0, closestB = 0;
         if (Width == 0 || Height == 0) return new ColorProbe(0, -1, -1, "n/a", -1);
 
-        for (int y = 0; y < Height; y++)
+        int sx = Math.Clamp((int)Math.Min(x1, x2), 0, Width - 1);
+        int ex = Math.Clamp((int)Math.Max(x1, x2), 0, Width - 1);
+        int sy = Math.Clamp((int)Math.Min(y1, y2), 0, Height - 1);
+        int ey = Math.Clamp((int)Math.Max(y1, y2), 0, Height - 1);
+        for (int y = sy; y <= ey; y++)
         {
             int row = y * Stride;
-            for (int x = 0; x < Width; x++)
+            for (int x = sx; x <= ex; x++)
             {
                 int i = row + x * 4;
                 int pixelB = Buffer[i];
@@ -150,6 +169,8 @@ public static class ScreenCapture
             reusable.Width = region.Width;
             reusable.Height = region.Height;
             reusable.Stride = data.Stride;
+            reusable.OriginX = region.Left;
+            reusable.OriginY = region.Top;
             return reusable;
         }
         finally

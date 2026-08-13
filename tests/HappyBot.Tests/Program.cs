@@ -19,6 +19,7 @@ static class Program
             FAndEParriesBothUsePercentage();
             FailedLegitDecisionLeavesCandidateAvailableForGuard();
             AutoBlockOffDoesNotArmCandidate();
+            FullFrameScreenCoordinatesPreserveRoiDetection();
             Console.WriteLine("ReactionCoordinator tests passed.");
             return 0;
         }
@@ -139,6 +140,20 @@ static class Program
         var coordinator = new ReactionCoordinator();
         CoordinatorTick tick = coordinator.Tick(Observation(1, CombatDirection.Left, hasThreat: false, flash: true), ReactionCommandKind.Parry, "F");
         Require(tick.Candidate is null && tick.Command is null && tick.IgnoredStaleFlash, "without Auto block threat input, no candidate or parry may be produced");
+    }
+
+    private static void FullFrameScreenCoordinatesPreserveRoiDetection()
+    {
+        var frame = new ScreenFrame { Width = 4, Height = 3, Stride = 16, OriginX = 100, OriginY = 200, Buffer = new byte[48] };
+        int pixel = 1 * frame.Stride + 2 * 4;
+        frame.Buffer[pixel] = 41;
+        frame.Buffer[pixel + 1] = 49;
+        frame.Buffer[pixel + 2] = 255;
+
+        bool found = frame.ScreenPixelSearch(100, 200, 103, 202, 255, 49, 41, 0, out int x, out int y);
+        ColorProbe probe = frame.ProbeColor(2, 1, 2, 1, 255, 49, 41, 0);
+        Require(found && x == 102 && y == 201, "full-frame ROI search must return screen coordinates");
+        Require(probe.MatchCount == 1, "ROI telemetry probe must remain scoped to the combat region");
     }
 
     private static CombatObservation Observation(long ms, CombatDirection direction, bool hasThreat = true, bool flash = false) =>
