@@ -153,6 +153,7 @@ public sealed class VisionOverlayForm : Form
     {
         if (state.Contains("PARRY", StringComparison.OrdinalIgnoreCase)) return Red;
         if (state.Contains("BULWARK", StringComparison.OrdinalIgnoreCase)) return Green;
+        if (state.Contains("CRUSHING", StringComparison.OrdinalIgnoreCase)) return Yellow;
         if (state.Contains("ORANGE", StringComparison.OrdinalIgnoreCase) || state.Contains("DODGE", StringComparison.OrdinalIgnoreCase)) return Orange;
         if (state.Contains("GUARD", StringComparison.OrdinalIgnoreCase)) return Green;
         if (state.Contains("SKIPPED", StringComparison.OrdinalIgnoreCase) || state.Contains("BLOCK ONLY", StringComparison.OrdinalIgnoreCase)) return Yellow;

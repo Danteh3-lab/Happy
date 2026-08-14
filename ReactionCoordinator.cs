@@ -23,6 +23,7 @@ internal enum ReactionCommandKind
 internal enum ParryOutcome
 {
     Parry,
+    Crushing,
     Bulwark,
     Block
 }
@@ -63,8 +64,8 @@ internal sealed record ParryDecision(
     }
 }
 
-/// <summary>Combines the percentage roll with an optional F-path Bulwark fallback.</summary>
-internal sealed record ParryResolution(ParryDecision Decision, ParryOutcome Outcome)
+/// <summary>Combines the percentage roll with an optional randomized F-path fallback mix.</summary>
+internal sealed record ParryResolution(ParryDecision Decision, ParryOutcome Outcome, int? FallbackRoll)
 {
     public static ParryResolution Create(
         ReactionCommand command,
@@ -72,15 +73,27 @@ internal sealed record ParryResolution(ParryDecision Decision, ParryOutcome Outc
         int chancePercent,
         IParryRollSource rolls,
         bool bulwarkFallbackEnabled,
-        bool bulwarkEligible)
+        bool bulwarkEligible,
+        bool crushingEligible = false,
+        int crushingFallbackChance = 50,
+        IParryRollSource fallbackRolls = null)
     {
         ParryDecision decision = ParryDecision.Create(command, legitEnabled, chancePercent, rolls);
-        ParryOutcome outcome = decision.ShouldParry
-            ? ParryOutcome.Parry
-            : bulwarkFallbackEnabled && bulwarkEligible && command.Hold == "F"
-                ? ParryOutcome.Bulwark
-                : ParryOutcome.Block;
-        return new ParryResolution(decision, outcome);
+        if (decision.ShouldParry) return new ParryResolution(decision, ParryOutcome.Parry, null);
+        if (command.Hold != "F") return new ParryResolution(decision, ParryOutcome.Block, null);
+
+        bool canBulwark = bulwarkFallbackEnabled && bulwarkEligible;
+        if (crushingEligible && canBulwark)
+        {
+            int roll = Math.Clamp((fallbackRolls ?? rolls).NextPercent(), 0, 99);
+            ParryOutcome mixedOutcome = roll < Math.Clamp(crushingFallbackChance, 0, 100)
+                ? ParryOutcome.Crushing
+                : ParryOutcome.Bulwark;
+            return new ParryResolution(decision, mixedOutcome, roll);
+        }
+        if (crushingEligible) return new ParryResolution(decision, ParryOutcome.Crushing, null);
+        if (canBulwark) return new ParryResolution(decision, ParryOutcome.Bulwark, null);
+        return new ParryResolution(decision, ParryOutcome.Block, null);
     }
 }
 

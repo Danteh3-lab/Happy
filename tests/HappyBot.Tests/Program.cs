@@ -18,6 +18,8 @@ static class Program
             LegitOffAlwaysParriesWithoutRolling();
             FAndEParriesBothUsePercentage();
             FailedFParryCanResolveToBulwark();
+            FailedFParryCanResolveToCrushing();
+            CrushingFallbackMixUsesConfiguredPercentage();
             BulwarkFallbackEligibilityIsStrict();
             FailedLegitDecisionLeavesCandidateAvailableForGuard();
             AutoBlockOffDoesNotArmCandidate();
@@ -144,6 +146,32 @@ static class Program
         ParryResolution passed = ParryResolution.Create(command, true, 55, new FixedRollSource(54), true, true);
         Require(failed.Outcome == ParryOutcome.Bulwark, "failed eligible F roll should resolve to Bulwark");
         Require(passed.Outcome == ParryOutcome.Parry, "successful roll must remain a normal parry");
+    }
+
+    private static void FailedFParryCanResolveToCrushing()
+    {
+        ReactionCommand f = new(24, ReactionCommandKind.Parry, "F", CombatDirection.Top);
+        ReactionCommand e = new(25, ReactionCommandKind.Parry, "E", CombatDirection.Top);
+        ParryResolution crushing = ParryResolution.Create(f, true, 0, new FixedRollSource(0), false, false, true);
+        ParryResolution unavailable = ParryResolution.Create(f, true, 0, new FixedRollSource(0), false, false, false);
+        ParryResolution eBlocked = ParryResolution.Create(e, true, 0, new FixedRollSource(0), false, false, true);
+        Require(crushing.Outcome == ParryOutcome.Crushing, "failed eligible F roll should resolve to Crushing");
+        Require(unavailable.Outcome == ParryOutcome.Block, "failed F roll without any fallback must guard only");
+        Require(eBlocked.Outcome == ParryOutcome.Block, "E failed roll must remain guard-only even when Crushing is enabled");
+    }
+
+    private static void CrushingFallbackMixUsesConfiguredPercentage()
+    {
+        ReactionCommand f = new(26, ReactionCommandKind.Parry, "F", CombatDirection.Left);
+        ParryResolution crushing = ParryResolution.Create(f, true, 0, new FixedRollSource(0), true, true, true, 50, new FixedRollSource(49));
+        ParryResolution bulwark = ParryResolution.Create(f, true, 0, new FixedRollSource(0), true, true, true, 50, new FixedRollSource(50));
+        ParryResolution zero = ParryResolution.Create(f, true, 0, new FixedRollSource(0), true, true, true, 0, new FixedRollSource(0));
+        ParryResolution full = ParryResolution.Create(f, true, 0, new FixedRollSource(0), true, true, true, 100, new FixedRollSource(99));
+        Require(crushing.Outcome == ParryOutcome.Crushing && crushing.FallbackRoll == 49, "roll below the Crushing chance must send RB");
+        Require(bulwark.Outcome == ParryOutcome.Bulwark && bulwark.FallbackRoll == 50, "roll equal to the Crushing chance must flip");
+        Require(zero.Outcome == ParryOutcome.Bulwark, "0% Crushing chance must always use Bulwark");
+        Require(full.Outcome == ParryOutcome.Crushing, "100% Crushing chance must always use RB");
+        Require(new Settings().CrushingFallbackChance == 50, "existing configurations must default to a 50/50 fallback mix");
     }
 
     private static void BulwarkFallbackEligibilityIsStrict()

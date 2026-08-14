@@ -38,6 +38,12 @@
       fallback.disabled = !(state.settings.Autoblock === true && state.settings.Legit === true && state.settings.Parry === true &&
         state.settings.YourHero === true && state.settings.Nohero !== true && state.settings.Blackprior === true);
     }
+    const crushingFallbackChance = $('[data-setting="CrushingFallbackChance"]');
+    if (crushingFallbackChance) {
+      crushingFallbackChance.disabled = !(state.settings.Autoblock === true && state.settings.Legit === true && state.settings.Parry === true &&
+        state.settings.Crushing === true && state.settings.BulwarkFallback === true && state.settings.YourHero === true &&
+        state.settings.Nohero !== true && state.settings.Blackprior === true);
+    }
   }
 
   function updateStatus(status) {
@@ -183,7 +189,7 @@
         state.settings[otherName] = false;
       }
       state.settings[control.dataset.setting] = control.type === "checkbox" ? control.checked : control.value;
-      if (["Autoblock", "Legit", "Parry", "YourHero", "Nohero", "Blackprior"].includes(control.dataset.setting)) syncLegitChanceControl();
+      if (["Autoblock", "Legit", "Parry", "Crushing", "BulwarkFallback", "YourHero", "Nohero", "Blackprior"].includes(control.dataset.setting)) syncLegitChanceControl();
       sendSettings();
     });
   });

@@ -142,7 +142,7 @@ public sealed class BotCore
     public void StartTelemetry(string label)
     {
         _telemetry.Start(label);
-        _telemetry.Record("runtime-settings", new { resolution = new { S.Res1, S.Res2 }, S.GuardHold, S.Pause3, S.ParryDelay, S.Legit, S.LegitParryChance, S.BulwarkFallback });
+        _telemetry.Record("runtime-settings", new { resolution = new { S.Res1, S.Res2 }, S.GuardHold, S.Pause3, S.ParryDelay, S.Legit, S.LegitParryChance, S.BulwarkFallback, S.CrushingFallbackChance });
     }
 
     public void StopTelemetry() => _telemetry.Stop();
@@ -339,8 +339,9 @@ public sealed class BotCore
             if (tick.Command.Kind == ReactionCommandKind.Parry)
             {
                 bool bulwarkEligible = S.Autoblock && S.Parry && S.Legit && YourChar("Blackprior") && Input.CanSendBulwark;
+                bool crushingEligible = S.Autoblock && S.Parry && S.Crushing && S.Legit;
                 ParryResolution resolution = ParryResolution.Create(tick.Command, S.Legit, S.LegitParryChance, _parryRolls,
-                    S.BulwarkFallback, bulwarkEligible);
+                    S.BulwarkFallback, bulwarkEligible, crushingEligible, S.CrushingFallbackChance, _parryRolls);
                 ParryDecision decision = resolution.Decision;
                 _latestParryDecision = decision;
                 _latestParryOutcome = resolution.Outcome;
@@ -354,11 +355,22 @@ public sealed class BotCore
                     outcome = resolution.Outcome.ToString().ToUpperInvariant(),
                     legitEnabled = decision.LegitEnabled,
                     bulwarkFallbackEnabled = S.BulwarkFallback,
-                    bulwarkEligible
+                    bulwarkEligible,
+                    crushingEligible,
+                    crushingFallbackChance = S.CrushingFallbackChance,
+                    fallbackRoll = resolution.FallbackRoll
                 });
+                if (resolution.Outcome == ParryOutcome.Crushing)
+                {
+                    string mix = resolution.FallbackRoll is int roll ? $"; fallback {S.CrushingFallbackChance}% roll {roll}" : "";
+                    SetVisionReaction("CRUSHING FALLBACK", $"Legit {decision.ChancePercent}% roll {decision.Roll}: RB{mix}", DirectionName(decision.Direction), 1100);
+                    QueueDirectionalAction(tick.Command with { Kind = ReactionCommandKind.Crushing });
+                    return;
+                }
                 if (resolution.Outcome == ParryOutcome.Bulwark)
                 {
-                    SetVisionReaction("BULWARK FALLBACK", $"Legit {decision.ChancePercent}% roll {decision.Roll}: flip", DirectionName(decision.Direction), 1100);
+                    string mix = resolution.FallbackRoll is int roll ? $"; fallback {S.CrushingFallbackChance}% roll {roll}" : "";
+                    SetVisionReaction("BULWARK FALLBACK", $"Legit {decision.ChancePercent}% roll {decision.Roll}: flip{mix}", DirectionName(decision.Direction), 1100);
                     QueueDirectionalAction(tick.Command with { Kind = ReactionCommandKind.Bulwark });
                     return;
                 }
