@@ -49,6 +49,8 @@
       deflectFallbackChance.disabled = !(state.settings.Autoblock === true && state.settings.Legit === true && state.settings.Parry === true &&
         state.settings.Deflect === true);
     }
+    const orangeLight = $('[data-setting="OrangeLight"]');
+    if (orangeLight) orangeLight.disabled = state.settings.Unblockables !== true;
   }
 
   function updateStatus(status) {
@@ -194,7 +196,7 @@
         state.settings[otherName] = false;
       }
       state.settings[control.dataset.setting] = control.type === "checkbox" ? control.checked : control.value;
-      if (["Autoblock", "Legit", "Parry", "Crushing", "Deflect", "BulwarkFallback", "YourHero", "Nohero", "Blackprior"].includes(control.dataset.setting)) syncLegitChanceControl();
+      if (["Autoblock", "Legit", "Parry", "Crushing", "Deflect", "BulwarkFallback", "YourHero", "Nohero", "Blackprior", "Unblockables"].includes(control.dataset.setting)) syncLegitChanceControl();
       sendSettings();
     });
   });

@@ -44,6 +44,62 @@ internal sealed class RandomParryRollSource : IParryRollSource
     public int NextPercent() => Random.Shared.Next(100);
 }
 
+/// <summary>Provides a testable random direction for orange-only light interrupts.</summary>
+internal interface IOrangeLightDirectionSource
+{
+    CombatDirection NextDirection();
+}
+
+internal sealed class RandomOrangeLightDirectionSource : IOrangeLightDirectionSource
+{
+    public static readonly RandomOrangeLightDirectionSource Instance = new();
+
+    private RandomOrangeLightDirectionSource() { }
+
+    public CombatDirection NextDirection() => Random.Shared.Next(3) switch
+    {
+        0 => CombatDirection.Left,
+        1 => CombatDirection.Top,
+        _ => CombatDirection.Right
+    };
+}
+
+internal sealed record OrangeLightDecision(CombatDirection Direction)
+{
+    public static OrangeLightDecision Create(IOrangeLightDirectionSource source)
+    {
+        CombatDirection direction = source?.NextDirection() ?? CombatDirection.Top;
+        return new OrangeLightDecision(direction is CombatDirection.Left or CombatDirection.Top or CombatDirection.Right
+            ? direction
+            : CombatDirection.Top);
+    }
+}
+
+internal enum OrangeResponseKind
+{
+    Dodge,
+    Parry,
+    Light
+}
+
+internal static class OrangeResponseResolver
+{
+    public static OrangeResponseKind Resolve(bool redOrFeint, bool orangeParryEnabled, bool orangeLightEnabled) =>
+        redOrFeint
+            ? orangeParryEnabled ? OrangeResponseKind.Parry : OrangeResponseKind.Dodge
+            : orangeLightEnabled ? OrangeResponseKind.Light : OrangeResponseKind.Dodge;
+}
+
+/// <summary>
+/// Orange state can only clear after a valid vision frame confirms the indicator
+/// disappeared. A missing anchor is an unknown frame, not an indicator clear.
+/// </summary>
+internal static class OrangeResponseLatch
+{
+    public static bool IsConfirmedClear(bool markerFound, bool orangeIndicator) =>
+        markerFound && !orangeIndicator;
+}
+
 /// <summary>One immutable parry-or-block choice for an accepted flash candidate.</summary>
 internal sealed record ParryDecision(
     long CandidateId,
@@ -87,9 +143,8 @@ internal sealed record ParryResolution(ParryDecision Decision, ParryOutcome Outc
         if (command.Hold != "F") return new ParryResolution(decision, ParryOutcome.Block, null, null);
 
         bool canBulwark = bulwarkFallbackEnabled && bulwarkEligible;
-        bool hasOtherFallback = crushingEligible || canBulwark;
         int? deflectRoll = null;
-        if (deflectEligible && hasOtherFallback)
+        if (deflectEligible)
         {
             deflectRoll = Math.Clamp((deflectRolls ?? rolls).NextPercent(), 0, 99);
             if (deflectRoll < Math.Clamp(deflectFallbackChance, 0, 100))
@@ -105,8 +160,7 @@ internal sealed record ParryResolution(ParryDecision Decision, ParryOutcome Outc
         }
         if (crushingEligible) return new ParryResolution(decision, ParryOutcome.Crushing, null, deflectRoll);
         if (canBulwark) return new ParryResolution(decision, ParryOutcome.Bulwark, null, deflectRoll);
-        if (deflectEligible) return new ParryResolution(decision, ParryOutcome.Deflect, null, null);
-        return new ParryResolution(decision, ParryOutcome.Block, null, null);
+        return new ParryResolution(decision, ParryOutcome.Block, null, deflectRoll);
     }
 }
 
@@ -143,7 +197,8 @@ internal sealed record ReactionCommand(
     long CandidateId,
     ReactionCommandKind Kind,
     string Hold,
-    CombatDirection Direction);
+    CombatDirection Direction,
+    bool RequiresParryEnabled = false);
 
 internal sealed record CoordinatorTick(
     ReactionCandidate Candidate,
@@ -162,6 +217,7 @@ internal sealed class ReactionCoordinator
     internal const int CandidateMaximumMs = 3000;
 
     private readonly TimeProvider _clock;
+    private readonly object _sync = new();
     private ReactionCandidate _candidate;
     private bool _mustClearBeforeRearm;
     private long _nextId;
@@ -171,84 +227,99 @@ internal sealed class ReactionCoordinator
         _clock = clock ?? TimeProvider.System;
     }
 
-    public ReactionCandidate CurrentCandidate => _candidate;
+    public ReactionCandidate CurrentCandidate
+    {
+        get { lock (_sync) return _candidate; }
+    }
 
-    public bool IsCurrent(long candidateId) => _candidate is { Id: var id } && id == candidateId;
+    public bool IsCurrent(long candidateId)
+    {
+        lock (_sync) return _candidate is { Id: var id } && id == candidateId;
+    }
 
     public CoordinatorTick Tick(CombatObservation observation, ReactionCommandKind requestedKind, string hold)
     {
-        long now = observation.TimestampMs != 0 ? observation.TimestampMs : _clock.GetUtcNow().ToUnixTimeMilliseconds();
-        bool validThreat = observation.MarkerFound && observation.HasIndicator && observation.Direction != CombatDirection.None;
-        string transition = "";
-        string cancellation = "";
-        bool staleFlash = false;
-
-        if (!validThreat && _mustClearBeforeRearm)
-            _mustClearBeforeRearm = false;
-
-        if (validThreat && !_mustClearBeforeRearm)
+        lock (_sync)
         {
-            if (_candidate == null)
-            {
-                _candidate = NewCandidate(observation.Direction, now);
-                transition = "armed";
-            }
-            else if (_candidate.Direction != observation.Direction)
-            {
-                _candidate = NewCandidate(observation.Direction, now);
-                transition = "replaced";
-            }
-            else
-            {
-                _candidate = _candidate with { LastValidMs = now };
-            }
-        }
+            long now = observation.TimestampMs != 0 ? observation.TimestampMs : _clock.GetUtcNow().ToUnixTimeMilliseconds();
+            bool validThreat = observation.MarkerFound && observation.HasIndicator && observation.Direction != CombatDirection.None;
+            string transition = "";
+            string cancellation = "";
+            bool staleFlash = false;
 
-        if (_candidate != null)
-        {
-            long age = now - _candidate.StartedMs;
-            long missingAge = now - _candidate.LastValidMs;
-            if (age > CandidateMaximumMs)
-            {
-                cancellation = "candidate-timeout";
-                _candidate = null;
-                _mustClearBeforeRearm = true;
-            }
-            else if (!validThreat && missingAge > MissingGraceMs)
-            {
-                cancellation = "indicator-stale";
-                _candidate = null;
-            }
-        }
+            if (!validThreat && _mustClearBeforeRearm)
+                _mustClearBeforeRearm = false;
 
-        ReactionCommand command = null;
-        if (_candidate != null && !_candidate.Consumed && observation.LightFlash && !observation.DarkRedGate)
-        {
-            if (requestedKind == ReactionCommandKind.None)
+            if (validThreat && !_mustClearBeforeRearm)
             {
-                // A flash without a held/eligible action is visual-only; guard
-                // remains active until the current red threat clears.
+                if (_candidate == null)
+                {
+                    _candidate = NewCandidate(observation.Direction, now);
+                    transition = "armed";
+                }
+                else if (_candidate.Direction != observation.Direction)
+                {
+                    _candidate = NewCandidate(observation.Direction, now);
+                    transition = "replaced";
+                }
+                else
+                {
+                    _candidate = _candidate with { LastValidMs = now };
+                }
             }
-            else
-            {
-                command = new ReactionCommand(_candidate.Id, requestedKind, hold, _candidate.Direction);
-                _candidate = _candidate with { Consumed = true, LastValidMs = now };
-                transition = string.IsNullOrEmpty(transition) ? "flash-accepted" : transition + "+flash-accepted";
-            }
-        }
-        else if (_candidate == null && observation.LightFlash)
-        {
-            staleFlash = true;
-        }
 
-        return new CoordinatorTick(_candidate, command, transition, cancellation, staleFlash);
+            if (_candidate != null)
+            {
+                long age = now - _candidate.StartedMs;
+                long missingAge = now - _candidate.LastValidMs;
+                if (age > CandidateMaximumMs)
+                {
+                    cancellation = "candidate-timeout";
+                    _candidate = null;
+                    _mustClearBeforeRearm = true;
+                }
+                else if (!validThreat && missingAge > MissingGraceMs)
+                {
+                    cancellation = "indicator-stale";
+                    _candidate = null;
+                }
+            }
+
+            ReactionCommand command = null;
+            if (_candidate != null && !_candidate.Consumed && observation.LightFlash && !observation.DarkRedGate)
+            {
+                if (requestedKind == ReactionCommandKind.None)
+                {
+                    // A flash is a one-shot timing opportunity. If no action can
+                    // run now (for example while another worker is busy), consume
+                    // it so it cannot fire late after a cooldown.
+                    _candidate = _candidate with { Consumed = true, LastValidMs = now };
+                    transition = string.IsNullOrEmpty(transition) ? "flash-ignored" : transition + "+flash-ignored";
+                }
+                else
+                {
+                    command = new ReactionCommand(_candidate.Id, requestedKind, hold, _candidate.Direction);
+                    _candidate = _candidate with { Consumed = true, LastValidMs = now };
+                    transition = string.IsNullOrEmpty(transition) ? "flash-accepted" : transition + "+flash-accepted";
+                }
+            }
+            else if (_candidate == null && observation.LightFlash)
+            {
+                staleFlash = true;
+            }
+
+            return new CoordinatorTick(_candidate, command, transition, cancellation, staleFlash);
+        }
     }
 
     public string Cancel(string reason)
     {
-        if (_candidate == null) return "";
-        _candidate = null;
-        return reason;
+        lock (_sync)
+        {
+            if (_candidate == null) return "";
+            _candidate = null;
+            return reason;
+        }
     }
 
     private ReactionCandidate NewCandidate(CombatDirection direction, long now) =>

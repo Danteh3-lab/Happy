@@ -88,6 +88,8 @@ public static class Input
 
     public static bool IsReady => RequestedMode != InputMode.ViGEm || ViGEmInput.IsAvailable;
 
+    public static bool UsesControllerBridge => RequestedMode == InputMode.ViGEm;
+
     public static bool CanSendBulwark => RequestedMode == InputMode.ViGEm && ViGEmInput.IsAvailable;
 
     public static bool IsElevated()
@@ -104,50 +106,53 @@ public static class Input
         }
     }
 
-    public static void KeyDown(int vk)
+    public static bool KeyDown(int vk)
     {
         if (RequestedMode == InputMode.ViGEm)
         {
-            ReportSend(ViGEmInput.IsAvailable && ViGEmInput.Key(vk, true));
-            return;
+            bool sent = ViGEmInput.IsAvailable && ViGEmInput.Key(vk, true);
+            ReportSend(sent);
+            return sent;
         }
 
         if (RequestedMode != InputMode.SendInput)
         {
             SendEventKey(vk, false);
-            return;
+            return true;
         }
 
-        SendKey(vk, false);
+        return SendKey(vk, false);
     }
 
-    public static void KeyUp(int vk)
+    public static bool KeyUp(int vk)
     {
         if (RequestedMode == InputMode.ViGEm)
         {
-            ReportSend(ViGEmInput.IsAvailable && ViGEmInput.Key(vk, false));
-            return;
+            bool sent = ViGEmInput.IsAvailable && ViGEmInput.Key(vk, false);
+            ReportSend(sent);
+            return sent;
         }
 
         if (RequestedMode != InputMode.SendInput)
         {
             SendEventKey(vk, true);
-            return;
+            return true;
         }
 
-        SendKey(vk, true);
+        return SendKey(vk, true);
     }
 
-    public static void KeyTap(int vk)
+    public static bool KeyTap(int vk)
     {
-        KeyTap(vk, KeyTapDelayMs);
+        return KeyTap(vk, KeyTapDelayMs);
     }
 
-    public static void KeyTap(int vk, int holdMs)
+    public static bool KeyTap(int vk, int holdMs)
     {
-        KeyDown(vk);
+        bool downSent = KeyDown(vk);
         Thread.Sleep(holdMs);
-        KeyUp(vk);
+        bool upSent = KeyUp(vk);
+        return downSent && upSent;
     }
 
     public static bool MouseClick(int vk)
@@ -212,6 +217,57 @@ public static class Input
         ReportSend(ViGEmInput.ClearRightStickOverride());
     }
 
+    /// <summary>
+    /// Sends one directional light while restoring the controller guard stick afterwards.
+    /// Keyboard modes use the existing matching guard bind around the RB/light input.
+    /// </summary>
+    public static bool DirectionalLight(int guardKey)
+    {
+        if (!TryGetGuardDirection(guardKey, out short x, out short y))
+        {
+            ReportSend(false);
+            return false;
+        }
+
+        if (RequestedMode == InputMode.ViGEm)
+        {
+            if (!ViGEmInput.IsAvailable)
+            {
+                ReportSend(false);
+                return false;
+            }
+
+            bool sent = ViGEmInput.SetRightStickOverride(x, y);
+            ReportSend(sent);
+            if (!sent) return false;
+            try
+            {
+                sent &= MouseClick(VK_LBUTTON);
+            }
+            finally
+            {
+                bool restored = ViGEmInput.ClearRightStickOverride();
+                ReportSend(restored);
+                sent &= restored;
+            }
+            return sent;
+        }
+
+        bool delivered = true;
+        Block(true);
+        try
+        {
+            delivered &= KeyDown(guardKey);
+            delivered &= MouseClick(VK_LBUTTON);
+        }
+        finally
+        {
+            delivered &= KeyUp(guardKey);
+            Block(false);
+        }
+        return delivered;
+    }
+
     public static void ReleaseAutomationInputs()
     {
         if (RequestedMode == InputMode.ViGEm)
@@ -254,6 +310,17 @@ public static class Input
         InjectedCount++;
     }
 
+    private static bool TryGetGuardDirection(int guardKey, out short x, out short y)
+    {
+        switch (guardKey)
+        {
+            case VK_NUMPAD4: x = -32767; y = 0; return true;
+            case VK_NUMPAD8: x = 0; y = 32767; return true;
+            case VK_NUMPAD6: x = 32767; y = 0; return true;
+            default: x = 0; y = 0; return false;
+        }
+    }
+
     private static void SendEventMouse(int vk)
     {
         uint down = vk == VK_LBUTTON ? 0x0002u : 0x0008u;
@@ -291,7 +358,7 @@ public static class Input
         }
     }
 
-    private static void SendKey(int vk, bool up)
+    private static bool SendKey(int vk, bool up)
     {
         var input = new Native.INPUT
         {
@@ -309,6 +376,7 @@ public static class Input
         LastSendResult = sent;
         LastSendError = sent == 0 ? Marshal.GetLastWin32Error() : 0;
         if (sent > 0) InjectedCount++;
+        return sent > 0;
     }
 
     private static uint SendMouse(uint flags)

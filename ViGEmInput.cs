@@ -7,6 +7,7 @@ namespace HappyBot;
 public static class ViGEmInput
 {
     private static readonly object Sync = new();
+    private static readonly object LifecycleSync = new();
     private static ViGEmClient _client;
     private static IXbox360Controller _controller;
     private static IVirtualGamepad _gamepad;
@@ -69,46 +70,61 @@ public static class ViGEmInput
 
     public static void Init()
     {
-        try
+        lock (LifecycleSync)
         {
-            if (IsAvailable) return;
-            _client = new ViGEmClient();
-            _controller = _client.CreateXbox360Controller();
-            _gamepad = _controller as IVirtualGamepad
-                ?? throw new InvalidOperationException("Unable to create an Xbox 360 controller.");
-            _gamepad.AutoSubmitReport = false;
-            _controller.Connect();
-            IsAvailable = true;
-            lock (Sync) ApplyLocked();
-            _sourceTimer = new System.Threading.Timer(PollSource, null, 0, 8);
-        }
-        catch
-        {
-            Shutdown();
+            try
+            {
+                if (IsAvailable) return;
+                _client = new ViGEmClient();
+                _controller = _client.CreateXbox360Controller();
+                _gamepad = _controller as IVirtualGamepad
+                    ?? throw new InvalidOperationException("Unable to create an Xbox 360 controller.");
+                _gamepad.AutoSubmitReport = false;
+                _controller.Connect();
+                IsAvailable = true;
+                lock (Sync)
+                {
+                    if (!ApplyLocked()) throw new InvalidOperationException("Unable to submit the initial controller report.");
+                }
+                _sourceTimer = new System.Threading.Timer(PollSource, null, 0, 8);
+            }
+            catch
+            {
+                Shutdown();
+            }
         }
     }
 
     public static void Shutdown()
     {
-        _sourceTimer?.Dispose();
-        _sourceTimer = null;
-        lock (Sync)
+        lock (LifecycleSync)
         {
-            _source = default;
-            _bot = default;
-            _rightStickOverrideActive = false;
-            _rightStickOverrideX = 0;
-            _rightStickOverrideY = 0;
-            _sourceConnected = false;
-            _sourceSlot = -1;
-            try { ApplyLocked(); } catch { }
+            System.Threading.Timer timer = _sourceTimer;
+            _sourceTimer = null;
+            if (timer != null)
+            {
+                using var callbacksStopped = new ManualResetEvent(false);
+                if (timer.Dispose(callbacksStopped)) callbacksStopped.WaitOne(500);
+            }
+
+            lock (Sync)
+            {
+                _source = default;
+                _bot = default;
+                _rightStickOverrideActive = false;
+                _rightStickOverrideX = 0;
+                _rightStickOverrideY = 0;
+                _sourceConnected = false;
+                _sourceSlot = -1;
+                TrySubmitNeutralLocked();
+            }
+            try { _controller?.Disconnect(); } catch { }
+            try { _client?.Dispose(); } catch { }
+            _controller = null;
+            _gamepad = null;
+            _client = null;
+            IsAvailable = false;
         }
-        try { _controller?.Disconnect(); } catch { }
-        try { _client?.Dispose(); } catch { }
-        _controller = null;
-        _gamepad = null;
-        _client = null;
-        IsAvailable = false;
     }
 
     public static void TryRecover()
@@ -272,8 +288,32 @@ public static class ViGEmInput
         }
         catch
         {
+            // The last successfully submitted report may still have a button or
+            // trigger down. Attempt a neutral report before declaring the bridge
+            // unavailable so a failed key-up cannot remain latched until recovery.
+            TrySubmitNeutralLocked();
             IsAvailable = false;
             return false;
+        }
+    }
+
+    private static void TrySubmitNeutralLocked()
+    {
+        if (_controller == null || _gamepad == null) return;
+        try
+        {
+            _controller.SetButtonsFull(0);
+            _controller.SetSliderValue(Xbox360Slider.LeftTrigger, 0);
+            _controller.SetSliderValue(Xbox360Slider.RightTrigger, 0);
+            _controller.SetAxisValue(Xbox360Axis.LeftThumbX, 0);
+            _controller.SetAxisValue(Xbox360Axis.LeftThumbY, 0);
+            _controller.SetAxisValue(Xbox360Axis.RightThumbX, 0);
+            _controller.SetAxisValue(Xbox360Axis.RightThumbY, 0);
+            _gamepad.SubmitReport();
+        }
+        catch
+        {
+            // Disconnecting the target remains the final neutralization path.
         }
     }
 

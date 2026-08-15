@@ -38,9 +38,12 @@ public sealed class BotCore
     private readonly object _visionSync = new();
     private readonly object _guardSync = new();
     private readonly object _actionSync = new();
+    // Serializes pause/stop transitions with the coordinator portion of each frame.
+    private readonly object _combatStateSync = new();
     private readonly TelemetryRecorder _telemetry = new();
     private readonly ReactionCoordinator _reactionCoordinator = new();
     private readonly IParryRollSource _parryRolls;
+    private readonly IOrangeLightDirectionSource _orangeLightDirections;
     private int _ubp;
     private long _guardReleaseTick;
     private long _guardPressedTick;
@@ -65,7 +68,7 @@ public sealed class BotCore
     private long _orangeFeintLastSeen;
     private long _orangeLastActionTick;
     private long _orangeLastSeen;
-    private bool _orangeMustClear;
+    private volatile bool _orangeMustClear;
     private long _reactionDisplayUntil;
     private string _markerKind = "NONE";
     private int _indicatorX = -1;
@@ -79,13 +82,18 @@ public sealed class BotCore
     private ScreenFrame _frame = new();
     private Thread _thread;
 
-    public BotCore() : this(RandomParryRollSource.Instance)
+    public BotCore() : this(RandomParryRollSource.Instance, RandomOrangeLightDirectionSource.Instance)
     {
     }
 
-    internal BotCore(IParryRollSource parryRolls)
+    internal BotCore(IParryRollSource parryRolls) : this(parryRolls, RandomOrangeLightDirectionSource.Instance)
+    {
+    }
+
+    internal BotCore(IParryRollSource parryRolls, IOrangeLightDirectionSource orangeLightDirections)
     {
         _parryRolls = parryRolls ?? throw new ArgumentNullException(nameof(parryRolls));
+        _orangeLightDirections = orangeLightDirections ?? throw new ArgumentNullException(nameof(orangeLightDirections));
         _releaseTimer = new System.Threading.Timer(_ => Volatile.Write(ref _ubp, 0), null, Timeout.Infinite, Timeout.Infinite);
         _releTimer = new System.Threading.Timer(_ => DodgeEnabled = true, null, Timeout.Infinite, Timeout.Infinite);
         _guardReleaseTimer = new System.Threading.Timer(_ => ReleaseAutoGuardWhenDue(), null, Timeout.Infinite, Timeout.Infinite);
@@ -106,9 +114,11 @@ public sealed class BotCore
     public void Stop()
     {
         _cts.Cancel();
-        CancelPendingAction("shutdown", true);
-        _reactionCoordinator.Cancel("shutdown");
-        _paused.Set();
+        lock (_combatStateSync)
+        {
+            _paused.Set();
+            AbortCombatState("shutdown", true);
+        }
         _thread?.Join();
         ReleaseAutoGuard();
         Input.ReleaseAutomationInputs();
@@ -116,15 +126,17 @@ public sealed class BotCore
 
     public void TogglePause()
     {
-        if (_paused.IsSet)
+        lock (_combatStateSync)
         {
-            _reactionCoordinator.Cancel("paused");
-            CancelPendingAction("paused", true);
-            ReleaseAutoGuard();
-            Input.ReleaseAutomationInputs();
-            _paused.Reset();
+            if (_paused.IsSet)
+            {
+                // Close the loop gate before releasing input so an in-flight
+                // frame cannot re-arm guard after pause was requested.
+                _paused.Reset();
+                AbortCombatState("paused", true);
+            }
+            else _paused.Set();
         }
-        else _paused.Set();
     }
 
     public void ScheduleRele() => _releTimer.Change(9000, Timeout.Infinite);
@@ -142,7 +154,7 @@ public sealed class BotCore
     public void StartTelemetry(string label)
     {
         _telemetry.Start(label);
-        _telemetry.Record("runtime-settings", new { resolution = new { S.Res1, S.Res2 }, S.GuardHold, S.Pause3, S.ParryDelay, S.Legit, S.LegitParryChance, S.BulwarkFallback, S.CrushingFallbackChance, S.DeflectFallbackChance });
+        _telemetry.Record("runtime-settings", new { resolution = new { S.Res1, S.Res2 }, S.GuardHold, S.Pause3, S.ParryDelay, S.Legit, S.LegitParryChance, S.BulwarkFallback, S.CrushingFallbackChance, S.DeflectFallbackChance, S.OrangeLight });
     }
 
     public void StopTelemetry() => _telemetry.Stop();
@@ -181,10 +193,8 @@ public sealed class BotCore
                     if (!Input.IsReady)
                     {
                         LastError = "Requested ViGEm input is unavailable; reactions are paused.";
-                        _reactionCoordinator.Cancel("input-unavailable");
-                        CancelPendingAction("input-unavailable", true);
+                        AbortCombatState("input-unavailable", true);
                         LoopHz = (int)(1000.0 / Math.Max(1.0, sw.Elapsed.TotalMilliseconds));
-                        ApplyCoordinatorGuard(null);
                         RecordTelemetryHeartbeat();
                         PublishVision();
                         Sleep(100);
@@ -203,6 +213,7 @@ public sealed class BotCore
                 catch (Exception ex)
                 {
                     LastError = $"{ex.GetType().Name}: {ex.Message}";
+                    AbortCombatState("vision-error", true);
                     Thread.Sleep(250);
                 }
             }
@@ -277,6 +288,15 @@ public sealed class BotCore
 
     private void ProcessCombatObservation(CombatObservation observation)
     {
+        lock (_combatStateSync)
+        {
+            if (!ReactionActive()) return;
+            ProcessCombatObservationCore(observation);
+        }
+    }
+
+    private void ProcessCombatObservationCore(CombatObservation observation)
+    {
         ProcessOrangeObservation(observation);
         if (!observation.EHeld && !observation.FHeld)
             CancelPendingAction("hold-released");
@@ -334,14 +354,20 @@ public sealed class BotCore
         }
         if (tick.Command != null)
         {
-            RecordTelemetry("flash-accepted", new { candidateId = tick.Command.CandidateId, direction = tick.Command.Direction.ToString(), kind = tick.Command.Kind.ToString() });
+            bool wardenTopParry = tick.Command.Kind == ReactionCommandKind.Crushing && tick.Command.Hold == "F" &&
+                S.Parry && tick.Command.Direction == CombatDirection.Top && YourChar("Warden");
+            ReactionCommand command = tick.Command with
+            {
+                RequiresParryEnabled = tick.Command.Kind == ReactionCommandKind.Parry || wardenTopParry
+            };
+            RecordTelemetry("flash-accepted", new { candidateId = command.CandidateId, direction = command.Direction.ToString(), kind = command.Kind.ToString() });
             _telemetry.CaptureRoi("flash-accepted", observation.CombatRoi);
-            if (tick.Command.Kind == ReactionCommandKind.Parry)
+            if (command.Kind == ReactionCommandKind.Parry)
             {
                 bool bulwarkEligible = S.Autoblock && S.Parry && S.Legit && YourChar("Blackprior") && Input.CanSendBulwark;
                 bool crushingEligible = S.Autoblock && S.Parry && S.Crushing && S.Legit;
                 bool deflectEligible = S.Autoblock && S.Parry && S.Deflect && S.Legit;
-                ParryResolution resolution = ParryResolution.Create(tick.Command, S.Legit, S.LegitParryChance, _parryRolls,
+                ParryResolution resolution = ParryResolution.Create(command, S.Legit, S.LegitParryChance, _parryRolls,
                     S.BulwarkFallback, bulwarkEligible, crushingEligible, S.CrushingFallbackChance, _parryRolls,
                     deflectEligible, S.DeflectFallbackChance, _parryRolls);
                 ParryDecision decision = resolution.Decision;
@@ -369,21 +395,21 @@ public sealed class BotCore
                 {
                     string mix = resolution.DeflectRoll is int roll ? $"; deflect {S.DeflectFallbackChance}% roll {roll}" : "";
                     SetVisionReaction("DEFLECT FALLBACK", $"Legit {decision.ChancePercent}% roll {decision.Roll}: dodge{mix}", DirectionName(decision.Direction), 1100);
-                    QueueDirectionalAction(tick.Command with { Kind = ReactionCommandKind.Deflect });
+                    QueueDirectionalAction(command with { Kind = ReactionCommandKind.Deflect });
                     return;
                 }
                 if (resolution.Outcome == ParryOutcome.Crushing)
                 {
                     string mix = DescribeLegitFallbackRolls(resolution);
                     SetVisionReaction("CRUSHING FALLBACK", $"Legit {decision.ChancePercent}% roll {decision.Roll}: RB{mix}", DirectionName(decision.Direction), 1100);
-                    QueueDirectionalAction(tick.Command with { Kind = ReactionCommandKind.Crushing });
+                    QueueDirectionalAction(command with { Kind = ReactionCommandKind.Crushing });
                     return;
                 }
                 if (resolution.Outcome == ParryOutcome.Bulwark)
                 {
                     string mix = DescribeLegitFallbackRolls(resolution);
                     SetVisionReaction("BULWARK FALLBACK", $"Legit {decision.ChancePercent}% roll {decision.Roll}: flip{mix}", DirectionName(decision.Direction), 1100);
-                    QueueDirectionalAction(tick.Command with { Kind = ReactionCommandKind.Bulwark });
+                    QueueDirectionalAction(command with { Kind = ReactionCommandKind.Bulwark });
                     return;
                 }
                 if (resolution.Outcome == ParryOutcome.Block)
@@ -392,7 +418,7 @@ public sealed class BotCore
                     return;
                 }
             }
-            QueueDirectionalAction(tick.Command);
+            QueueDirectionalAction(command);
         }
     }
 
@@ -468,8 +494,10 @@ public sealed class BotCore
                 await Task.Delay(Math.Max(0, delay), token);
                 if (!CanCommitAction(command, token)) return;
                 _actionCommitted = true;
-                SendDeflect(command.Direction);
-                SetVisionReaction("DEFLECT SENT", "F hold + flash gate", DirectionName(command.Direction), 1300);
+                if (SendDeflect(command.Direction))
+                    SetVisionReaction("DEFLECT SENT", "F hold + flash gate", DirectionName(command.Direction), 1300);
+                else
+                    SetVisionReaction("DEFLECT FAILED", "Directional dodge input was not delivered", DirectionName(command.Direction), 1300);
             }
             else if (command.Kind == ReactionCommandKind.Hero)
             {
@@ -503,25 +531,46 @@ public sealed class BotCore
     private bool CanCommitAction(ReactionCommand command, CancellationToken token)
     {
         bool holdStillDown = command.Hold == "E" ? IsEHeld() : IsFHeld();
-        return !token.IsCancellationRequested && holdStillDown && ReactionActive() && _reactionCoordinator.IsCurrent(command.CandidateId);
+        return !token.IsCancellationRequested && holdStillDown && ReactionActive() &&
+            IsCommandStillEnabled(command) && _reactionCoordinator.IsCurrent(command.CandidateId);
     }
 
-    private void SendDeflect(CombatDirection direction)
+    private bool IsCommandStillEnabled(ReactionCommand command)
     {
+        Settings settings = S;
+        if (!settings.Autoblock) return false;
+        if (command.RequiresParryEnabled && !(command.Hold == "E" ? settings.Parry2 : settings.Parry)) return false;
+        return command.Kind switch
+        {
+            ReactionCommandKind.Parry => command.Hold == "E" ? settings.Parry2 : settings.Parry,
+            ReactionCommandKind.Crushing => command.Hold == "E"
+                ? settings.Crushing2
+                : settings.Crushing || (settings.Parry && command.Direction == CombatDirection.Top && YourChar("Warden")),
+            ReactionCommandKind.Deflect => settings.Deflect,
+            ReactionCommandKind.Bulwark => settings.BulwarkFallback && settings.Legit && settings.Parry && YourChar("Blackprior"),
+            ReactionCommandKind.Hero => HasHeroAction(),
+            _ => false
+        };
+    }
+
+    private bool SendDeflect(CombatDirection direction)
+    {
+        bool sent = true;
         WithBlock(() =>
         {
-            Input.KeyUp(Input.VK_W);
-            Input.KeyUp(Input.VK_S);
-            Input.KeyUp(Input.VK_A);
-            Input.KeyUp(Input.VK_D);
-            if (direction == CombatDirection.Left) Input.KeyDown(Input.VK_LEFT);
-            else if (direction == CombatDirection.Right) Input.KeyDown(Input.VK_RIGHT);
-            else Input.KeyDown(Input.VK_UP);
-            Input.KeyTap(Input.VK_SPACE);
-            if (direction == CombatDirection.Left) Input.KeyUp(Input.VK_LEFT);
-            else if (direction == CombatDirection.Right) Input.KeyUp(Input.VK_RIGHT);
-            else Input.KeyUp(Input.VK_UP);
+            sent &= Input.KeyUp(Input.VK_W);
+            sent &= Input.KeyUp(Input.VK_S);
+            sent &= Input.KeyUp(Input.VK_A);
+            sent &= Input.KeyUp(Input.VK_D);
+            if (direction == CombatDirection.Left) sent &= Input.KeyDown(Input.VK_LEFT);
+            else if (direction == CombatDirection.Right) sent &= Input.KeyDown(Input.VK_RIGHT);
+            else sent &= Input.KeyDown(Input.VK_UP);
+            sent &= Input.KeyTap(Input.VK_SPACE);
+            if (direction == CombatDirection.Left) sent &= Input.KeyUp(Input.VK_LEFT);
+            else if (direction == CombatDirection.Right) sent &= Input.KeyUp(Input.VK_RIGHT);
+            else sent &= Input.KeyUp(Input.VK_UP);
         });
+        return sent;
     }
 
     private async Task ExecuteHeroActionAsync(ReactionCommand command, CancellationToken token)
@@ -546,6 +595,7 @@ public sealed class BotCore
             try
             {
                 await Task.Delay(250, token);
+                if (!CanCommitAction(command, token)) return;
                 Input.MouseClick(Input.VK_LBUTTON);
                 Input.MouseClick(Input.VK_RBUTTON);
             }
@@ -595,40 +645,56 @@ public sealed class BotCore
     private void ProcessOrangeObservation(CombatObservation observation)
     {
         if (!S.Unblockables) return;
-        if (!observation.OrangeIndicator)
+        if (OrangeResponseLatch.IsConfirmedClear(observation.MarkerFound, observation.OrangeIndicator))
+        {
+            _orangeMustClear = false;
+            Interlocked.Exchange(ref _orangeFeintLastSeen, 0);
+            return;
+        }
+        // Marker loss produces an unknown frame, not proof the orange indicator
+        // cleared. Preserve the one-response latch so the same attack cannot
+        // re-arm when the anchor flickers back.
+        if (!observation.MarkerFound) return;
+        long now = observation.TimestampMs;
+        Interlocked.Exchange(ref _orangeLastSeen, now);
+        if (observation.OrangeFeint)
+        {
+            Interlocked.Exchange(ref _orangeFeintLastSeen, now);
+            if (_orangeMustClear) return;
+            SetVisionReaction("ORANGE PARRY WINDOW", "Red feint indicator detected", "", 900);
+            return;
+        }
+        if (_orangeMustClear) return;
+        bool afterFeint = Interlocked.Read(ref _orangeFeintLastSeen) != 0;
+        int delay = afterFeint ? S.Pause1 : S.Pause;
+        if (now - _orangeLastActionTick < Math.Max(250, delay + 150)) return;
+        // Orange has priority. Cancel work that has not issued input yet, then
+        // retry on later frames until the worker is free rather than consuming
+        // this unblockable without scheduling a response.
+        CancelPendingAction("orange-priority");
+        // The task may run synchronously when the configured delay is zero, so
+        // publish its active state before it is queued and roll it back on refusal.
+        _orangeMustClear = true;
+        if (!QueueOrangeAction(afterFeint, delay))
         {
             _orangeMustClear = false;
             return;
         }
-        long now = observation.TimestampMs;
-        Interlocked.Exchange(ref _orangeLastSeen, now);
-        if (_orangeMustClear) return;
-        if (observation.OrangeFeint)
-        {
-            _orangeFeintLastSeen = now;
-            SetVisionReaction("ORANGE PARRY WINDOW", "Red feint indicator detected", "", 900);
-            return;
-        }
-        bool afterFeint = _orangeFeintLastSeen != 0;
-        int delay = afterFeint ? S.Pause1 : S.Pause;
-        if (now - _orangeLastActionTick < Math.Max(250, delay + 150)) return;
-        _orangeFeintLastSeen = 0;
         _orangeLastActionTick = now;
-        _orangeMustClear = true;
-        QueueOrangeAction(afterFeint, delay);
     }
 
-    private void QueueOrangeAction(bool afterFeint, int delay)
+    private bool QueueOrangeAction(bool afterFeint, int delay)
     {
         lock (_actionSync)
         {
-            if (!_actionTask.IsCompleted) return;
+            if (!_actionTask.IsCompleted) return false;
             _actionCts?.Dispose();
             _actionCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
             _actionCandidateId = 0;
             _actionCommitted = false;
             _actionState = afterFeint ? "ORANGE FEINT" : "ORANGE";
             _actionTask = ExecuteOrangeActionAsync(afterFeint, delay, _actionCts.Token);
+            return true;
         }
     }
 
@@ -637,14 +703,15 @@ public sealed class BotCore
         try
         {
             await Task.Delay(Math.Max(0, delay), token);
-            if (token.IsCancellationRequested || !ReactionActive() || !S.Unblockables ||
-                Environment.TickCount64 - Interlocked.Read(ref _orangeLastSeen) > ReactionCoordinator.MissingGraceMs) return;
-            _actionCommitted = true;
-            if (afterFeint && OrangeParry)
+            if (!CanCommitOrangeAction(token)) return;
+            bool redOrFeint = afterFeint || Interlocked.Read(ref _orangeFeintLastSeen) != 0;
+            OrangeResponseKind response = OrangeResponseResolver.Resolve(redOrFeint, OrangeParry, S.OrangeLight);
+            if (response == OrangeResponseKind.Parry)
             {
                 SetVisionReaction("ORANGE PARRY READY", "Feint check passed", "", 900);
                 await Task.Delay(Math.Max(0, S.ParryDelay), token);
-                if (!ReactionActive()) return;
+                if (!OrangeParry || !CanCommitOrangeAction(token)) return;
+                _actionCommitted = true;
                 if (Input.MouseClick(Input.VK_RBUTTON))
                 {
                     ParryCount++;
@@ -652,11 +719,18 @@ public sealed class BotCore
                 }
                 else SetVisionReaction("ORANGE PARRY FAILED", "RT input was not delivered", "", 1300);
             }
+            else if (response == OrangeResponseKind.Light)
+            {
+                _actionCommitted = true;
+                SendOrangeLight();
+            }
             else
             {
+                if (!CanCommitOrangeAction(token)) return;
+                _actionCommitted = true;
                 bool handledByBulwark = await SendOrangeDodgeSequenceAsync(token);
                 if (!handledByBulwark)
-                    SetVisionReaction("ORANGE DODGE SENT", afterFeint ? "Orange parry is disabled" : "Orange indicator detected", "", 1300);
+                    SetVisionReaction("ORANGE DODGE SENT", redOrFeint ? "Orange parry is disabled" : "Orange indicator detected", "", 1300);
             }
             _actionState = "COOLDOWN";
             await Task.Delay(150, token);
@@ -673,6 +747,41 @@ public sealed class BotCore
                 _actionCommitted = false;
                 _actionState = "IDLE";
             }
+        }
+    }
+
+    private bool CanCommitOrangeAction(CancellationToken token) =>
+        !token.IsCancellationRequested && ReactionActive() && MarkerFound && S.Unblockables && _orangeMustClear &&
+        Environment.TickCount64 - Interlocked.Read(ref _orangeLastSeen) <= ReactionCoordinator.MissingGraceMs;
+
+    private void SendOrangeLight()
+    {
+        OrangeLightDecision decision = OrangeLightDecision.Create(_orangeLightDirections);
+        _actionState = "ORANGE LIGHT";
+        bool delivered = Input.DirectionalLight(GuardKey(decision.Direction));
+        RestoreAutoGuardAfterDirectionalLight();
+        string direction = DirectionName(decision.Direction);
+        SetVisionReaction(delivered ? "ORANGE LIGHT SENT" : "ORANGE LIGHT FAILED",
+            delivered ? "Orange-only indicator -> RB light" : "Directional RB input was not delivered", direction, 1300);
+        RecordTelemetry("orange-light-decision", new
+        {
+            direction,
+            delivered,
+            bridge = ViGEmInput.GetDiagnostics()
+        }, !delivered);
+    }
+
+    private void RestoreAutoGuardAfterDirectionalLight()
+    {
+        if (Input.UsesControllerBridge) return;
+        lock (_guardSync)
+        {
+            if (_activeGuardKey == 0 || !ReactionActive()) return;
+            int holdMs = Math.Max(60, S.GuardHold);
+            Input.KeyDown(_activeGuardKey);
+            _guardReleaseTick = Environment.TickCount64 + holdMs;
+            _guardReleaseTimer.Change(holdMs, Timeout.Infinite);
+            RecordTelemetry("guard-restored-after-orange-light", new { key = _activeGuardKey, holdMs });
         }
     }
 
@@ -765,6 +874,17 @@ public sealed class BotCore
             if (_actionTask.IsCompleted || (_actionCommitted && !force)) return;
             RecordTelemetry("action-cancel-request", new { reason, candidateId = _actionCandidateId, state = _actionState, force });
             _actionCts?.Cancel();
+        }
+    }
+
+    private void AbortCombatState(string reason, bool forceAction)
+    {
+        lock (_combatStateSync)
+        {
+            _reactionCoordinator.Cancel(reason);
+            CancelPendingAction(reason, forceAction);
+            ReleaseAutoGuard();
+            Input.ReleaseAutomationInputs();
         }
     }
 
@@ -1158,6 +1278,7 @@ public sealed class BotCore
             state.Contains("PARRY BLOCKED", StringComparison.OrdinalIgnoreCase) ||
             state.Contains("CRUSHING SENT", StringComparison.OrdinalIgnoreCase) ||
             state.Contains("DEFLECT SENT", StringComparison.OrdinalIgnoreCase) ||
+            state.Contains("DEFLECT FAILED", StringComparison.OrdinalIgnoreCase) ||
             state.Contains("HERO RESPONSE SENT", StringComparison.OrdinalIgnoreCase) ||
             state.Contains("BULWARK", StringComparison.OrdinalIgnoreCase))
         {
@@ -1193,6 +1314,13 @@ public sealed class BotCore
         CombatDirection.Right => "RIGHT",
         CombatDirection.Top => "TOP",
         _ => ""
+    };
+
+    private static int GuardKey(CombatDirection direction) => direction switch
+    {
+        CombatDirection.Left => Input.VK_NUMPAD4,
+        CombatDirection.Right => Input.VK_NUMPAD6,
+        _ => Input.VK_NUMPAD8
     };
 
     private string LegitParryStatus

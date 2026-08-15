@@ -13,7 +13,7 @@ static class Program
             StaleFlashIsIgnored();
             CandidateTimesOutAndRequiresClear();
             LatestDirectionReplacesCandidate();
-            ReleasedHoldDoesNotIssueReaction();
+            IgnoredFlashIsConsumedAndCannotTriggerLate();
             LegitPercentageUsesBoundaryRolls();
             LegitOffAlwaysParriesWithoutRolling();
             FAndEParriesBothUsePercentage();
@@ -22,6 +22,9 @@ static class Program
             CrushingFallbackMixUsesConfiguredPercentage();
             DeflectFallbackMixUsesConfiguredPercentage();
             BulwarkFallbackEligibilityIsStrict();
+            OrangeOnlyLightSelectionIsDeterministic();
+            OrangeRedResponseKeepsCurrentPriority();
+            OrangeMarkerLossDoesNotClearResponseLatch();
             FailedLegitDecisionLeavesCandidateAvailableForGuard();
             AutoBlockOffDoesNotArmCandidate();
             FullFrameScreenCoordinatesPreserveRoiDetection();
@@ -92,12 +95,14 @@ static class Program
             "latest valid direction should replace candidate");
     }
 
-    private static void ReleasedHoldDoesNotIssueReaction()
+    private static void IgnoredFlashIsConsumedAndCannotTriggerLate()
     {
         var coordinator = new ReactionCoordinator();
         coordinator.Tick(Observation(1, CombatDirection.Top), ReactionCommandKind.None, "");
-        CoordinatorTick flash = coordinator.Tick(Observation(50, CombatDirection.Top, flash: true), ReactionCommandKind.None, "");
-        Require(flash.Command is null && flash.Candidate is { Consumed: false }, "flash with released hold should remain unconsumed");
+        CoordinatorTick ignored = coordinator.Tick(Observation(50, CombatDirection.Top, flash: true), ReactionCommandKind.None, "");
+        CoordinatorTick late = coordinator.Tick(Observation(75, CombatDirection.Top, flash: true), ReactionCommandKind.Parry, "F");
+        Require(ignored.Command is null && ignored.Candidate is { Consumed: true } && late.Command is null,
+            "an ignored flash must be consumed so it cannot trigger late after a cooldown");
     }
 
     private static void LegitPercentageUsesBoundaryRolls()
@@ -186,7 +191,9 @@ static class Program
         ParryResolution bulwark = ParryResolution.Create(f, true, 0, new FixedRollSource(0), true, true,
             true, 50, new FixedRollSource(50), true, 50, new FixedRollSource(50));
         ParryResolution deflectOnly = ParryResolution.Create(f, true, 0, new FixedRollSource(0), false, false,
-            false, 50, null, true, 0);
+            false, 50, null, true, 0, new FixedRollSource(0));
+        ParryResolution deflectOnlySuccess = ParryResolution.Create(f, true, 0, new FixedRollSource(0), false, false,
+            false, 50, null, true, 100, new FixedRollSource(99));
         ParryResolution eBlocked = ParryResolution.Create(e, true, 0, new FixedRollSource(0), false, false,
             false, 50, null, true, 100);
 
@@ -196,8 +203,10 @@ static class Program
             "a missed Deflect roll must proceed to the existing Crushing mix");
         Require(bulwark.Outcome == ParryOutcome.Bulwark && bulwark.DeflectRoll == 50 && bulwark.FallbackRoll == 50,
             "a missed Deflect roll must preserve the Bulwark branch");
-        Require(deflectOnly.Outcome == ParryOutcome.Deflect && deflectOnly.DeflectRoll is null,
-            "the only eligible fallback must execute without an unnecessary roll");
+        Require(deflectOnly.Outcome == ParryOutcome.Block && deflectOnly.DeflectRoll == 0,
+            "a missed sole Deflect roll must retain ordinary guard");
+        Require(deflectOnlySuccess.Outcome == ParryOutcome.Deflect && deflectOnlySuccess.DeflectRoll == 99,
+            "a successful sole Deflect roll must dodge");
         Require(eBlocked.Outcome == ParryOutcome.Block,
             "E path must remain guard-only even when Deflect is enabled");
         Require(new Settings().DeflectFallbackChance == 50,
@@ -217,6 +226,37 @@ static class Program
         Require(ParryResolution.Create(f, false, 0, new FixedRollSource(99), true, true).Outcome == ParryOutcome.Parry,
             "Legit off must always use the normal parry path");
         Require(!new Settings().BulwarkFallback, "existing configurations must default fallback to off");
+    }
+
+    private static void OrangeOnlyLightSelectionIsDeterministic()
+    {
+        OrangeLightDecision light = OrangeLightDecision.Create(new FixedOrangeDirectionSource(CombatDirection.Right));
+        OrangeLightDecision invalid = OrangeLightDecision.Create(new FixedOrangeDirectionSource(CombatDirection.None));
+        Require(light.Direction == CombatDirection.Right, "orange-only light should use the injected direction");
+        Require(invalid.Direction == CombatDirection.Top, "invalid orange direction should safely fall back to top");
+        Require(OrangeResponseResolver.Resolve(false, false, true) == OrangeResponseKind.Light,
+            "orange-only with Auto light enabled must choose exactly one light instead of a dodge");
+        Require(!new Settings().OrangeLight, "existing configurations must default Auto light on orange to off");
+    }
+
+    private static void OrangeRedResponseKeepsCurrentPriority()
+    {
+        Require(OrangeResponseResolver.Resolve(true, true, true) == OrangeResponseKind.Parry,
+            "orange plus red/feint must retain orange parry priority");
+        Require(OrangeResponseResolver.Resolve(true, false, true) == OrangeResponseKind.Dodge,
+            "orange plus red/feint with parry disabled must retain dodge behavior, never Auto light");
+        Require(OrangeResponseResolver.Resolve(false, false, false) == OrangeResponseKind.Dodge,
+            "Auto light off must preserve the normal orange dodge");
+    }
+
+    private static void OrangeMarkerLossDoesNotClearResponseLatch()
+    {
+        Require(!OrangeResponseLatch.IsConfirmedClear(false, false),
+            "marker loss is an unknown orange frame and must not re-arm the same attack");
+        Require(!OrangeResponseLatch.IsConfirmedClear(true, true),
+            "a present orange indicator must retain its one-response latch");
+        Require(OrangeResponseLatch.IsConfirmedClear(true, false),
+            "only a valid marker frame with no orange can clear the response latch");
     }
 
     private static void AutoBlockOffDoesNotArmCandidate()
@@ -258,5 +298,10 @@ static class Program
             Calls++;
             return value;
         }
+    }
+
+    private sealed class FixedOrangeDirectionSource(CombatDirection direction) : IOrangeLightDirectionSource
+    {
+        public CombatDirection NextDirection() => direction;
     }
 }
