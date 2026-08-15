@@ -41,6 +41,7 @@ public sealed class Settings
     public bool Legit;
     public bool BulwarkFallback;
     public int CrushingFallbackChance = 50;
+    public int DeflectFallbackChance = 50;
 
     public Dictionary<string, bool> Chars = new(StringComparer.OrdinalIgnoreCase)
     {

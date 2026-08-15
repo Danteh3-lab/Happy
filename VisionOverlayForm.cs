@@ -152,6 +152,7 @@ public sealed class VisionOverlayForm : Form
     private static Color StateColor(string state)
     {
         if (state.Contains("PARRY", StringComparison.OrdinalIgnoreCase)) return Red;
+        if (state.Contains("DEFLECT", StringComparison.OrdinalIgnoreCase)) return Orange;
         if (state.Contains("BULWARK", StringComparison.OrdinalIgnoreCase)) return Green;
         if (state.Contains("CRUSHING", StringComparison.OrdinalIgnoreCase)) return Yellow;
         if (state.Contains("ORANGE", StringComparison.OrdinalIgnoreCase) || state.Contains("DODGE", StringComparison.OrdinalIgnoreCase)) return Orange;

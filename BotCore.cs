@@ -142,7 +142,7 @@ public sealed class BotCore
     public void StartTelemetry(string label)
     {
         _telemetry.Start(label);
-        _telemetry.Record("runtime-settings", new { resolution = new { S.Res1, S.Res2 }, S.GuardHold, S.Pause3, S.ParryDelay, S.Legit, S.LegitParryChance, S.BulwarkFallback, S.CrushingFallbackChance });
+        _telemetry.Record("runtime-settings", new { resolution = new { S.Res1, S.Res2 }, S.GuardHold, S.Pause3, S.ParryDelay, S.Legit, S.LegitParryChance, S.BulwarkFallback, S.CrushingFallbackChance, S.DeflectFallbackChance });
     }
 
     public void StopTelemetry() => _telemetry.Stop();
@@ -340,8 +340,10 @@ public sealed class BotCore
             {
                 bool bulwarkEligible = S.Autoblock && S.Parry && S.Legit && YourChar("Blackprior") && Input.CanSendBulwark;
                 bool crushingEligible = S.Autoblock && S.Parry && S.Crushing && S.Legit;
+                bool deflectEligible = S.Autoblock && S.Parry && S.Deflect && S.Legit;
                 ParryResolution resolution = ParryResolution.Create(tick.Command, S.Legit, S.LegitParryChance, _parryRolls,
-                    S.BulwarkFallback, bulwarkEligible, crushingEligible, S.CrushingFallbackChance, _parryRolls);
+                    S.BulwarkFallback, bulwarkEligible, crushingEligible, S.CrushingFallbackChance, _parryRolls,
+                    deflectEligible, S.DeflectFallbackChance, _parryRolls);
                 ParryDecision decision = resolution.Decision;
                 _latestParryDecision = decision;
                 _latestParryOutcome = resolution.Outcome;
@@ -357,19 +359,29 @@ public sealed class BotCore
                     bulwarkFallbackEnabled = S.BulwarkFallback,
                     bulwarkEligible,
                     crushingEligible,
+                    deflectEligible,
                     crushingFallbackChance = S.CrushingFallbackChance,
-                    fallbackRoll = resolution.FallbackRoll
+                    deflectFallbackChance = S.DeflectFallbackChance,
+                    fallbackRoll = resolution.FallbackRoll,
+                    deflectRoll = resolution.DeflectRoll
                 });
+                if (resolution.Outcome == ParryOutcome.Deflect)
+                {
+                    string mix = resolution.DeflectRoll is int roll ? $"; deflect {S.DeflectFallbackChance}% roll {roll}" : "";
+                    SetVisionReaction("DEFLECT FALLBACK", $"Legit {decision.ChancePercent}% roll {decision.Roll}: dodge{mix}", DirectionName(decision.Direction), 1100);
+                    QueueDirectionalAction(tick.Command with { Kind = ReactionCommandKind.Deflect });
+                    return;
+                }
                 if (resolution.Outcome == ParryOutcome.Crushing)
                 {
-                    string mix = resolution.FallbackRoll is int roll ? $"; fallback {S.CrushingFallbackChance}% roll {roll}" : "";
+                    string mix = DescribeLegitFallbackRolls(resolution);
                     SetVisionReaction("CRUSHING FALLBACK", $"Legit {decision.ChancePercent}% roll {decision.Roll}: RB{mix}", DirectionName(decision.Direction), 1100);
                     QueueDirectionalAction(tick.Command with { Kind = ReactionCommandKind.Crushing });
                     return;
                 }
                 if (resolution.Outcome == ParryOutcome.Bulwark)
                 {
-                    string mix = resolution.FallbackRoll is int roll ? $"; fallback {S.CrushingFallbackChance}% roll {roll}" : "";
+                    string mix = DescribeLegitFallbackRolls(resolution);
                     SetVisionReaction("BULWARK FALLBACK", $"Legit {decision.ChancePercent}% roll {decision.Roll}: flip{mix}", DirectionName(decision.Direction), 1100);
                     QueueDirectionalAction(tick.Command with { Kind = ReactionCommandKind.Bulwark });
                     return;
@@ -382,6 +394,16 @@ public sealed class BotCore
             }
             QueueDirectionalAction(tick.Command);
         }
+    }
+
+    private string DescribeLegitFallbackRolls(ParryResolution resolution)
+    {
+        string detail = resolution.DeflectRoll is int deflectRoll
+            ? $"; deflect {S.DeflectFallbackChance}% roll {deflectRoll}"
+            : "";
+        return resolution.FallbackRoll is int fallbackRoll
+            ? detail + $"; fallback {S.CrushingFallbackChance}% roll {fallbackRoll}"
+            : detail;
     }
 
     private (ReactionCommandKind Kind, string Hold) ResolveReactionCommand(CombatObservation observation)

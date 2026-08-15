@@ -20,6 +20,7 @@ static class Program
             FailedFParryCanResolveToBulwark();
             FailedFParryCanResolveToCrushing();
             CrushingFallbackMixUsesConfiguredPercentage();
+            DeflectFallbackMixUsesConfiguredPercentage();
             BulwarkFallbackEligibilityIsStrict();
             FailedLegitDecisionLeavesCandidateAvailableForGuard();
             AutoBlockOffDoesNotArmCandidate();
@@ -172,6 +173,35 @@ static class Program
         Require(zero.Outcome == ParryOutcome.Bulwark, "0% Crushing chance must always use Bulwark");
         Require(full.Outcome == ParryOutcome.Crushing, "100% Crushing chance must always use RB");
         Require(new Settings().CrushingFallbackChance == 50, "existing configurations must default to a 50/50 fallback mix");
+    }
+
+    private static void DeflectFallbackMixUsesConfiguredPercentage()
+    {
+        ReactionCommand f = new(27, ReactionCommandKind.Parry, "F", CombatDirection.Right);
+        ReactionCommand e = new(28, ReactionCommandKind.Parry, "E", CombatDirection.Right);
+        ParryResolution deflect = ParryResolution.Create(f, true, 0, new FixedRollSource(0), true, true,
+            true, 50, new FixedRollSource(49), true, 50, new FixedRollSource(49));
+        ParryResolution crushing = ParryResolution.Create(f, true, 0, new FixedRollSource(0), true, true,
+            true, 50, new FixedRollSource(49), true, 50, new FixedRollSource(50));
+        ParryResolution bulwark = ParryResolution.Create(f, true, 0, new FixedRollSource(0), true, true,
+            true, 50, new FixedRollSource(50), true, 50, new FixedRollSource(50));
+        ParryResolution deflectOnly = ParryResolution.Create(f, true, 0, new FixedRollSource(0), false, false,
+            false, 50, null, true, 0);
+        ParryResolution eBlocked = ParryResolution.Create(e, true, 0, new FixedRollSource(0), false, false,
+            false, 50, null, true, 100);
+
+        Require(deflect.Outcome == ParryOutcome.Deflect && deflect.DeflectRoll == 49,
+            "roll below the Deflect chance must dodge");
+        Require(crushing.Outcome == ParryOutcome.Crushing && crushing.DeflectRoll == 50 && crushing.FallbackRoll == 49,
+            "a missed Deflect roll must proceed to the existing Crushing mix");
+        Require(bulwark.Outcome == ParryOutcome.Bulwark && bulwark.DeflectRoll == 50 && bulwark.FallbackRoll == 50,
+            "a missed Deflect roll must preserve the Bulwark branch");
+        Require(deflectOnly.Outcome == ParryOutcome.Deflect && deflectOnly.DeflectRoll is null,
+            "the only eligible fallback must execute without an unnecessary roll");
+        Require(eBlocked.Outcome == ParryOutcome.Block,
+            "E path must remain guard-only even when Deflect is enabled");
+        Require(new Settings().DeflectFallbackChance == 50,
+            "existing configurations must default Deflect fallback to 50 percent");
     }
 
     private static void BulwarkFallbackEligibilityIsStrict()
