@@ -22,6 +22,7 @@ public sealed class Settings
     public bool Rightdodge;
     public bool Unblockables;
     public bool OrangeLight;
+    public bool OrangeParry;
     public bool Autoblock;
     public bool Lightbash;
     public bool Parry;

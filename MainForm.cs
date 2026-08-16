@@ -28,7 +28,7 @@ public sealed class MainForm : Form
 
     private static readonly string[] CheckKeys =
     {
-        "DodgeL", "DodgeH", "Leftdodge", "Rightdodge", "Unblockables", "OrangeLight", "Autoblock", "Lightbash",
+        "DodgeL", "DodgeH", "Leftdodge", "Rightdodge", "Unblockables", "OrangeLight", "OrangeParry", "Autoblock", "Lightbash",
         "Parry", "Crushing", "Deflect", "Parry2", "Crushing2", "Nohero", "YourHero", "Legit", "BulwarkFallback",
         "Warden", "Peacekeeper", "Centurion", "Blackprior", "Gryphon", "Conqueror", "Lawbringer", "Gladiator", "Warmonger",
         "Raider", "Berserker", "Highlander", "Jormungandr", "Warlord", "Valkyrie", "Shaman", "Varangian", "Null",
@@ -309,6 +309,7 @@ public sealed class MainForm : Form
             "Rightdodge" => s.Rightdodge,
             "Unblockables" => s.Unblockables,
             "OrangeLight" => s.OrangeLight,
+            "OrangeParry" => s.OrangeParry,
             "Autoblock" => s.Autoblock,
             "Lightbash" => s.Lightbash,
             "Parry" => s.Parry,
@@ -334,6 +335,7 @@ public sealed class MainForm : Form
             case "Rightdodge": s.Rightdodge = value; if (value) s.Leftdodge = false; break;
             case "Unblockables": s.Unblockables = value; break;
             case "OrangeLight": s.OrangeLight = value; break;
+            case "OrangeParry": s.OrangeParry = value; break;
             case "Autoblock": s.Autoblock = value; break;
             case "Lightbash": s.Lightbash = value; break;
             case "Parry": s.Parry = value; break;
@@ -534,6 +536,7 @@ public sealed class MainForm : Form
                 _peacekeeperApplied = false;
             }
         });
+        _bot.OrangeParry = _bot.S.OrangeParry;
         SendSettings();
         SendToast("Settings loaded.", "success");
     }
@@ -735,8 +738,11 @@ public sealed class MainForm : Form
 
     private void ToggleOrangeParry()
     {
-        _bot.OrangeParry = !_bot.OrangeParry;
+        bool enabled = !_bot.OrangeParry;
+        _bot.OrangeParry = enabled;
+        _bot.UpdateSettings(s => s.OrangeParry = enabled);
         SendToast(_bot.OrangeParry ? "Orange parry ON" : "Orange parry OFF", _bot.OrangeParry ? "success" : "info");
+        SendSettings();
         SendStatus();
     }
 
