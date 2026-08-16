@@ -163,6 +163,28 @@ public sealed class BotCore
         lock (_visionSync) return _vision;
     }
 
+    public OverlayFeatureSnapshot GetOverlayFeatures()
+    {
+        Settings settings = S;
+        bool autoBlock = settings.Autoblock;
+        bool blackPrior = settings.YourHero && !settings.Nohero && settings.Ch("Blackprior");
+
+        return new OverlayFeatureSnapshot
+        {
+            AutoBlock = autoBlock,
+            AutoParry = autoBlock && settings.Parry,
+            AutoCrushing = autoBlock && settings.Crushing,
+            AutoDeflect = autoBlock && settings.Deflect,
+            AutoDodge = settings.Unblockables && !settings.OrangeLight,
+            OrangeLight = settings.Unblockables && settings.OrangeLight,
+            OrangeParry = OrangeParry,
+            Legit = autoBlock && settings.Legit && settings.Parry,
+            LegitChance = Math.Clamp(settings.LegitParryChance, 0, 100),
+            BulwarkFallback = autoBlock && settings.Parry && settings.Legit && settings.BulwarkFallback && blackPrior && Input.CanSendBulwark,
+            Telemetry = _telemetry.IsRecording
+        };
+    }
+
     public void RefreshVisionSnapshot() => PublishVision();
 
     private static bool IsEHeld() => Input.IsDown(Input.VK_E);

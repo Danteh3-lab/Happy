@@ -88,7 +88,7 @@ public sealed class MainForm : Form
         });
         ApplyResolution(screen.Width, screen.Height);
 
-        _visionOverlay = new VisionOverlayForm(_bot.GetVisionSnapshot);
+        _visionOverlay = new VisionOverlayForm(_bot.GetVisionSnapshot, _bot.GetOverlayFeatures);
 
         _webView = new WebView2
         {

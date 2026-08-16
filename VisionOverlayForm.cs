@@ -25,6 +25,7 @@ public sealed class VisionOverlayForm : Form
     private static readonly Color Panel = Color.FromArgb(218, 10, 18, 23);
 
     private readonly Func<VisionSnapshot> _getSnapshot;
+    private readonly Func<OverlayFeatureSnapshot> _getFeatures;
     private readonly System.Windows.Forms.Timer _paintTimer;
     private Rectangle _screenBounds;
     private bool _showAnchorScan = true;
@@ -35,9 +36,10 @@ public sealed class VisionOverlayForm : Form
         Invalidate();
     }
 
-    public VisionOverlayForm(Func<VisionSnapshot> getSnapshot)
+    public VisionOverlayForm(Func<VisionSnapshot> getSnapshot, Func<OverlayFeatureSnapshot> getFeatures)
     {
         _getSnapshot = getSnapshot;
+        _getFeatures = getFeatures;
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false;
         TopMost = true;
@@ -108,10 +110,12 @@ public sealed class VisionOverlayForm : Form
     {
         base.OnPaint(e);
         VisionSnapshot s = _getSnapshot();
+        OverlayFeatureSnapshot features = _getFeatures();
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
         e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
         DrawHeader(e.Graphics, s);
+        DrawFeatureList(e.Graphics, features);
         if (_showAnchorScan) DrawAnchorScan(e.Graphics, s);
 
         if (!s.MarkerFound) return;
@@ -182,6 +186,52 @@ public sealed class VisionOverlayForm : Form
     {
         RectangleF region = ToClient(s.AnchorScan);
         DrawRegion(g, region, s.MarkerFound ? Cyan : CyanDim, "ANCHOR SCAN", 1f);
+    }
+
+    private static void DrawFeatureList(Graphics g, OverlayFeatureSnapshot features)
+    {
+        var items = new List<(string Text, Color Color)>();
+        if (features.AutoBlock) items.Add(("AUTO BLOCK", Green));
+        if (features.AutoParry) items.Add(("AUTO PARRY", Red));
+        if (features.AutoCrushing) items.Add(("AUTO CRUSH", Yellow));
+        if (features.AutoDeflect) items.Add(("AUTO DEFLECT", Orange));
+        if (features.AutoDodge) items.Add(("AUTO DODGE", Orange));
+        if (features.OrangeLight) items.Add(("ORANGE LIGHT", Orange));
+        if (features.OrangeParry) items.Add(("ORANGE PARRY", Red));
+        if (features.Legit) items.Add(($"LEGIT {features.LegitChance}%", Cyan));
+        if (features.BulwarkFallback) items.Add(("BULWARK", Green));
+        if (features.Telemetry) items.Add(("TELEMETRY", Cyan));
+
+        const int rightMargin = 18;
+        const int top = 16;
+        int y = top;
+        DrawRightChip(g, new Point(g.VisibleClipBounds.Right > 0 ? (int)g.VisibleClipBounds.Right - rightMargin : 0, y), "MODULES", CyanDim);
+        y += 29;
+
+        if (items.Count == 0)
+        {
+            DrawRightChip(g, new Point((int)g.VisibleClipBounds.Right - rightMargin, y), "NO MODULES", CyanDim);
+            return;
+        }
+
+        foreach ((string text, Color color) in items)
+        {
+            DrawRightChip(g, new Point((int)g.VisibleClipBounds.Right - rightMargin, y), text, color);
+            y += 29;
+        }
+    }
+
+    private static void DrawRightChip(Graphics g, Point rightAlignedLocation, string text, Color color)
+    {
+        using var font = new Font("Consolas", 8.2f, FontStyle.Bold, GraphicsUnit.Point);
+        SizeF size = g.MeasureString(text, font);
+        var rect = new RectangleF(rightAlignedLocation.X - size.Width - 12, rightAlignedLocation.Y, size.Width + 12, size.Height + 6);
+        using var fill = new SolidBrush(Panel);
+        using var border = new Pen(Color.FromArgb(220, color));
+        using var foreground = new SolidBrush(Color.FromArgb(235, 241, 246));
+        g.FillRectangle(fill, rect);
+        g.DrawRectangle(border, rect.X, rect.Y, rect.Width, rect.Height);
+        g.DrawString(text, font, foreground, rect.X + 6, rect.Y + 3);
     }
 
     private static void DrawRegion(Graphics g, RectangleF region, Color color, string label, float width)
