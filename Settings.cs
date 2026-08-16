@@ -15,15 +15,6 @@ public sealed class Settings
     public int Left;
     public int Right;
 
-    public int Ubp;
-    public int NMode;
-    public int Active1 = 1;
-    public int Active3;
-    public int Active4;
-    public int Active9;
-    public int Active11;
-    public int Active12;
-
     public bool DodgeH;
     public bool DodgeL;
     public bool Leftdodge;

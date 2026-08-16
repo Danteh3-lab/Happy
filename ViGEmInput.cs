@@ -40,14 +40,6 @@ public static class ViGEmInput
         }
     }
 
-    public static bool IsRightStickOverrideActive
-    {
-        get
-        {
-            lock (Sync) return _rightStickOverrideActive;
-        }
-    }
-
     public static InputBridgeSnapshot GetDiagnostics()
     {
         lock (Sync)

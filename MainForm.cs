@@ -8,7 +8,8 @@ namespace HappyBot;
 
 public sealed class MainForm : Form
 {
-    private const int IdF1 = 1, IdF2 = 2, IdF3 = 3, IdF4 = 4, IdF5 = 5, IdF6 = 6, IdF7 = 7;
+    private const int IdF1 = 1, IdF3 = 3, IdF4 = 4, IdF5 = 5, IdF6 = 6, IdF7 = 7;
+    private static readonly int[] HotkeyIds = { IdF1, IdF3, IdF4, IdF5, IdF6, IdF7 };
     private const int PeacekeeperDeflectDelayMs = 100;
     private const int MaxDelayMs = 10000;
     private int _prevLeftDeflect;
@@ -50,8 +51,6 @@ public sealed class MainForm : Form
     private readonly System.Windows.Forms.Timer _statusTimer;
     private CancellationTokenSource _testCts = new();
     private int _testMode;
-    private bool _shiftDown;
-    private bool _rDown;
     private bool _fKeyDown;
     private bool _webReady;
     private bool _visionOverlayVisible;
@@ -238,9 +237,7 @@ public sealed class MainForm : Form
             sourceSlot = ViGEmInput.SourceSlot,
             virtualState = ViGEmInput.IsAvailable ? "ON" : "OFF",
             loop = _bot.LoopHz,
-            dodgeEnabled = _bot.DodgeEnabled,
             legit = _bot.S.Legit,
-            parryToggle = _bot.ParryToggle,
             orangeParry = _bot.OrangeParry,
             visionOverlay = _visionOverlayVisible,
             anchorScan = _showAnchorScan,
@@ -330,8 +327,6 @@ public sealed class MainForm : Form
 
     private void ApplySettings(JsonElement values)
     {
-        bool parryChanged = values.TryGetProperty("Parry", out _);
-        bool parryEnabled = _bot.S.Parry;
         _bot.UpdateSettings(s =>
         {
             s.Res1 = ReadString(values, "res1", s.Res1);
@@ -372,9 +367,7 @@ public sealed class MainForm : Form
                     _peacekeeperApplied = false;
                 }
             }
-            parryEnabled = s.Parry;
         });
-        if (parryChanged) _bot.ParryToggle = parryEnabled;
     }
 
     private static int ClampDelay(int value) => Math.Clamp(value, 0, MaxDelayMs);
@@ -492,7 +485,6 @@ public sealed class MainForm : Form
 
     private void OnLoad()
     {
-        bool parryEnabled = false;
         _bot.UpdateSettings(s =>
         {
             foreach (string key in EditKeys)
@@ -516,9 +508,7 @@ public sealed class MainForm : Form
             {
                 _peacekeeperApplied = false;
             }
-            parryEnabled = s.Parry;
         });
-        _bot.ParryToggle = parryEnabled;
         SendSettings();
         SendToast("Settings loaded.", "success");
     }
@@ -618,17 +608,17 @@ public sealed class MainForm : Form
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
-        for (int i = 0; i < 7; i++)
+        foreach (int id in HotkeyIds)
         {
-            Native.RegisterHotKey(Handle, i + 1, 0, (uint)(0x70 + i));
+            Native.RegisterHotKey(Handle, id, 0, (uint)(0x70 + id - 1));
         }
     }
 
     protected override void OnHandleDestroyed(EventArgs e)
     {
-        for (int i = 0; i < 7; i++)
+        foreach (int id in HotkeyIds)
         {
-            Native.UnregisterHotKey(Handle, i + 1);
+            Native.UnregisterHotKey(Handle, id);
         }
         base.OnHandleDestroyed(e);
     }
@@ -666,21 +656,6 @@ public sealed class MainForm : Form
             _fKeyDown = down;
             _bot.FHeld = _fKeyDown || Input.HoldButtonHeld();
         }
-        else if (vk == Input.VK_LSHIFT)
-        {
-            if (down && !_shiftDown && _bot.S.Active12 == 1)
-                Input.KeyTap(Input.VK_NUMPAD3);
-            _shiftDown = down;
-        }
-        else if (vk == Input.VK_R)
-        {
-            if (down && !_rDown)
-            {
-                _bot.DodgeEnabled = false;
-                _bot.ScheduleRele();
-            }
-            _rDown = down;
-        }
     }
 
     private void HandleHotkey(int id)
@@ -692,10 +667,6 @@ public sealed class MainForm : Form
                 SendSettings();
                 Sound(_bot.S.Pause == 0 ? "buttonunclick" : "buttonclick");
                 break;
-            case IdF2:
-                _bot.DodgeEnabled = !_bot.DodgeEnabled;
-                Sound(_bot.DodgeEnabled ? "buttonclick" : "buttonunclick");
-                break;
             case IdF3:
                 string fMode = "Parry";
                 _bot.UpdateSettings(next =>
@@ -703,7 +674,6 @@ public sealed class MainForm : Form
                     if (next.Parry) { next.Parry = false; next.Crushing = true; next.Deflect = false; fMode = "Crushing counter"; }
                     else if (next.Crushing) { next.Parry = false; next.Crushing = false; next.Deflect = true; fMode = "Deflect"; }
                     else { next.Parry = true; next.Crushing = false; next.Deflect = false; fMode = "Parry"; }
-                    _bot.ParryToggle = next.Parry;
                 });
                 SendSettings();
                 SendToast($"F-mode: {fMode}", "info");
@@ -826,13 +796,14 @@ public sealed class MainForm : Form
         "3) Match the menu resolution to the game render.\n" +
         "4) Use fullscreen or borderless fullscreen, not windowed mode.\n" +
         "5) Hide physical/source controllers with HidHide and leave the ViGEm output visible.\n" +
-        "6) Hold E or F before an attack for parry/counter actions. Orange handling runs automatically when enabled; F5 toggles orange parry.\n" +
+        "6) Hold E or F before an attack for parry/counter actions. Orange handling runs automatically when enabled; own controller RT/RB attacks are ignored until their orange clears; F5 toggles orange parry.\n" +
         "7) F7 toggles the diagnostic vision overlay. It is click-through and does not change bot behavior.";
 
     private const string ReadMeText =
         "FEATURES\n\n" +
         "- Screen-aware orange and red indicator detection\n" +
-        "- Orange-only dodge and optional orange plus red RT parry\n" +
+        "- Orange-only dodge/light and optional orange plus red RT parry\n" +
+        "- Own controller RT/RB attacks are excluded from orange responses\n" +
         "- Auto block and directional guard\n" +
         "- Hero-specific evades and reactions\n" +
         "- ViGEm source/output merge\n" +

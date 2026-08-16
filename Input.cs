@@ -28,16 +28,13 @@ public static class Input
     public const int VK_D = 0x44;
     public const int VK_E = 0x45;
     public const int VK_F = 0x46;
-    public const int VK_R = 0x52;
     public const int VK_S = 0x53;
     public const int VK_W = 0x57;
-    public const int VK_NUMPAD3 = 0x63;
     public const int VK_NUMPAD4 = 0x64;
     public const int VK_NUMPAD5 = 0x65;
     public const int VK_NUMPAD6 = 0x66;
     public const int VK_NUMPAD8 = 0x68;
     public const int VK_NUMPAD9 = 0x69;
-    public const int VK_LSHIFT = 0xA0;
 
     public static bool IsDown(int vk) => (Native.GetAsyncKeyState(vk) & 0x8000) != 0;
 
@@ -69,6 +66,28 @@ public static class Input
     }
 
     /// <summary>
+    /// Reads only the forwarded physical controller's RT state. DANBOT's
+    /// virtual RT is kept separate so an automated parry cannot look like a
+    /// player attack. RT is excluded when it is configured as the hold gate.
+    /// </summary>
+    public static bool PhysicalHeavyAttackHeld()
+    {
+        if (RequestedMode != InputMode.ViGEm || HoldButton == "RT") return false;
+        return ViGEmInput.TryGetSourceState(out var state) && state.bRightTrigger > 32;
+    }
+
+    /// <summary>
+    /// Reads the physical controller's RB/light state for outgoing orange
+    /// light attribution. RB is excluded when it is configured as the hold
+    /// gate, just like RT above.
+    /// </summary>
+    public static bool PhysicalLightAttackHeld()
+    {
+        if (RequestedMode != InputMode.ViGEm || HoldButton == "RB") return false;
+        return ViGEmInput.TryGetSourceState(out var state) && (state.wButtons & 0x0200) != 0;
+    }
+
+    /// <summary>
     /// Uses the physical controller's forwarded left-stick state when the
     /// controller bridge is active. Keyboard modes keep the existing W gate.
     /// </summary>
@@ -91,20 +110,6 @@ public static class Input
     public static bool UsesControllerBridge => RequestedMode == InputMode.ViGEm;
 
     public static bool CanSendBulwark => RequestedMode == InputMode.ViGEm && ViGEmInput.IsAvailable;
-
-    public static bool IsElevated()
-    {
-        try
-        {
-            using var id = System.Security.Principal.WindowsIdentity.GetCurrent();
-            return new System.Security.Principal.WindowsPrincipal(id)
-                .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
-        }
-        catch
-        {
-            return false;
-        }
-    }
 
     public static bool KeyDown(int vk)
     {
@@ -276,7 +281,7 @@ public static class Input
         int[] keys =
         {
             VK_SPACE, VK_LEFT, VK_UP, VK_RIGHT, VK_DOWN, VK_C,
-            VK_NUMPAD3, VK_NUMPAD4, VK_NUMPAD5, VK_NUMPAD6, VK_NUMPAD8, VK_NUMPAD9
+            VK_NUMPAD4, VK_NUMPAD5, VK_NUMPAD6, VK_NUMPAD8, VK_NUMPAD9
         };
         foreach (int key in keys) KeyUp(key);
 

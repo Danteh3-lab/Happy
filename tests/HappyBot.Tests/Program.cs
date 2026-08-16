@@ -25,6 +25,7 @@ static class Program
             OrangeOnlyLightSelectionIsDeterministic();
             OrangeRedResponseKeepsCurrentPriority();
             OrangeMarkerLossDoesNotClearResponseLatch();
+            OutgoingOrangeGuardSuppressesOwnAttackUntilClear();
             FailedLegitDecisionLeavesCandidateAvailableForGuard();
             AutoBlockOffDoesNotArmCandidate();
             FullFrameScreenCoordinatesPreserveRoiDetection();
@@ -257,6 +258,48 @@ static class Program
             "a present orange indicator must retain its one-response latch");
         Require(OrangeResponseLatch.IsConfirmedClear(true, false),
             "only a valid marker frame with no orange can clear the response latch");
+    }
+
+    private static void OutgoingOrangeGuardSuppressesOwnAttackUntilClear()
+    {
+        var guard = new OutgoingOrangeGuard();
+        OutgoingOrangeGuardResult attack = guard.Observe(100, true, false, true);
+        OutgoingOrangeGuardResult preOrange = guard.Observe(1200, true, false, false);
+        OutgoingOrangeGuardResult ownOrange = guard.Observe(1400, true, true, false);
+        OutgoingOrangeGuardResult afterRelease = guard.Observe(1800, true, true, false);
+        OutgoingOrangeGuardResult markerLoss = guard.Observe(1810, false, false, false);
+        OutgoingOrangeGuardResult clear = guard.Observe(1820, true, false, false);
+        OutgoingOrangeGuardResult nextEnemy = guard.Observe(1900, true, true, false);
+        OutgoingOrangeGuardResult noSource = new OutgoingOrangeGuard().Observe(100, true, true, false);
+
+        Require(attack.WindowActive && !attack.SelfOrangeLatched,
+            "source RT should start the outgoing-orange suppression window");
+        Require(preOrange.WindowActive && !preOrange.SelfOrangeLatched,
+            "the outgoing-orange window should remain active for the observed attack delay");
+        Require(ownOrange.SuppressesOrange && ownOrange.SelfOrangeStarted,
+            "orange appearing during the source RT window should be attributed to the own attack");
+        Require(ownOrange.AttributionSource == "RT",
+            "the delayed orange should retain RT attribution after release");
+        Require(afterRelease.SuppressesOrange && afterRelease.SelfOrangeLatched,
+            "releasing RT must not allow a late response while the same orange remains");
+        Require(markerLoss.SuppressesOrange,
+            "marker loss must not clear the self-orange latch");
+        Require(clear.SelfOrangeCleared && !clear.SuppressesOrange,
+            "a valid marker frame without orange should clear the self-orange latch");
+        Require(clear.AttributionSource == "RT",
+            "the clear event should retain the original RT attribution");
+        Require(!nextEnemy.SuppressesOrange && nextEnemy.SelfOrangeStarted == false,
+            "the next orange after a confirmed clear should be eligible for normal handling");
+        Require(!noSource.SuppressesOrange && !noSource.SelfOrangeLatched,
+            "without a source attack signal, orange must retain normal handling");
+
+        var lightGuard = new OutgoingOrangeGuard();
+        OutgoingOrangeGuardResult lightAttack = lightGuard.Observe(100, true, false, false, true);
+        OutgoingOrangeGuardResult lightOrange = lightGuard.Observe(1400, true, true, false, false);
+        Require(lightAttack.WindowActive && lightOrange.SelfOrangeLatched && lightOrange.SuppressesOrange,
+            "source RB/light should attribute a delayed orange indicator to the own attack");
+        Require(lightOrange.AttributionSource == "RB",
+            "the delayed orange should retain RB attribution after release");
     }
 
     private static void AutoBlockOffDoesNotArmCandidate()

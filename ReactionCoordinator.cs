@@ -100,6 +100,91 @@ internal static class OrangeResponseLatch
         markerFound && !orangeIndicator;
 }
 
+/// <summary>
+/// Attributes an orange indicator to a physical source-controller heavy attack
+/// when it appears during the short outgoing-attack window. The attribution
+/// remains latched until a valid marker frame confirms that orange has cleared.
+/// </summary>
+internal sealed record OutgoingOrangeGuardResult(
+    bool SourceHeavyHeld,
+    bool SourceLightHeld,
+    string AttributionSource,
+    bool WindowActive,
+    bool SelfOrangeLatched,
+    long SuppressionUntilMs,
+    bool SuppressesOrange,
+    bool SelfOrangeStarted,
+    bool SelfOrangeCleared);
+
+internal sealed class OutgoingOrangeGuard
+{
+    // The orange indicator can appear well after the physical heavy is
+    // released. Keep this internal so it remains a safety attribution window,
+    // not a user-facing timing setting.
+    public const int SuppressionWindowMs = 1500;
+
+    private long _suppressionUntilMs;
+    private bool _selfOrangeLatched;
+    private bool _windowSourceHeavySeen;
+    private bool _windowSourceLightSeen;
+    private bool _selfOrangeSourceHeavy;
+    private bool _selfOrangeSourceLight;
+
+    private static string SourceName(bool sourceHeavy, bool sourceLight) =>
+        sourceHeavy && sourceLight ? "RT+RB" : sourceHeavy ? "RT" : sourceLight ? "RB" : "";
+
+    public OutgoingOrangeGuardResult Observe(long now, bool markerFound, bool orangeIndicator, bool sourceHeavyHeld, bool sourceLightHeld = false)
+    {
+        if (sourceHeavyHeld)
+            _windowSourceHeavySeen = true;
+        if (sourceLightHeld)
+            _windowSourceLightSeen = true;
+        if (sourceHeavyHeld || sourceLightHeld)
+            _suppressionUntilMs = Math.Max(_suppressionUntilMs, now + SuppressionWindowMs);
+        else if (!_selfOrangeLatched && now >= _suppressionUntilMs)
+        {
+            _windowSourceHeavySeen = false;
+            _windowSourceLightSeen = false;
+        }
+
+        bool selfOrangeCleared = false;
+        string clearedSource = "";
+        if (_selfOrangeLatched && OrangeResponseLatch.IsConfirmedClear(markerFound, orangeIndicator))
+        {
+            clearedSource = SourceName(_selfOrangeSourceHeavy, _selfOrangeSourceLight);
+            _selfOrangeLatched = false;
+            _selfOrangeSourceHeavy = false;
+            _selfOrangeSourceLight = false;
+            selfOrangeCleared = true;
+        }
+
+        bool windowActive = now < _suppressionUntilMs;
+        bool selfOrangeStarted = false;
+        if (!_selfOrangeLatched && windowActive && markerFound && orangeIndicator)
+        {
+            _selfOrangeLatched = true;
+            _selfOrangeSourceHeavy = _windowSourceHeavySeen;
+            _selfOrangeSourceLight = _windowSourceLightSeen;
+            selfOrangeStarted = true;
+        }
+
+        string attributionSource = _selfOrangeLatched
+            ? SourceName(_selfOrangeSourceHeavy, _selfOrangeSourceLight)
+            : clearedSource;
+
+        return new OutgoingOrangeGuardResult(
+            sourceHeavyHeld,
+            sourceLightHeld,
+            attributionSource,
+            windowActive,
+            _selfOrangeLatched,
+            _suppressionUntilMs,
+            windowActive || _selfOrangeLatched,
+            selfOrangeStarted,
+            selfOrangeCleared);
+    }
+}
+
 /// <summary>One immutable parry-or-block choice for an accepted flash candidate.</summary>
 internal sealed record ParryDecision(
     long CandidateId,
@@ -184,7 +269,9 @@ internal sealed record CombatObservation(
     bool EHeld,
     bool FHeld,
     bool LtHeld,
-    bool InputReady);
+    bool InputReady,
+    bool SourceHeavyHeld = false,
+    bool SourceLightHeld = false);
 
 internal sealed record ReactionCandidate(
     long Id,

@@ -90,7 +90,7 @@
     setMetric("metric-virtual", virtual, virtual === "ON");
     setMetric("metric-loop", loop + " Hz", loop > 0);
     $("#sidebar-input").textContent = mode + " / " + (source === "ON" ? "source " + sourceSlot : "idle");
-    $("#parry-count").textContent = String(state.status.parryCount || 0) + " parries · P-" + (state.status.parryToggle === false ? "OFF" : "ON");
+    $("#parry-count").textContent = String(state.status.parryCount || 0) + " parries";
     const orangeButton = $("#orange-parry-button");
     if (orangeButton) {
       orangeButton.textContent = "Orange parry: " + (orangeParry ? "ON" : "OFF") + " · F5";
