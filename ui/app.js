@@ -71,6 +71,7 @@
     const anchorScan = state.status.anchorScan !== false;
     const telemetry = state.status.telemetry || {};
     const telemetryRecording = telemetry.recording === true;
+    const autoDodgeBindButton = $("#auto-dodge-bind-button");
 
     const top = $("#top-runtime");
     top.innerHTML = '<span class="status-dot ' + (running ? "green" : "") + '"></span> ' + (running ? "RUNNING" : "STANDBY");
@@ -117,6 +118,12 @@
       telemetryStatus.textContent = telemetryRecording
         ? "Telemetry " + (telemetry.label || "Other") + " · " + seconds + "s · " + Number(telemetry.failures || 0) + " failures · " + Number(telemetry.dropped || 0) + " dropped"
         : "Telemetry OFF";
+    }
+    if (autoDodgeBindButton) {
+      autoDodgeBindButton.textContent = state.status.bindingAutoDodge
+        ? "Press controller button..."
+        : "Dodge bind: " + String(state.status.autoDodgeBind || "UNBOUND");
+      autoDodgeBindButton.classList.toggle("active", state.status.bindingAutoDodge === true);
     }
   }
 
@@ -169,6 +176,7 @@
     if (action === "toggle-orange-parry") return post("orange-parry");
     if (action === "vision-overlay") return post("vision-overlay");
     if (action === "anchor-scan") return post("anchor-scan");
+    if (action === "bind-auto-dodge") return post("bind-auto-dodge");
     if (action === "telemetry") return post("telemetry", { label: $("#telemetry-label").value });
     if (action === "export-telemetry") return post("export-telemetry");
   }

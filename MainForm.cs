@@ -12,13 +12,19 @@ public sealed class MainForm : Form
     private static readonly int[] HotkeyIds = { IdF1, IdF3, IdF4, IdF5, IdF6, IdF7 };
     private const int PeacekeeperDeflectDelayMs = 100;
     private const int MaxDelayMs = 10000;
+    private static readonly (ushort Mask, string Name)[] ControllerButtonBindings =
+    {
+        (0x0001, "DPad Up"), (0x0002, "DPad Down"), (0x0004, "DPad Left"), (0x0008, "DPad Right"),
+        (0x0010, "Start"), (0x0020, "Back"), (0x0040, "LS"), (0x0080, "RS"),
+        (0x0100, "LB"), (0x0200, "RB"), (0x1000, "A"), (0x2000, "B"), (0x4000, "X"), (0x8000, "Y")
+    };
     private int _prevLeftDeflect;
     private int _prevRightDeflect;
     private bool _peacekeeperApplied;
     private const int WmNcLButtonDown = 0xA1;
     private const int HtCaption = 0x2;
 
-    private static readonly string[] EditKeys = { "res1", "res2", "Pause", "Pause1", "Pause2", "Pause3", "ParryDelay", "LegitParryChance", "CrushingFallbackChance", "DeflectFallbackChance", "GuardHold", "Left", "Right" };
+    private static readonly string[] EditKeys = { "res1", "res2", "Pause", "Pause1", "Pause2", "Pause3", "ParryDelay", "LegitParryChance", "CrushingFallbackChance", "DeflectFallbackChance", "GuardHold", "Left", "Right", "AutoDodgeBind" };
 
     private static readonly string[] CheckKeys =
     {
@@ -49,12 +55,21 @@ public sealed class MainForm : Form
     private readonly WebView2 _webView;
     private readonly VisionOverlayForm _visionOverlay;
     private readonly System.Windows.Forms.Timer _statusTimer;
+    private readonly System.Windows.Forms.Timer _controllerTimer;
     private CancellationTokenSource _testCts = new();
     private int _testMode;
     private bool _fKeyDown;
     private bool _webReady;
     private bool _visionOverlayVisible;
     private bool _showAnchorScan = true;
+    private bool _bindingAutoDodge;
+    private ushort _autoDodgeBindBaselineButtons;
+    private bool _autoDodgeBindBaselineLt;
+    private bool _autoDodgeBindBaselineRt;
+    private ushort _previousControllerButtons;
+    private bool _previousControllerLt;
+    private bool _previousControllerRt;
+    private bool _controllerStateInitialized;
 
     public MainForm()
     {
@@ -93,6 +108,9 @@ public sealed class MainForm : Form
             SendStatus();
         };
         _statusTimer.Start();
+        _controllerTimer = new System.Windows.Forms.Timer { Interval = 35 };
+        _controllerTimer.Tick += (_, _) => PollControllerBinding();
+        _controllerTimer.Start();
         Shown += (_, _) => _ = InitializeWebViewAsync();
     }
 
@@ -194,6 +212,9 @@ public sealed class MainForm : Form
                 case "anchor-scan":
                     ToggleAnchorScan();
                     break;
+                case "bind-auto-dodge":
+                    ToggleAutoDodgeBindingCapture();
+                    break;
                 case "telemetry":
                     ToggleTelemetry(root.TryGetProperty("label", out JsonElement label) ? label.GetString() ?? "Other" : "Other");
                     break;
@@ -239,6 +260,8 @@ public sealed class MainForm : Form
             loop = _bot.LoopHz,
             legit = _bot.S.Legit,
             orangeParry = _bot.OrangeParry,
+            autoDodgeBind = string.IsNullOrWhiteSpace(_bot.S.AutoDodgeBind) ? "UNBOUND" : _bot.S.AutoDodgeBind,
+            bindingAutoDodge = _bindingAutoDodge,
             visionOverlay = _visionOverlayVisible,
             anchorScan = _showAnchorScan,
             telemetry = new
@@ -269,7 +292,8 @@ public sealed class MainForm : Form
             ["DeflectFallbackChance"] = s.DeflectFallbackChance,
             ["GuardHold"] = s.GuardHold,
             ["Left"] = s.Left,
-            ["Right"] = s.Right
+            ["Right"] = s.Right,
+            ["AutoDodgeBind"] = s.AutoDodgeBind
         };
         foreach (string key in CheckKeys) values[key] = GetCheck(s, key);
         return values;
@@ -342,6 +366,7 @@ public sealed class MainForm : Form
             s.GuardHold = Math.Clamp(ReadInt(values, "GuardHold", s.GuardHold), 60, MaxDelayMs);
             s.Left = ClampDelay(ReadInt(values, "Left", s.Left));
             s.Right = ClampDelay(ReadInt(values, "Right", s.Right));
+            s.AutoDodgeBind = ReadString(values, "AutoDodgeBind", s.AutoDodgeBind).Trim();
             foreach (string key in CheckKeys)
             {
                 if (values.TryGetProperty(key, out _))
@@ -538,6 +563,7 @@ public sealed class MainForm : Form
             "GuardHold" => s.GuardHold.ToString(),
             "Left" => s.Left.ToString(),
             "Right" => s.Right.ToString(),
+            "AutoDodgeBind" => s.AutoDodgeBind,
             _ => ""
         };
     }
@@ -559,6 +585,7 @@ public sealed class MainForm : Form
             case "GuardHold": s.GuardHold = Math.Clamp(ToInt(value), 60, MaxDelayMs); break;
             case "Left": s.Left = ClampDelay(ToInt(value)); break;
             case "Right": s.Right = ClampDelay(ToInt(value)); break;
+            case "AutoDodgeBind": s.AutoDodgeBind = value.Trim(); break;
         }
     }
 
@@ -626,6 +653,7 @@ public sealed class MainForm : Form
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         _statusTimer.Stop();
+        _controllerTimer.Stop();
         _testCts.Cancel();
         _bot.StopTelemetry();
         _bot.Stop();
@@ -741,6 +769,101 @@ public sealed class MainForm : Form
         SendStatus();
     }
 
+    private void ToggleAutoDodgeBindingCapture()
+    {
+        if (_bindingAutoDodge)
+        {
+            _bindingAutoDodge = false;
+            SendToast("Auto dodge binding cancelled.", "info");
+            SendStatus();
+            return;
+        }
+
+        if (!ViGEmInput.SourceConnected || !ViGEmInput.TryGetSourceState(out Native.XINPUT_GAMEPAD source))
+        {
+            SendToast("Connect the physical source controller before binding auto dodge.", "error");
+            return;
+        }
+
+        _autoDodgeBindBaselineButtons = source.wButtons;
+        _autoDodgeBindBaselineLt = source.bLeftTrigger > 32;
+        _autoDodgeBindBaselineRt = source.bRightTrigger > 32;
+        _bindingAutoDodge = true;
+        SendToast("Press a controller button to bind auto dodge.", "info");
+        SendStatus();
+    }
+
+    private void PollControllerBinding()
+    {
+        if (!ViGEmInput.TryGetSourceState(out Native.XINPUT_GAMEPAD source))
+        {
+            _previousControllerButtons = 0;
+            _previousControllerLt = false;
+            _previousControllerRt = false;
+            _controllerStateInitialized = false;
+            return;
+        }
+
+        if (!_controllerStateInitialized)
+        {
+            _previousControllerButtons = source.wButtons;
+            _previousControllerLt = source.bLeftTrigger > 32;
+            _previousControllerRt = source.bRightTrigger > 32;
+            _controllerStateInitialized = true;
+            return;
+        }
+
+        string pressed = FindNewControllerBinding(
+            source,
+            _bindingAutoDodge ? _autoDodgeBindBaselineButtons : _previousControllerButtons,
+            _bindingAutoDodge ? _autoDodgeBindBaselineLt : _previousControllerLt,
+            _bindingAutoDodge ? _autoDodgeBindBaselineRt : _previousControllerRt);
+
+        if (_bindingAutoDodge)
+        {
+            if (!string.IsNullOrEmpty(pressed))
+            {
+                _bot.UpdateSettings(s => s.AutoDodgeBind = pressed);
+                _bindingAutoDodge = false;
+                SendSettings();
+                SendToast($"Auto dodge bound to {pressed}.", "success");
+                SendStatus();
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(_bot.S.AutoDodgeBind) &&
+                 string.Equals(pressed, _bot.S.AutoDodgeBind, StringComparison.OrdinalIgnoreCase))
+        {
+            bool enabled = false;
+            _bot.UpdateSettings(s =>
+            {
+                s.Unblockables = !s.Unblockables;
+                enabled = s.Unblockables;
+            });
+            SendSettings();
+            SendToast(enabled ? "Auto dodge ON." : "Auto dodge OFF.", enabled ? "success" : "info");
+            SendStatus();
+        }
+
+        _previousControllerButtons = source.wButtons;
+        _previousControllerLt = source.bLeftTrigger > 32;
+        _previousControllerRt = source.bRightTrigger > 32;
+    }
+
+    private static string FindNewControllerBinding(Native.XINPUT_GAMEPAD current, ushort previousButtons, bool previousLt, bool previousRt)
+    {
+        foreach ((ushort mask, string name) in ControllerButtonBindings)
+        {
+            bool held = (current.wButtons & mask) != 0;
+            if (held && (previousButtons & mask) == 0) return name;
+        }
+
+        bool currentLt = current.bLeftTrigger > 32;
+        if (currentLt && !previousLt) return "LT";
+        bool currentRt = current.bRightTrigger > 32;
+        if (currentRt && !previousRt) return "RT";
+        return "";
+    }
+
     private void ToggleTelemetry(string label)
     {
         if (_bot.Telemetry.Recording)
@@ -796,7 +919,7 @@ public sealed class MainForm : Form
         "3) Match the menu resolution to the game render.\n" +
         "4) Use fullscreen or borderless fullscreen, not windowed mode.\n" +
         "5) Hide physical/source controllers with HidHide and leave the ViGEm output visible.\n" +
-        "6) Hold E or F before an attack for parry/counter actions. Orange handling runs automatically when enabled; own controller RT/RB attacks are ignored until their orange clears; F5 toggles orange parry.\n" +
+        "6) Hold E or F before an attack for parry/counter actions. Orange handling runs automatically when enabled; own controller RT/RB attacks are ignored until their orange clears; use the Dodge bind button to assign a controller toggle; F5 toggles orange parry.\n" +
         "7) F7 toggles the diagnostic vision overlay. It is click-through and does not change bot behavior.";
 
     private const string ReadMeText =

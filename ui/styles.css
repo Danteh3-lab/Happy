@@ -224,6 +224,8 @@ h3 { margin-top: 6px; font-size: 0.98rem; letter-spacing: -0.012em; }
 .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
 .btn-secondary { background: rgba(255, 255, 255, 0.028); border-color: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.78); backdrop-filter: blur(20px) saturate(150%); -webkit-backdrop-filter: blur(20px) saturate(150%); box-shadow: var(--glass-highlight); }
 .btn-secondary:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); border-color: var(--border-strong); }
+.bind-button { min-height: 30px; max-width: 150px; padding: 7px 9px; overflow: hidden; font-size: 0.61rem; text-overflow: ellipsis; white-space: nowrap; }
+.bind-button.active { color: var(--accent-hover); border-color: rgba(226, 85, 74, 0.42); background: var(--accent-soft); }
 .btn-toggle.active { color: var(--success); border-color: rgba(61, 207, 142, 0.38); background: rgba(61, 207, 142, 0.1); }
 .btn.full { width: 100%; margin-top: 16px; }
 
