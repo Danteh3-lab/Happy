@@ -1,5 +1,9 @@
 using System.Drawing;
 using HappyBot;
+using HappyBot.Automation;
+using HappyBot.Combat;
+using HappyBot.Infrastructure.Input;
+using HappyBot.Vision;
 
 static class Program
 {
@@ -26,10 +30,17 @@ static class Program
             OrangeRedResponseKeepsCurrentPriority();
             OrangeMarkerLossDoesNotClearResponseLatch();
             OutgoingOrangeGuardSuppressesOwnAttackUntilClear();
+            OutgoingOrangeGuardAutomationLightSuppressesUntilClear();
             FailedLegitDecisionLeavesCandidateAvailableForGuard();
             AutoBlockOffDoesNotArmCandidate();
             FullFrameScreenCoordinatesPreserveRoiDetection();
-            Console.WriteLine("ReactionCoordinator tests passed.");
+            ReactionPolicySelectionCoversEAndFWardenPriority();
+            VisionAnalyzerUsesExplicitBoundsAndPreservesMarkerLoss();
+            AutoGuardFakeInputAppliesReplacesAndReleases();
+            SchedulerImmediateStateIsAuthoritative();
+            ZeroDelayReactionActionsCommit();
+            DeflectSendsLightOnlyAfterSuccessfulDodge();
+            Console.WriteLine("ReactionCoordinator and seam tests passed.");
             return 0;
         }
         catch (Exception ex)
@@ -302,6 +313,28 @@ static class Program
             "the delayed orange should retain RB attribution after release");
     }
 
+    private static void OutgoingOrangeGuardAutomationLightSuppressesUntilClear()
+    {
+        var guard = new OutgoingOrangeGuard();
+        guard.RegisterAutomationLight(100);
+
+        OutgoingOrangeGuardResult laterOrange = guard.Observe(500, true, true, false, false);
+        Require(laterOrange.SuppressesOrange && laterOrange.SelfOrangeStarted && laterOrange.AttributionSource == "RB",
+            "a bot-generated RB light should suppress and attribute a later orange as RB");
+
+        OutgoingOrangeGuardResult markerLoss = guard.Observe(600, false, true, false, false);
+        Require(markerLoss.SuppressesOrange && markerLoss.SelfOrangeLatched,
+            "marker loss must not clear the automation-light orange latch");
+
+        OutgoingOrangeGuardResult clear = guard.Observe(1601, true, false, false, false);
+        Require(clear.SelfOrangeCleared && !clear.SuppressesOrange,
+            "a confirmed clear after the automation window must release suppression");
+
+        OutgoingOrangeGuardResult nextEnemy = guard.Observe(1700, true, true, false, false);
+        Require(!nextEnemy.SuppressesOrange && !nextEnemy.SelfOrangeStarted,
+            "a new orange after confirmed clear and window expiry must be eligible again");
+    }
+
     private static void AutoBlockOffDoesNotArmCandidate()
     {
         var coordinator = new ReactionCoordinator();
@@ -321,6 +354,242 @@ static class Program
         ColorProbe probe = frame.ProbeColor(2, 1, 2, 1, 255, 49, 41, 0);
         Require(found && x == 102 && y == 201, "full-frame ROI search must return screen coordinates");
         Require(probe.MatchCount == 1, "ROI telemetry probe must remain scoped to the combat region");
+    }
+
+    private static void ReactionPolicySelectionCoversEAndFWardenPriority()
+    {
+        Settings eSettings = new() { Autoblock = true, Parry2 = true };
+        ReactionSelection eSelection = ReactionPolicy.ResolveCommand(
+            Observation(10, CombatDirection.Left) with { EHeld = true, FHeld = false, LtHeld = false }, eSettings);
+        Require(eSelection.Kind == ReactionCommandKind.Parry && eSelection.Hold == "E",
+            "E should select the configured E parry action before the F path");
+
+        Settings wardenSettings = new() { Autoblock = true, Parry = true, YourHero = true };
+        wardenSettings.Chars["Warden"] = true;
+        ReactionSelection wardenSelection = ReactionPolicy.ResolveCommand(
+            Observation(20, CombatDirection.Top), wardenSettings);
+        Require(wardenSelection.Kind == ReactionCommandKind.Crushing && wardenSelection.Hold == "F",
+            "Warden top F should retain its crushing priority");
+
+        wardenSettings.Chars["Warden"] = false;
+        ReactionSelection normalSelection = ReactionPolicy.ResolveCommand(
+            Observation(21, CombatDirection.Top), wardenSettings);
+        Require(normalSelection.Kind == ReactionCommandKind.Parry && normalSelection.Hold == "F",
+            "a non-Warden top F should remain a normal parry");
+
+        Settings orangeSettings = new() { Unblockables = true };
+        CombatObservation orange = Observation(30, CombatDirection.Right) with { OrangeIndicator = true };
+        Require(ReactionPolicy.OrangeHasPriority(orange, orangeSettings, false),
+            "an orange indicator must win before reaction selection");
+        Require(ReactionPolicy.OrangeHasPriority(orange with { OrangeIndicator = false }, orangeSettings, true),
+            "an active action must remain a priority gate even without orange");
+    }
+
+    private static void VisionAnalyzerUsesExplicitBoundsAndPreservesMarkerLoss()
+    {
+        var analyzer = new VisionAnalyzer();
+        Rectangle combatRoi = new(120, 220, 80, 80);
+        Rectangle screenBounds = new(100, 200, 70, 70);
+
+        VisionScanRequest request = new(
+            100,
+            true,
+            new Point(110, 210),
+            2,
+            combatRoi,
+            0,
+            240,
+            0,
+            280,
+            150,
+            240,
+            130,
+            240,
+            screenBounds,
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true);
+
+        ScreenFrame rightFrame = SyntheticIndicatorFrame(160, 260);
+        VisionAnalysisResult right = analyzer.Scan(rightFrame, request);
+        Require(right.Observation.CombatRoi == new Rectangle(120, 220, 50, 50),
+            "vision ROI should be clipped to the supplied screen bounds");
+        Require(right.Observation.HasIndicator && right.Observation.Direction == CombatDirection.Right,
+            "a red indicator in the right half-plane should classify as right");
+        Require(right.Observation.Indicator == new Point(160, 260) && right.RedProbe.MatchCount == 1,
+            "vision should preserve screen coordinates and scoped red telemetry");
+
+        VisionAnalysisResult left = analyzer.Scan(SyntheticIndicatorFrame(125, 260), request);
+        Require(left.Observation.Direction == CombatDirection.Left,
+            "a red indicator in the left half-plane should classify as left");
+
+        VisionAnalysisResult top = analyzer.Scan(SyntheticIndicatorFrame(145, 245), request);
+        Require(top.Observation.Direction == CombatDirection.Top,
+            "a red indicator between the vertical thresholds should classify as top");
+
+        VisionAnalysisResult markerLoss = analyzer.Scan(rightFrame, request with { MarkerFound = false });
+        Require(!markerLoss.Observation.HasIndicator && markerLoss.Observation.Direction == CombatDirection.None,
+            "marker loss must suppress indicator and direction output");
+        Require(markerLoss.Observation.CombatRoi == combatRoi,
+            "marker loss should retain the configured combat ROI for diagnostics");
+    }
+
+    private static ScreenFrame SyntheticIndicatorFrame(int screenX, int screenY)
+    {
+        var frame = new ScreenFrame
+        {
+            Width = 100,
+            Height = 100,
+            Stride = 400,
+            OriginX = 100,
+            OriginY = 200,
+            Buffer = new byte[40000]
+        };
+        int localX = screenX - frame.OriginX;
+        int localY = screenY - frame.OriginY;
+        int offset = localY * frame.Stride + localX * 4;
+        frame.Buffer[offset] = 41;
+        frame.Buffer[offset + 1] = 49;
+        frame.Buffer[offset + 2] = 255;
+        return frame;
+    }
+
+    private static void AutoGuardFakeInputAppliesReplacesAndReleases()
+    {
+        var input = new FakeInputGateway();
+        var settings = new Settings { Autoblock = true, GuardHold = 1000 };
+        ReactionCandidate current = new(1, CombatDirection.Left, 1, 1, false);
+        string direction = "";
+        var guard = new AutoGuardController(
+            input,
+            () => settings,
+            () => true,
+            () => current,
+            () => false,
+            () => 0,
+            () => new Rectangle(10, 20, 30, 40),
+            (_, _, _) => { },
+            (_, _) => { },
+            value => direction = value);
+
+        guard.Apply(current);
+        Require(guard.ActiveGuardKey == Input.VK_NUMPAD4 && direction == "LFT",
+            "AutoGuard should apply the left guard and publish its direction");
+        Require(input.Events.Contains("down:" + Input.VK_NUMPAD4),
+            "AutoGuard should press the left guard key");
+
+        current = current with { Id = 2, Direction = CombatDirection.Right };
+        guard.Apply(current);
+        Require(guard.ActiveGuardKey == Input.VK_NUMPAD6 && direction == "RGT",
+            "a replacement candidate should switch the active guard direction");
+        Require(input.Events.Contains("up:" + Input.VK_NUMPAD4) && input.Events.Contains("down:" + Input.VK_NUMPAD6),
+            "replacing a guard must release the old key before pressing the new key");
+
+        guard.Release("test");
+        Require(guard.ActiveGuardKey == 0 && guard.ReleaseTick == 0,
+            "explicit guard release should clear the active state");
+        Require(input.Events.Contains("up:" + Input.VK_NUMPAD6),
+            "explicit guard release must release the active key");
+        guard.Dispose();
+        guard.Dispose();
+    }
+
+    private static void SchedulerImmediateStateIsAuthoritative()
+    {
+        var scheduler = new ActionScheduler(CancellationToken.None);
+        bool sawCurrent = false;
+        bool sawBusy = false;
+        bool scheduled = scheduler.TrySchedule(77, "IMMEDIATE", _ =>
+        {
+            sawCurrent = scheduler.IsCurrent(77);
+            sawBusy = scheduler.IsBusy;
+            return Task.FromResult(false);
+        });
+
+        Require(scheduled && sawCurrent && sawBusy,
+            "scheduler state must be active while an immediate worker is starting");
+        scheduler.Dispose();
+    }
+
+    private static void ZeroDelayReactionActionsCommit()
+    {
+        var parryInput = new FakeInputGateway();
+        parryInput.HeldKeys.Add(Input.VK_F);
+        var parrySettings = new Settings
+        {
+            Autoblock = true,
+            Parry = true,
+            Legit = false,
+            ParryDelay = 0
+        };
+        var parryHost = new FakeAutomationHost(parryInput, parrySettings, 101);
+        var parryScheduler = new ActionScheduler(parryHost.ShutdownToken);
+        var parryExecutor = new ReactionActionExecutor(parryHost, parryScheduler, new FixedRollSource(0));
+        parryExecutor.QueueReaction(new ReactionCommand(101, ReactionCommandKind.Parry, "F", CombatDirection.Left));
+        Require(parryHost.ParryCount == 1 && parryInput.Events.Contains("click:" + Input.VK_RBUTTON),
+            "a zero-delay parry should commit RT input and increment the parry count");
+        parryScheduler.Dispose();
+
+        var crushingInput = new FakeInputGateway();
+        crushingInput.HeldKeys.Add(Input.VK_F);
+        var crushingSettings = new Settings { Autoblock = true, Crushing = true, ParryDelay = 0 };
+        var crushingHost = new FakeAutomationHost(crushingInput, crushingSettings, 102);
+        var crushingScheduler = new ActionScheduler(crushingHost.ShutdownToken);
+        var crushingExecutor = new ReactionActionExecutor(crushingHost, crushingScheduler, new FixedRollSource(0));
+        crushingExecutor.QueueReaction(new ReactionCommand(102, ReactionCommandKind.Crushing, "F", CombatDirection.Right));
+        Require(crushingInput.Events.Contains("click:" + Input.VK_LBUTTON),
+            "a zero-delay crushing action should commit RB input");
+        crushingScheduler.Dispose();
+    }
+
+    private static void DeflectSendsLightOnlyAfterSuccessfulDodge()
+    {
+        var successInput = new FakeInputGateway();
+        successInput.HeldKeys.Add(Input.VK_F);
+        var settings = new Settings { Autoblock = true, Deflect = true, Left = 0, Right = 0 };
+        var successHost = new FakeAutomationHost(successInput, settings, 104);
+        var successScheduler = new ActionScheduler(successHost.ShutdownToken);
+        var successExecutor = new ReactionActionExecutor(successHost, successScheduler, new FixedRollSource(0));
+        successExecutor.QueueReaction(new ReactionCommand(104, ReactionCommandKind.Deflect, "F", CombatDirection.Left));
+
+        int dodgeIndex = successInput.Events.IndexOf("tap:" + Input.VK_SPACE);
+        int lightIndex = successInput.Events.IndexOf("click:" + Input.VK_LBUTTON);
+        Require(dodgeIndex >= 0 && lightIndex > dodgeIndex,
+            "a successful deflect must complete the dodge sequence before sending the RB light");
+        Require(successHost.VisionStates.Contains("DEFLECT + LIGHT SENT"),
+            "a successful deflect-plus-light should publish its combined state");
+        Require(successHost.AutomationLightRegistrations == 1,
+            "a successfully delivered deflect light must register outgoing-orange suppression");
+        successScheduler.Dispose();
+
+        var failedInput = new FakeInputGateway { FailDeflect = true };
+        failedInput.HeldKeys.Add(Input.VK_F);
+        var failedHost = new FakeAutomationHost(failedInput, settings, 105);
+        var failedScheduler = new ActionScheduler(failedHost.ShutdownToken);
+        var failedExecutor = new ReactionActionExecutor(failedHost, failedScheduler, new FixedRollSource(0));
+        failedExecutor.QueueReaction(new ReactionCommand(105, ReactionCommandKind.Deflect, "F", CombatDirection.Left));
+
+        Require(!failedInput.Events.Contains("click:" + Input.VK_LBUTTON),
+            "a failed deflect must not send the RB light");
+        Require(failedHost.AutomationLightRegistrations == 0,
+            "a failed deflect must not register outgoing-orange suppression");
+        Require(failedHost.VisionStates.Contains("DEFLECT FAILED"),
+            "a failed deflect should retain its failure state");
+        failedScheduler.Dispose();
+
+        var undeliveredInput = new FakeInputGateway { FailLight = true };
+        undeliveredInput.HeldKeys.Add(Input.VK_F);
+        var undeliveredHost = new FakeAutomationHost(undeliveredInput, settings, 106);
+        var undeliveredScheduler = new ActionScheduler(undeliveredHost.ShutdownToken);
+        var undeliveredExecutor = new ReactionActionExecutor(undeliveredHost, undeliveredScheduler, new FixedRollSource(0));
+        undeliveredExecutor.QueueReaction(new ReactionCommand(106, ReactionCommandKind.Deflect, "F", CombatDirection.Left));
+        Require(undeliveredHost.AutomationLightRegistrations == 0,
+            "an undelivered RB light must not register outgoing-orange suppression");
+        undeliveredScheduler.Dispose();
     }
 
     private static CombatObservation Observation(long ms, CombatDirection direction, bool hasThreat = true, bool flash = false) =>
@@ -346,5 +615,73 @@ static class Program
     private sealed class FixedOrangeDirectionSource(CombatDirection direction) : IOrangeLightDirectionSource
     {
         public CombatDirection NextDirection() => direction;
+    }
+
+    private sealed class FakeInputGateway : IInputGateway
+    {
+        public List<string> Events { get; } = new();
+        public HashSet<int> HeldKeys { get; } = new();
+        public bool FailDeflect { get; set; }
+        public bool FailLight { get; set; }
+        public bool IsReady => true;
+        public bool UsesControllerBridge => false;
+        public bool CanSendBulwark => true;
+        public InputBridgeSnapshot Diagnostics => new(false, false, 0, 0, 0, 0, 0, 0, 0);
+        public bool IsDown(int virtualKey) => HeldKeys.Contains(virtualKey);
+        public bool HoldButtonHeld() => false;
+        public bool PhysicalHeavyAttackHeld() => false;
+        public bool PhysicalLightAttackHeld() => false;
+        public bool MovingForwardHeld() => false;
+        public bool KeyDown(int virtualKey) { Events.Add("down:" + virtualKey); return true; }
+        public bool KeyUp(int virtualKey) { Events.Add("up:" + virtualKey); return true; }
+        public bool KeyTap(int virtualKey)
+        {
+            Events.Add("tap:" + virtualKey);
+            return !(FailDeflect && virtualKey == Input.VK_SPACE);
+        }
+        public bool MouseClick(int virtualKey)
+        {
+            Events.Add("click:" + virtualKey);
+            return !(FailLight && virtualKey == Input.VK_LBUTTON);
+        }
+        public void Block(bool on) => Events.Add("block:" + on);
+        public bool BeginBulwarkStance() { Events.Add("bulwark-down"); return true; }
+        public void EndBulwarkStance() => Events.Add("bulwark-up");
+        public bool DirectionalLight(int guardKey) { Events.Add("light:" + guardKey); return true; }
+        public void ReleaseAutomationInputs() => Events.Add("release-all");
+    }
+
+    private sealed class FakeAutomationHost : IAutomationHost
+    {
+        private readonly long _candidateId;
+
+        public FakeAutomationHost(FakeInputGateway input, Settings settings, long candidateId)
+        {
+            Input = input;
+            Settings = settings;
+            _candidateId = candidateId;
+        }
+
+        public Settings Settings { get; }
+        public CancellationToken ShutdownToken => CancellationToken.None;
+        public IInputGateway Input { get; }
+        public bool IsReactionActive => true;
+        public bool MarkerFound => true;
+        public bool OrangeParryEnabled => false;
+        public OutgoingOrangeGuardResult OutgoingOrangeState { get; } =
+            new(false, false, "", false, false, 0, false, false, false);
+        public bool IsEHeld() => Input.IsDown(HappyBot.Input.VK_E);
+        public bool IsFHeld() => Input.IsDown(HappyBot.Input.VK_F) || Input.HoldButtonHeld();
+        public bool IsCurrentCandidate(long candidateId) => candidateId == _candidateId;
+        public bool IsYourChar(string name) => ReactionPolicy.IsYourChar(Settings, name);
+        public bool HasHeroAction => ReactionPolicy.HasHeroAction(Settings);
+        public int ParryCount { get; private set; }
+        public int AutomationLightRegistrations { get; private set; }
+        public List<string> VisionStates { get; } = new();
+        public void SetVisionReaction(string state, string reason, string direction = "", int displayMs = 1100) => VisionStates.Add(state);
+        public void RecordTelemetry(string name, object data, bool failure = false) { }
+        public void IncrementParryCount() => ParryCount++;
+        public void RegisterAutomationLight() => AutomationLightRegistrations++;
+        public void RestoreAutoGuardAfterDirectionalLight() { }
     }
 }

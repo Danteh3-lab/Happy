@@ -1,6 +1,6 @@
 using System.Drawing;
 
-namespace HappyBot;
+namespace HappyBot.Combat;
 
 internal enum CombatDirection
 {
@@ -123,6 +123,7 @@ internal sealed class OutgoingOrangeGuard
     // not a user-facing timing setting.
     public const int SuppressionWindowMs = 1500;
 
+    private readonly object _sync = new();
     private long _suppressionUntilMs;
     private bool _selfOrangeLatched;
     private bool _windowSourceHeavySeen;
@@ -133,55 +134,68 @@ internal sealed class OutgoingOrangeGuard
     private static string SourceName(bool sourceHeavy, bool sourceLight) =>
         sourceHeavy && sourceLight ? "RT+RB" : sourceHeavy ? "RT" : sourceLight ? "RB" : "";
 
+    /// <summary>Registers a bot-generated RB light in the same outgoing window as a physical light.</summary>
+    public void RegisterAutomationLight(long now)
+    {
+        lock (_sync)
+        {
+            _windowSourceLightSeen = true;
+            _suppressionUntilMs = Math.Max(_suppressionUntilMs, now + SuppressionWindowMs);
+        }
+    }
+
     public OutgoingOrangeGuardResult Observe(long now, bool markerFound, bool orangeIndicator, bool sourceHeavyHeld, bool sourceLightHeld = false)
     {
-        if (sourceHeavyHeld)
-            _windowSourceHeavySeen = true;
-        if (sourceLightHeld)
-            _windowSourceLightSeen = true;
-        if (sourceHeavyHeld || sourceLightHeld)
-            _suppressionUntilMs = Math.Max(_suppressionUntilMs, now + SuppressionWindowMs);
-        else if (!_selfOrangeLatched && now >= _suppressionUntilMs)
+        lock (_sync)
         {
-            _windowSourceHeavySeen = false;
-            _windowSourceLightSeen = false;
+            if (sourceHeavyHeld)
+                _windowSourceHeavySeen = true;
+            if (sourceLightHeld)
+                _windowSourceLightSeen = true;
+            if (sourceHeavyHeld || sourceLightHeld)
+                _suppressionUntilMs = Math.Max(_suppressionUntilMs, now + SuppressionWindowMs);
+            else if (!_selfOrangeLatched && now >= _suppressionUntilMs)
+            {
+                _windowSourceHeavySeen = false;
+                _windowSourceLightSeen = false;
+            }
+
+            bool selfOrangeCleared = false;
+            string clearedSource = "";
+            if (_selfOrangeLatched && OrangeResponseLatch.IsConfirmedClear(markerFound, orangeIndicator))
+            {
+                clearedSource = SourceName(_selfOrangeSourceHeavy, _selfOrangeSourceLight);
+                _selfOrangeLatched = false;
+                _selfOrangeSourceHeavy = false;
+                _selfOrangeSourceLight = false;
+                selfOrangeCleared = true;
+            }
+
+            bool windowActive = now < _suppressionUntilMs;
+            bool selfOrangeStarted = false;
+            if (!_selfOrangeLatched && windowActive && markerFound && orangeIndicator)
+            {
+                _selfOrangeLatched = true;
+                _selfOrangeSourceHeavy = _windowSourceHeavySeen;
+                _selfOrangeSourceLight = _windowSourceLightSeen;
+                selfOrangeStarted = true;
+            }
+
+            string attributionSource = _selfOrangeLatched
+                ? SourceName(_selfOrangeSourceHeavy, _selfOrangeSourceLight)
+                : clearedSource;
+
+            return new OutgoingOrangeGuardResult(
+                sourceHeavyHeld,
+                sourceLightHeld,
+                attributionSource,
+                windowActive,
+                _selfOrangeLatched,
+                _suppressionUntilMs,
+                windowActive || _selfOrangeLatched,
+                selfOrangeStarted,
+                selfOrangeCleared);
         }
-
-        bool selfOrangeCleared = false;
-        string clearedSource = "";
-        if (_selfOrangeLatched && OrangeResponseLatch.IsConfirmedClear(markerFound, orangeIndicator))
-        {
-            clearedSource = SourceName(_selfOrangeSourceHeavy, _selfOrangeSourceLight);
-            _selfOrangeLatched = false;
-            _selfOrangeSourceHeavy = false;
-            _selfOrangeSourceLight = false;
-            selfOrangeCleared = true;
-        }
-
-        bool windowActive = now < _suppressionUntilMs;
-        bool selfOrangeStarted = false;
-        if (!_selfOrangeLatched && windowActive && markerFound && orangeIndicator)
-        {
-            _selfOrangeLatched = true;
-            _selfOrangeSourceHeavy = _windowSourceHeavySeen;
-            _selfOrangeSourceLight = _windowSourceLightSeen;
-            selfOrangeStarted = true;
-        }
-
-        string attributionSource = _selfOrangeLatched
-            ? SourceName(_selfOrangeSourceHeavy, _selfOrangeSourceLight)
-            : clearedSource;
-
-        return new OutgoingOrangeGuardResult(
-            sourceHeavyHeld,
-            sourceLightHeld,
-            attributionSource,
-            windowActive,
-            _selfOrangeLatched,
-            _suppressionUntilMs,
-            windowActive || _selfOrangeLatched,
-            selfOrangeStarted,
-            selfOrangeCleared);
     }
 }
 
@@ -412,3 +426,4 @@ internal sealed class ReactionCoordinator
     private ReactionCandidate NewCandidate(CombatDirection direction, long now) =>
         new(Interlocked.Increment(ref _nextId), direction, now, now, false);
 }
+

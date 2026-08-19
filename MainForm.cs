@@ -658,8 +658,8 @@ public sealed class MainForm : Form
         _statusTimer.Stop();
         _controllerTimer.Stop();
         _testCts.Cancel();
-        _bot.StopTelemetry();
-        _bot.Stop();
+        _testCts.Dispose();
+        _bot.Dispose();
         _hook.Dispose();
         _visionOverlay.Dispose();
         _webView.Dispose();
