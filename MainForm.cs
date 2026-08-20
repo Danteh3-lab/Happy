@@ -622,17 +622,7 @@ public sealed class MainForm : Form
 
     private void ApplyResolution(int width, int height)
     {
-        _bot.B55 = width / 1920.0;
-        _bot.Y55 = height / 1080.0;
-        _bot.X8 = (width / 1920.0) * 860;
-        _bot.Y8 = (height / 1080.0) * 80;
-        _bot.X9 = (width / 1920.0) * 1075;
-        _bot.Y9 = (height / 1080.0) * 425;
-        _bot.X18 = (width / 1920.0) * 670;
-        _bot.Y18 = (height / 1080.0) * 300;
-        _bot.X19 = (width / 1920.0) * 820;
-        _bot.Y19 = (height / 1080.0) * 510;
-        _bot.RefreshVisionSnapshot();
+        _bot.ConfigureResolution(width, height);
     }
 
     protected override void OnHandleCreated(EventArgs e)

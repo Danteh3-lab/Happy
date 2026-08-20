@@ -6,18 +6,7 @@ namespace HappyBot.Vision;
 /// <summary>Inputs required for one combat-region scan.</summary>
 internal sealed record VisionScanRequest(
     long TimestampMs,
-    bool MarkerFound,
-    Point Anchor,
-    int Box,
-    Rectangle CombatRoi,
-    double TopLeftX,
-    double TopLeftY,
-    double TopRightX,
-    double TopRightY,
-    double RightX,
-    double RightY,
-    double LeftX,
-    double LeftY,
+    VisionTrackingSnapshot Tracking,
     Rectangle ScreenBounds,
     bool EHeld,
     bool FHeld,
@@ -39,15 +28,20 @@ internal sealed class VisionAnalyzer
 {
     public VisionAnalysisResult Scan(ScreenFrame frame, VisionScanRequest request)
     {
-        if (!request.MarkerFound)
+        // Freshness belongs to the observation timestamp, not to the time the
+        // tracking object was last published. This keeps the exact 150ms
+        // boundary correct even when analysis starts after a brief delay.
+        VisionTrackingSnapshot tracking = (request.Tracking ?? VisionTrackingSnapshot.Empty).At(request.TimestampMs);
+        if (!tracking.TrackingUsable)
         {
-            return Empty(frame, request, new Point(-1, -1), Rectangle.Empty);
+            return Empty(request, new Point(-1, -1), Rectangle.Empty);
         }
 
-        Rectangle roi = Rectangle.Intersect(request.CombatRoi, request.ScreenBounds);
+        VisionGeometry geometry = tracking.Geometry;
+        Rectangle roi = Rectangle.Intersect(geometry.CombatRoiRectangle, request.ScreenBounds);
         if (roi.Width <= 0 || roi.Height <= 0)
         {
-            return Empty(frame, request, new Point(-1, -1), roi);
+            return Empty(request, new Point(-1, -1), roi);
         }
 
         bool red = frame.ScreenPixelSearch(roi.Left, roi.Top, roi.Right - 1, roi.Bottom - 1,
@@ -63,7 +57,7 @@ internal sealed class VisionAnalyzer
 
         Point indicator = red ? new Point(indicatorX, indicatorY) : new Point(-1, -1);
         CombatDirection direction = red
-            ? ClassifyDirection(indicator.X, indicator.Y, request)
+            ? ClassifyDirection(indicator.X, indicator.Y, geometry)
             : CombatDirection.None;
         ColorProbe probe = request.IncludeTelemetryProbe
             ? frame.ProbeColor(roi.Left - frame.OriginX, roi.Top - frame.OriginY,
@@ -72,28 +66,29 @@ internal sealed class VisionAnalyzer
             : new ColorProbe(0, -1, -1, "n/a", -1);
 
         return new VisionAnalysisResult(
-            new CombatObservation(request.TimestampMs, true, request.Anchor, request.Box, roi, red,
+            new CombatObservation(request.TimestampMs, tracking.RawMarkerFound, tracking.Anchor, tracking.Box, roi, red,
                 indicator, direction, darkRed, lightFlash, orange, orangeFeint,
                 request.EHeld, request.FHeld, request.LtHeld, request.InputReady,
-                request.SourceHeavyHeld, request.SourceLightHeld), probe);
+                request.SourceHeavyHeld, request.SourceLightHeld, tracking), probe);
     }
 
-    private static VisionAnalysisResult Empty(ScreenFrame frame, VisionScanRequest request,
+    private static VisionAnalysisResult Empty(VisionScanRequest request,
         Point indicator, Rectangle roi)
     {
+        VisionTrackingSnapshot tracking = (request.Tracking ?? VisionTrackingSnapshot.Empty).At(request.TimestampMs);
         return new VisionAnalysisResult(
-            new CombatObservation(request.TimestampMs, request.MarkerFound, request.Anchor, request.Box,
-                request.MarkerFound ? roi : request.CombatRoi, false, indicator, CombatDirection.None,
+            new CombatObservation(request.TimestampMs, tracking.RawMarkerFound, tracking.Anchor, tracking.Box,
+                tracking.TrackingUsable ? roi : tracking.Geometry.CombatRoiRectangle, false, indicator, CombatDirection.None,
                 false, false, false, false, request.EHeld, request.FHeld, request.LtHeld,
-                request.InputReady, request.SourceHeavyHeld, request.SourceLightHeld),
+                request.InputReady, request.SourceHeavyHeld, request.SourceLightHeld, tracking),
             new ColorProbe(0, -1, -1, "n/a", -1));
     }
 
-    private static CombatDirection ClassifyDirection(int x, int y, VisionScanRequest request)
+    private static CombatDirection ClassifyDirection(int x, int y, VisionGeometry geometry)
     {
-        if (x > request.RightX && y > request.RightY) return CombatDirection.Right;
-        if (x < request.LeftX && y > request.RightY) return CombatDirection.Left;
-        if (y > request.TopLeftY && y < request.TopRightY) return CombatDirection.Top;
+        if (x > geometry.X4 && y > geometry.Y4) return CombatDirection.Right;
+        if (x < geometry.X7 && y > geometry.Y4) return CombatDirection.Left;
+        if (y > geometry.Y2 && y < geometry.Y3) return CombatDirection.Top;
         return CombatDirection.None;
     }
 }

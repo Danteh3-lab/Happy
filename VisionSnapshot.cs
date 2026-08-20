@@ -10,6 +10,9 @@ public sealed class VisionSnapshot
 {
     public bool Running { get; init; }
     public bool MarkerFound { get; init; }
+    public bool RawMarkerFound { get; init; }
+    public bool TrackingUsable { get; init; }
+    public bool TrackingStale { get; init; }
     public string MarkerKind { get; init; } = "NONE";
     public Point Anchor { get; init; } = new(-1, -1);
     public RectangleF AnchorScan { get; init; }
@@ -27,6 +30,11 @@ public sealed class VisionSnapshot
     public int LoopHz { get; init; }
     public int Box { get; init; }
     public long AnchorAgeMs { get; init; }
+    public long MarkerAgeMs { get; init; } = -1;
+    public long LastMarkerSeenMs { get; init; } = -1;
+    public long TrackingVersion { get; init; }
+    public int AnchorDeltaX { get; init; }
+    public int AnchorDeltaY { get; init; }
     public long GuardRemainingMs { get; init; }
     public long ReactionWaitMs { get; init; }
     public long CandidateId { get; init; }
