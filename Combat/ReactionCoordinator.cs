@@ -1,5 +1,4 @@
 using System.Drawing;
-using HappyBot.Vision;
 
 namespace HappyBot.Combat;
 
@@ -286,16 +285,7 @@ internal sealed record CombatObservation(
     bool LtHeld,
     bool InputReady,
     bool SourceHeavyHeld = false,
-    bool SourceLightHeld = false,
-    VisionTrackingSnapshot Tracking = null)
-{
-    public bool RawMarkerFrame => Tracking?.RawMarkerFound ?? MarkerFound;
-    public bool UsableTracking => Tracking?.TrackingUsable ?? MarkerFound;
-    public bool StaleTracking => Tracking?.TrackingStale ?? false;
-    public long MarkerAgeMs => Tracking?.MarkerAgeMs ?? (MarkerFound ? 0 : -1);
-    public long LastMarkerSeenMs => Tracking?.LastSeenMs ?? (MarkerFound ? TimestampMs : -1);
-    public long TrackingVersion => Tracking?.Version ?? 0;
-}
+    bool SourceLightHeld = false);
 
 internal sealed record ReactionCandidate(
     long Id,
@@ -316,9 +306,7 @@ internal sealed record CoordinatorTick(
     ReactionCommand Command,
     string Transition,
     string CancellationReason,
-    bool IgnoredStaleFlash,
-    bool StaleDirectionMismatch = false,
-    bool StaleCandidateSuppressed = false);
+    bool IgnoredStaleFlash);
 
 /// <summary>
 /// Owns only the directional threat lifecycle. Input and image capture remain
@@ -355,27 +343,15 @@ internal sealed class ReactionCoordinator
         lock (_sync)
         {
             long now = observation.TimestampMs != 0 ? observation.TimestampMs : _clock.GetUtcNow().ToUnixTimeMilliseconds();
-            bool freshThreat = observation.RawMarkerFrame && observation.UsableTracking &&
-                observation.HasIndicator && observation.Direction != CombatDirection.None;
-            bool staleThreat = observation.StaleTracking && observation.UsableTracking &&
-                observation.HasIndicator && observation.Direction != CombatDirection.None;
+            bool validThreat = observation.MarkerFound && observation.HasIndicator && observation.Direction != CombatDirection.None;
             string transition = "";
             string cancellation = "";
             bool staleFlash = false;
-            bool staleDirectionMismatch = false;
-            bool staleCandidateSuppressed = false;
 
-            // Legacy seam callers do not carry a tracking snapshot; preserve
-            // their explicit "no indicator" clear signal. Live observations
-            // must prove the clear with a fresh marker so stale ROI data cannot
-            // re-arm a timed-out candidate.
-            bool freshIndicatorClear = observation.Tracking is null
-                ? !observation.HasIndicator
-                : observation.RawMarkerFrame && observation.UsableTracking && !observation.HasIndicator;
-            if (_mustClearBeforeRearm && freshIndicatorClear)
+            if (!validThreat && _mustClearBeforeRearm)
                 _mustClearBeforeRearm = false;
 
-            if (freshThreat && !_mustClearBeforeRearm)
+            if (validThreat && !_mustClearBeforeRearm)
             {
                 if (_candidate == null)
                 {
@@ -392,11 +368,6 @@ internal sealed class ReactionCoordinator
                     _candidate = _candidate with { LastValidMs = now };
                 }
             }
-            else if (staleThreat && _candidate != null && _candidate.Direction != observation.Direction)
-            {
-                staleDirectionMismatch = true;
-                staleCandidateSuppressed = true;
-            }
 
             if (_candidate != null)
             {
@@ -408,7 +379,7 @@ internal sealed class ReactionCoordinator
                     _candidate = null;
                     _mustClearBeforeRearm = true;
                 }
-                else if (!freshThreat && missingAge > MissingGraceMs)
+                else if (!validThreat && missingAge > MissingGraceMs)
                 {
                     cancellation = "indicator-stale";
                     _candidate = null;
@@ -418,26 +389,18 @@ internal sealed class ReactionCoordinator
             ReactionCommand command = null;
             if (_candidate != null && !_candidate.Consumed && observation.LightFlash && !observation.DarkRedGate)
             {
-                bool flashTrackingAllowed = observation.UsableTracking &&
-                    (!observation.StaleTracking || observation.Direction == _candidate.Direction);
-                if (!flashTrackingAllowed)
-                {
-                    staleFlash = true;
-                    staleDirectionMismatch = observation.StaleTracking && observation.Direction != _candidate.Direction;
-                    staleCandidateSuppressed = observation.StaleTracking;
-                }
-                else if (requestedKind == ReactionCommandKind.None)
+                if (requestedKind == ReactionCommandKind.None)
                 {
                     // A flash is a one-shot timing opportunity. If no action can
                     // run now (for example while another worker is busy), consume
                     // it so it cannot fire late after a cooldown.
-                    _candidate = _candidate with { Consumed = true };
+                    _candidate = _candidate with { Consumed = true, LastValidMs = now };
                     transition = string.IsNullOrEmpty(transition) ? "flash-ignored" : transition + "+flash-ignored";
                 }
                 else
                 {
                     command = new ReactionCommand(_candidate.Id, requestedKind, hold, _candidate.Direction);
-                    _candidate = _candidate with { Consumed = true };
+                    _candidate = _candidate with { Consumed = true, LastValidMs = now };
                     transition = string.IsNullOrEmpty(transition) ? "flash-accepted" : transition + "+flash-accepted";
                 }
             }
@@ -446,8 +409,7 @@ internal sealed class ReactionCoordinator
                 staleFlash = true;
             }
 
-            return new CoordinatorTick(_candidate, command, transition, cancellation, staleFlash,
-                staleDirectionMismatch, staleCandidateSuppressed);
+            return new CoordinatorTick(_candidate, command, transition, cancellation, staleFlash);
         }
     }
 
@@ -464,3 +426,4 @@ internal sealed class ReactionCoordinator
     private ReactionCandidate NewCandidate(CombatDirection direction, long now) =>
         new(Interlocked.Increment(ref _nextId), direction, now, now, false);
 }
+

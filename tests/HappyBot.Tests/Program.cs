@@ -35,23 +35,11 @@ static class Program
             AutoBlockOffDoesNotArmCandidate();
             FullFrameScreenCoordinatesPreserveRoiDetection();
             ReactionPolicySelectionCoversEAndFWardenPriority();
-            NuxiaDeflectIsSideOnly();
             VisionAnalyzerUsesExplicitBoundsAndPreservesMarkerLoss();
             AutoGuardFakeInputAppliesReplacesAndReleases();
             SchedulerImmediateStateIsAuthoritative();
             ZeroDelayReactionActionsCommit();
             DeflectSendsLightOnlyAfterSuccessfulDodge();
-            VisionGeometryPreservesAnchorFormulas();
-            TrackingSnapshotFreshnessUsesExactBoundaries();
-            StaleTrackingCannotArmOrReplaceCandidate();
-            StaleTrackingPreservesCandidateWithoutRefreshingGrace();
-            StaleFlashAndOrangeSignalsAreRejectedByTrackingState();
-            OrangeControllerRejectsStaleTracking();
-            DelayedOrangeActionsRevalidateTrackingBeforeInput();
-            ConcurrentResolutionPublicationIsAtomic();
-            ResolutionOnlyVisionPublicationClearsFrameState();
-            StaleFlashesDoNotExtendCandidateGrace();
-            CandidateHardTimeoutKeepsExactBoundary();
             Console.WriteLine("ReactionCoordinator and seam tests passed.");
             return 0;
         }
@@ -397,76 +385,26 @@ static class Program
             "an active action must remain a priority gate even without orange");
     }
 
-    private static void NuxiaDeflectIsSideOnly()
-    {
-        Settings nuxia = new() { YourHero = true, Deflect = true };
-        nuxia.Chars["Nuxia"] = true;
-        Require(!ReactionPolicy.IsDeflectDirectionEligible(nuxia, CombatDirection.Top),
-            "Nuxia top deflects must be suppressed");
-        Require(ReactionPolicy.IsDeflectDirectionEligible(nuxia, CombatDirection.Left) &&
-                ReactionPolicy.IsDeflectDirectionEligible(nuxia, CombatDirection.Right),
-            "Nuxia side deflects must remain eligible");
-        Require(ReactionPolicy.IsNuxiaTopDeflectSuppressed(nuxia, CombatDirection.Top),
-            "Nuxia top suppression must be identified for direct deflect paths");
-
-        nuxia.YourHero = false;
-        Require(ReactionPolicy.IsDeflectDirectionEligible(nuxia, CombatDirection.Top),
-            "generic mode must retain top deflect behavior when Your Hero is off");
-        nuxia.YourHero = true;
-        nuxia.Nohero = true;
-        Require(ReactionPolicy.IsDeflectDirectionEligible(nuxia, CombatDirection.Top),
-            "No Hero mode must retain generic top deflect behavior");
-        nuxia.Nohero = false;
-        nuxia.Chars["Nuxia"] = false;
-        nuxia.Chars["Warden"] = true;
-        Require(ReactionPolicy.IsDeflectDirectionEligible(nuxia, CombatDirection.Top),
-            "another selected hero must retain generic top deflect behavior");
-
-        var input = new FakeInputGateway();
-        input.HeldKeys.Add(Input.VK_F);
-        nuxia.Chars["Nuxia"] = true;
-        nuxia.Chars["Warden"] = false;
-        var host = new FakeAutomationHost(input, nuxia, 107);
-        var scheduler = new ActionScheduler(host.ShutdownToken);
-        var executor = new ReactionActionExecutor(host, scheduler, new FixedRollSource(0));
-        executor.QueueReaction(new ReactionCommand(107, ReactionCommandKind.Deflect, "F", CombatDirection.Top));
-        Require(!input.Events.Contains("tap:" + Input.VK_SPACE) &&
-                !host.VisionStates.Contains("DEFLECT + LIGHT SENT") &&
-                host.VisionStates.Contains("BLOCK ONLY · NUXIA TOP"),
-            "a pending Nuxia top deflect must be suppressed before input");
-        scheduler.Dispose();
-
-        Settings legit = new() { Autoblock = true, Parry = true, Deflect = true, Legit = true, LegitParryChance = 0 };
-        legit.YourHero = true;
-        legit.Chars["Nuxia"] = true;
-        ParryResolution resolution = ParryResolution.Create(
-            new ReactionCommand(108, ReactionCommandKind.Parry, "F", CombatDirection.Top),
-            true, 0, new FixedRollSource(99), false, false, false, 50,
-            new FixedRollSource(0), ReactionPolicy.IsDeflectDirectionEligible(legit, CombatDirection.Top), 50,
-            new FixedRollSource(0));
-        Require(resolution.Outcome == ParryOutcome.Block && resolution.DeflectRoll is null,
-            "failed Nuxia top Legit parries must skip the Deflect roll and guard");
-    }
-
     private static void VisionAnalyzerUsesExplicitBoundsAndPreservesMarkerLoss()
     {
         var analyzer = new VisionAnalyzer();
         Rectangle combatRoi = new(120, 220, 80, 80);
         Rectangle screenBounds = new(100, 200, 70, 70);
-        VisionGeometry testGeometry = VisionGeometry.CreateResolution(1920, 1080) with
-        {
-            X2 = 0, Y2 = 240, X3 = 0, Y3 = 280,
-            X4 = 150, Y4 = 240, X7 = 130, Y7 = 240,
-            X16 = combatRoi.Left, Y16 = combatRoi.Top,
-            X17 = combatRoi.Right, Y17 = combatRoi.Bottom
-        };
-        VisionTrackingSnapshot tracking = VisionTrackingSnapshot.Create(
-            1, 100, true, "GREEN", new Point(110, 210), 2,
-            testGeometry, 100, 0, 0);
 
         VisionScanRequest request = new(
             100,
-            tracking,
+            true,
+            new Point(110, 210),
+            2,
+            combatRoi,
+            0,
+            240,
+            0,
+            280,
+            150,
+            240,
+            130,
+            240,
             screenBounds,
             false,
             true,
@@ -493,55 +431,11 @@ static class Program
         Require(top.Observation.Direction == CombatDirection.Top,
             "a red indicator between the vertical thresholds should classify as top");
 
-        VisionTrackingSnapshot lostTracking = VisionTrackingSnapshot.Create(
-            2, 100, false, "NONE", tracking.Anchor, tracking.Box, testGeometry,
-            -1, 0, 0, tracking.LastMarkerKind);
-        VisionAnalysisResult markerLoss = analyzer.Scan(rightFrame, request with { Tracking = lostTracking });
+        VisionAnalysisResult markerLoss = analyzer.Scan(rightFrame, request with { MarkerFound = false });
         Require(!markerLoss.Observation.HasIndicator && markerLoss.Observation.Direction == CombatDirection.None,
             "marker loss must suppress indicator and direction output");
         Require(markerLoss.Observation.CombatRoi == combatRoi,
             "marker loss should retain the configured combat ROI for diagnostics");
-
-        VisionTrackingSnapshot stale150 = VisionTrackingSnapshot.Create(
-            3, 250, false, tracking.MarkerKind, tracking.Anchor, tracking.Box, testGeometry,
-            100, 0, 0, tracking.LastMarkerKind);
-        VisionAnalysisResult staleResult = analyzer.Scan(rightFrame, request with
-        {
-            TimestampMs = 250,
-            Tracking = stale150
-        });
-        Require(staleResult.Observation.Tracking.TrackingStale &&
-            staleResult.Observation.Tracking.MarkerAgeMs == 150 &&
-            staleResult.Observation.HasIndicator &&
-            staleResult.Observation.Box == tracking.Box &&
-            staleResult.Observation.Anchor == tracking.Anchor &&
-            staleResult.Observation.CombatRoi == new Rectangle(120, 220, 50, 50) &&
-            staleResult.Observation.Tracking.MarkerKind == tracking.MarkerKind &&
-            staleResult.Observation.Tracking.LastMarkerKind == tracking.LastMarkerKind,
-            "a 150ms stale scan must retain the coherent Box, anchor, ROI, and marker kind");
-
-        VisionTrackingSnapshot stale151 = VisionTrackingSnapshot.Create(
-            4, 251, false, tracking.MarkerKind, tracking.Anchor, tracking.Box, testGeometry,
-            100, 0, 0, tracking.LastMarkerKind);
-        VisionAnalysisResult expiredResult = analyzer.Scan(rightFrame, request with
-        {
-            TimestampMs = 251,
-            Tracking = stale151
-        });
-        Require(!expiredResult.Observation.Tracking.TrackingUsable &&
-            !expiredResult.Observation.HasIndicator &&
-            expiredResult.Observation.Direction == CombatDirection.None,
-            "a 151ms stale scan must suppress indicator classification");
-
-        VisionGeometry recoveredGeometry = VisionGeometry.CreateResolution(1920, 1080)
-            .WithAnchor(new Point(130, 220), 1, "YELLOW");
-        VisionTrackingSnapshot recovered = VisionTrackingSnapshot.Create(
-            5, 300, true, "YELLOW", new Point(130, 220), 1, recoveredGeometry,
-            300, 0, 0, "YELLOW");
-        Require(recovered.RawMarkerFound && recovered.Box == 1 &&
-            recovered.Anchor == new Point(130, 220) && recovered.LastMarkerKind == "YELLOW" &&
-            recovered.Geometry != stale150.Geometry,
-            "fresh recovery must be able to atomically publish a new Box and geometry");
     }
 
     private static ScreenFrame SyntheticIndicatorFrame(int screenX, int screenY)
@@ -562,323 +456,6 @@ static class Program
         frame.Buffer[offset + 1] = 49;
         frame.Buffer[offset + 2] = 255;
         return frame;
-    }
-
-    private static void VisionGeometryPreservesAnchorFormulas()
-    {
-        VisionGeometry geometry = VisionGeometry.CreateResolution(1920, 1080)
-            .WithAnchor(new Point(900, 400), 2, "GREEN");
-        Require(geometry.AnchorScan == RectangleF.FromLTRB(860, 80, 1075, 425),
-            "anchor scan must preserve the existing 1920x1080 coordinates");
-        Require(geometry.CombatRoi == RectangleF.FromLTRB(700, 420, 1060, 830),
-            "green Box 2 ROI must preserve the existing anchor-relative formula");
-        Require(geometry.RightZone.Left == 905 && geometry.LeftZone.Right == 870,
-            "directional boundaries must preserve the existing Box 2 formulas");
-
-        VisionGeometry yellow = VisionGeometry.CreateResolution(960, 540)
-            .WithAnchor(new Point(450, 200), 1, "YELLOW");
-        Require(yellow.B55 == 0.5 && yellow.Y55 == 0.5,
-            "resolution scalers must remain proportional to the configured resolution");
-        Require(yellow.CombatRoi == RectangleF.FromLTRB(406.25f, 217.5f, 496.25f, 307.5f),
-            "yellow Box 1 ROI must preserve the existing scaled formula");
-    }
-
-    private static void TrackingSnapshotFreshnessUsesExactBoundaries()
-    {
-        VisionGeometry geometry = VisionGeometry.CreateResolution(1920, 1080)
-            .WithAnchor(new Point(900, 400), 2, "GREEN");
-        VisionTrackingSnapshot snapshot = VisionTrackingSnapshot.Create(
-            7, 1000, false, "GREEN", new Point(900, 400), 2, geometry,
-            850, 0, 0);
-        Require(snapshot.MarkerAgeMs == 150 && snapshot.TrackingUsable && snapshot.TrackingStale,
-            "a marker exactly 150ms old must remain usable but stale");
-        VisionTrackingSnapshot oneMsLater = snapshot.At(1001);
-        Require(oneMsLater.MarkerAgeMs == 151 && !oneMsLater.TrackingUsable && !oneMsLater.TrackingStale,
-            "a marker at 150ms plus one must become unusable");
-
-        VisionTrackingSnapshot fresh = VisionTrackingSnapshot.Create(
-            8, 1000, true, "GREEN", new Point(900, 400), 2, geometry,
-            1000, 0, 0);
-        Require(fresh.MarkerAgeMs == 0 && fresh.TrackingUsable && !fresh.TrackingStale,
-            "a raw marker from the current frame must be fresh and usable");
-    }
-
-    private static void StaleTrackingCannotArmOrReplaceCandidate()
-    {
-        var coordinator = new ReactionCoordinator();
-        CoordinatorTick stale = coordinator.Tick(TrackedObservation(50, CombatDirection.Left, false, 1),
-            ReactionCommandKind.None, "");
-        Require(stale.Candidate is null && stale.StaleCandidateSuppressed == false,
-            "stale tracking must not arm a new candidate");
-
-        CoordinatorTick fresh = coordinator.Tick(TrackedObservation(100, CombatDirection.Left, true, 100),
-            ReactionCommandKind.None, "");
-        CoordinatorTick staleReplacement = coordinator.Tick(TrackedObservation(150, CombatDirection.Right, false, 100),
-            ReactionCommandKind.None, "");
-        Require(fresh.Candidate is not null && staleReplacement.Candidate?.Id == fresh.Candidate.Id &&
-            staleReplacement.Candidate.Direction == CombatDirection.Left &&
-            staleReplacement.StaleDirectionMismatch && staleReplacement.StaleCandidateSuppressed,
-            "stale tracking must not replace an active candidate or change its direction");
-    }
-
-    private static void StaleTrackingPreservesCandidateWithoutRefreshingGrace()
-    {
-        var coordinator = new ReactionCoordinator();
-        CoordinatorTick armed = coordinator.Tick(TrackedObservation(1, CombatDirection.Left, true, 1),
-            ReactionCommandKind.None, "");
-        CoordinatorTick sameDirectionFlash = coordinator.Tick(
-            TrackedObservation(50, CombatDirection.Left, false, 1, flash: true),
-            ReactionCommandKind.Parry, "F");
-        Require(sameDirectionFlash.Command is { Kind: ReactionCommandKind.Parry },
-            "stale tracking may support an already-armed candidate when its direction is unchanged");
-
-        coordinator = new ReactionCoordinator();
-        armed = coordinator.Tick(TrackedObservation(1, CombatDirection.Left, true, 1),
-            ReactionCommandKind.None, "");
-        CoordinatorTick atGraceBoundary = coordinator.Tick(TrackedObservation(251, CombatDirection.Left, false, 101),
-            ReactionCommandKind.None, "");
-        Require(atGraceBoundary.Candidate?.Id == armed.Candidate?.Id,
-            "stale tracking at exactly 250ms since last valid indicator must preserve the candidate");
-
-        CoordinatorTick afterGrace = coordinator.Tick(TrackedObservation(252, CombatDirection.Left, false, 102),
-            ReactionCommandKind.None, "");
-        Require(afterGrace.Candidate is null && afterGrace.CancellationReason == "indicator-stale",
-            "stale tracking at 250ms plus one must expire the candidate");
-
-        CoordinatorTick recovered = coordinator.Tick(TrackedObservation(300, CombatDirection.Right, true, 300),
-            ReactionCommandKind.None, "");
-        Require(recovered.Candidate is not null && recovered.Candidate.Direction == CombatDirection.Right,
-            "a fresh marker recovery must be able to arm a new direction");
-    }
-
-    private static void StaleFlashAndOrangeSignalsAreRejectedByTrackingState()
-    {
-        var coordinator = new ReactionCoordinator();
-        coordinator.Tick(TrackedObservation(1, CombatDirection.Left, true, 1), ReactionCommandKind.None, "");
-        CoordinatorTick staleFlash = coordinator.Tick(
-            TrackedObservation(50, CombatDirection.Right, false, 1, flash: true),
-            ReactionCommandKind.Parry, "F");
-        Require(staleFlash.Command is null && staleFlash.IgnoredStaleFlash && staleFlash.StaleDirectionMismatch,
-            "a stale flash from a different direction must not trigger a reaction");
-
-        CombatObservation staleOrange = TrackedObservation(60, CombatDirection.Left, false, 1)
-            with { OrangeIndicator = true, OrangeFeint = true };
-        Require(!staleOrange.RawMarkerFrame && staleOrange.StaleTracking,
-            "the orange safety seam must identify the frame as stale before response filtering");
-    }
-
-    private static CombatObservation TrackedObservation(
-        long timestamp,
-        CombatDirection direction,
-        bool rawMarkerFound,
-        long lastSeenMs,
-        bool hasThreat = true,
-        bool flash = false)
-    {
-        Point anchor = new(900, 400);
-        VisionGeometry geometry = VisionGeometry.CreateResolution(1920, 1080)
-            .WithAnchor(anchor, 2, "GREEN");
-        VisionTrackingSnapshot tracking = VisionTrackingSnapshot.Create(
-            timestamp,
-            timestamp,
-            rawMarkerFound,
-            rawMarkerFound ? "GREEN" : "NONE",
-            anchor,
-            2,
-            geometry,
-            lastSeenMs,
-            0,
-            0,
-            "GREEN");
-        return new CombatObservation(timestamp, rawMarkerFound, anchor, 2,
-            geometry.CombatRoiRectangle, hasThreat, new Point(950, 550), direction,
-            false, flash, false, false, false, true, true, true,
-            Tracking: tracking);
-    }
-
-    private static void ConcurrentResolutionPublicationIsAtomic()
-    {
-        using var bot = new BotCore();
-        using var start = new ManualResetEventSlim(false);
-        int reads = 0;
-        Task writer = Task.Run(() =>
-        {
-            start.Wait();
-            for (int i = 0; i < 500; i++)
-            {
-                int width = i % 2 == 0 ? 1920 : 1280;
-                int height = i % 2 == 0 ? 1080 : 720;
-                bot.ConfigureResolution(width, height);
-            }
-        });
-        Task reader = Task.Run(() =>
-        {
-            start.Wait();
-            for (int i = 0; i < 5000; i++)
-            {
-                VisionTrackingSnapshot snapshot = bot.GetTrackingSnapshot();
-                VisionGeometry geometry = snapshot.Geometry;
-                double expectedB55 = geometry.ScreenWidth / 1920.0;
-                double expectedY55 = geometry.ScreenHeight / 1080.0;
-                RectangleF expectedCombat = RectangleF.FromLTRB(
-                    (float)Math.Min(geometry.X16, geometry.X17),
-                    (float)Math.Min(geometry.Y16, geometry.Y17),
-                    (float)Math.Max(geometry.X16, geometry.X17),
-                    (float)Math.Max(geometry.Y16, geometry.Y17));
-                Require(Math.Abs(geometry.B55 - expectedB55) < 0.000001 &&
-                    Math.Abs(geometry.Y55 - expectedY55) < 0.000001 &&
-                    geometry.AnchorScan == RectangleF.FromLTRB((float)(860 * expectedB55), (float)(80 * expectedY55),
-                        (float)(1075 * expectedB55), (float)(425 * expectedY55)) &&
-                    geometry.BoxScan == RectangleF.FromLTRB((float)(670 * expectedB55), (float)(300 * expectedY55),
-                        (float)(820 * expectedB55), (float)(510 * expectedY55)) &&
-                    geometry.CombatRoi == expectedCombat &&
-                    geometry.TopZone == RectangleF.FromLTRB(expectedCombat.Left,
-                        Math.Max(expectedCombat.Top, (float)Math.Min(geometry.Y2, geometry.Y3)),
-                        expectedCombat.Right,
-                        Math.Min(expectedCombat.Bottom, (float)Math.Max(geometry.Y2, geometry.Y3))) &&
-                    geometry.LeftZone == RectangleF.FromLTRB(expectedCombat.Left,
-                        Math.Max(expectedCombat.Top, (float)geometry.Y4),
-                        Math.Min(expectedCombat.Right, (float)geometry.X7),
-                        expectedCombat.Bottom) &&
-                    geometry.RightZone == RectangleF.FromLTRB(
-                        Math.Max(expectedCombat.Left, (float)geometry.X4),
-                        Math.Max(expectedCombat.Top, (float)geometry.Y4),
-                        expectedCombat.Right,
-                        expectedCombat.Bottom),
-                    "concurrent resolution publication must never expose mixed scaler geometry");
-                Interlocked.Increment(ref reads);
-            }
-        });
-        start.Set();
-        Task.WaitAll(writer, reader);
-        Require(reads == 5000, "the concurrent tracking reader must complete all atomic snapshot checks");
-    }
-
-    private static void ResolutionOnlyVisionPublicationClearsFrameState()
-    {
-        using var bot = new BotCore();
-        bot.ConfigureResolution(1920, 1080);
-        VisionTrackingSnapshot tracking = bot.GetTrackingSnapshot();
-        VisionSnapshot vision = bot.GetVisionSnapshot();
-        Require(vision.TrackingVersion == tracking.Version &&
-            vision.CombatRoi == tracking.Geometry.CombatRoi &&
-            !vision.AttackIndicator && vision.Indicator == new Point(-1, -1) && !vision.Flash,
-            "resolution-only publication must use one rebased tracking version and clear frame-local detection state");
-    }
-
-    private static void OrangeControllerRejectsStaleTracking()
-    {
-        var input = new FakeInputGateway();
-        var settings = new Settings { Unblockables = true };
-        var host = new FakeAutomationHost(input, settings, 200);
-        var scheduler = new ActionScheduler(host.ShutdownToken);
-        var controller = new OrangeResponseController(host, scheduler, new FixedOrangeDirectionSource(CombatDirection.Left));
-        CombatObservation staleOrange = TrackedObservation(60, CombatDirection.Left, false, 1)
-            with { OrangeIndicator = true };
-
-        controller.ProcessObservation(staleOrange, false);
-        Require(input.Events.Count == 0 && host.VisionStates.Count == 0,
-            "stale tracking must not queue an orange dodge, light, or parry");
-        scheduler.Dispose();
-    }
-
-    private static void DelayedOrangeActionsRevalidateTrackingBeforeInput()
-    {
-        VerifyDelayedOrangeCancellation(new Settings { Unblockables = true, OrangeLight = true },
-            host => { }, "light:");
-        VerifyDelayedOrangeCancellation(new Settings { Unblockables = true },
-            host => { }, "tap:" + Input.VK_SPACE);
-
-        VerifyDelayedOrangeCancellation(new Settings { Unblockables = true },
-            host => host.OrangeParryEnabled = true, "click:" + Input.VK_RBUTTON, useFeint: true);
-
-        VerifyDelayedOrangeCancellation(new Settings { Unblockables = true, YourHero = true },
-            host =>
-            {
-                host.Settings.Chars["Blackprior"] = true;
-                host.InputGateway.MovingForward = true;
-            }, "bulwark-down");
-    }
-
-    private static void VerifyDelayedOrangeCancellation(
-        Settings settings,
-        Action<FakeAutomationHost> configure,
-        string forbiddenEvent,
-        bool useFeint = false)
-    {
-        settings.Pause = 200;
-        settings.Pause1 = 200;
-        var input = new FakeInputGateway();
-        var host = new FakeAutomationHost(input, settings, 300);
-        configure(host);
-        var scheduler = new ActionScheduler(host.ShutdownToken);
-        var controller = new OrangeResponseController(host, scheduler, new FixedOrangeDirectionSource(CombatDirection.Left));
-        long started = Environment.TickCount64;
-        CombatObservation fresh = TrackedObservation(started, CombatDirection.Left, true, started)
-            with { OrangeIndicator = true, OrangeFeint = useFeint };
-        host.TrackingSnapshot = fresh.Tracking;
-        controller.ProcessObservation(fresh, false);
-        if (useFeint)
-        {
-            long second = Environment.TickCount64;
-            CombatObservation followup = TrackedObservation(second, CombatDirection.Left, true, second)
-                with { OrangeIndicator = true };
-            host.TrackingSnapshot = followup.Tracking;
-            controller.ProcessObservation(followup, false);
-        }
-
-        // Simulate the cached marker becoming too old while the response delay
-        // is still running. The host recalculates freshness at commit time.
-        host.TrackingSnapshot = host.TrackingSnapshot with
-        {
-            RawMarkerFound = true,
-            LastSeenMs = Environment.TickCount64 - VisionTrackingSnapshot.TrackingUsableWindowMs - 1
-        };
-        Thread.Sleep(350);
-        Require(!input.Events.Contains(forbiddenEvent),
-            "orange input must be cancelled when tracking becomes stale during its delay");
-        scheduler.Dispose();
-    }
-
-    private static void StaleFlashesDoNotExtendCandidateGrace()
-    {
-        var accepted = new ReactionCoordinator();
-        accepted.Tick(TrackedObservation(1, CombatDirection.Left, true, 1), ReactionCommandKind.None, "");
-        CoordinatorTick acceptedFlash = accepted.Tick(
-            TrackedObservation(50, CombatDirection.Left, false, 1, flash: true),
-            ReactionCommandKind.Parry, "F");
-        Require(acceptedFlash.Command is not null, "stale same-direction flash should still accept the armed reaction");
-        CoordinatorTick acceptedAtBoundary = accepted.Tick(
-            TrackedObservation(251, CombatDirection.Left, false, 101), ReactionCommandKind.None, "");
-        Require(acceptedAtBoundary.Candidate is not null,
-            "an accepted stale flash must not expire the candidate at exactly 250ms");
-        CoordinatorTick acceptedAfterBoundary = accepted.Tick(
-            TrackedObservation(252, CombatDirection.Left, false, 102), ReactionCommandKind.None, "");
-        Require(acceptedAfterBoundary.Candidate is null && acceptedAfterBoundary.CancellationReason == "indicator-stale",
-            "an accepted stale flash must not extend the candidate beyond 250ms");
-
-        var ignored = new ReactionCoordinator();
-        ignored.Tick(TrackedObservation(1, CombatDirection.Right, true, 1), ReactionCommandKind.None, "");
-        CoordinatorTick ignoredFlash = ignored.Tick(
-            TrackedObservation(50, CombatDirection.Right, false, 1, flash: true),
-            ReactionCommandKind.None, "");
-        Require(ignoredFlash.Candidate is { Consumed: true }, "an ignored stale flash should consume only the action opportunity");
-        CoordinatorTick ignoredAfterBoundary = ignored.Tick(
-            TrackedObservation(252, CombatDirection.Right, false, 102), ReactionCommandKind.None, "");
-        Require(ignoredAfterBoundary.Candidate is null && ignoredAfterBoundary.CancellationReason == "indicator-stale",
-            "an ignored stale flash must not extend candidate validity");
-    }
-
-    private static void CandidateHardTimeoutKeepsExactBoundary()
-    {
-        var coordinator = new ReactionCoordinator();
-        coordinator.Tick(Observation(1, CombatDirection.Top), ReactionCommandKind.None, "");
-        CoordinatorTick atBoundary = coordinator.Tick(Observation(3001, CombatDirection.Top), ReactionCommandKind.None, "");
-        Require(atBoundary.Candidate is not null && string.IsNullOrEmpty(atBoundary.CancellationReason),
-            "a candidate at exactly 3000ms total age must remain active");
-        CoordinatorTick afterBoundary = coordinator.Tick(Observation(3002, CombatDirection.Top), ReactionCommandKind.None, "");
-        Require(afterBoundary.Candidate is null && afterBoundary.CancellationReason == "candidate-timeout",
-            "a candidate at 3001ms total age must hard-cancel");
     }
 
     private static void AutoGuardFakeInputAppliesReplacesAndReleases()
@@ -1046,7 +623,6 @@ static class Program
         public HashSet<int> HeldKeys { get; } = new();
         public bool FailDeflect { get; set; }
         public bool FailLight { get; set; }
-        public bool MovingForward { get; set; }
         public bool IsReady => true;
         public bool UsesControllerBridge => false;
         public bool CanSendBulwark => true;
@@ -1055,7 +631,7 @@ static class Program
         public bool HoldButtonHeld() => false;
         public bool PhysicalHeavyAttackHeld() => false;
         public bool PhysicalLightAttackHeld() => false;
-        public bool MovingForwardHeld() => MovingForward;
+        public bool MovingForwardHeld() => false;
         public bool KeyDown(int virtualKey) { Events.Add("down:" + virtualKey); return true; }
         public bool KeyUp(int virtualKey) { Events.Add("up:" + virtualKey); return true; }
         public bool KeyTap(int virtualKey)
@@ -1089,15 +665,9 @@ static class Program
         public Settings Settings { get; }
         public CancellationToken ShutdownToken => CancellationToken.None;
         public IInputGateway Input { get; }
-        public FakeInputGateway InputGateway => (FakeInputGateway)Input;
         public bool IsReactionActive => true;
-        public VisionTrackingSnapshot TrackingSnapshot { get; set; } = VisionTrackingSnapshot.Create(
-            1, 0, true, "GREEN", new Point(900, 400), 2,
-            VisionGeometry.CreateResolution(1920, 1080).WithAnchor(new Point(900, 400), 2, "GREEN"),
-            0, 0, 0, "GREEN");
-        public VisionTrackingSnapshot GetTrackingSnapshot(long observationTimestamp) =>
-            TrackingSnapshot.At(observationTimestamp);
-        public bool OrangeParryEnabled { get; set; }
+        public bool MarkerFound => true;
+        public bool OrangeParryEnabled => false;
         public OutgoingOrangeGuardResult OutgoingOrangeState { get; } =
             new(false, false, "", false, false, 0, false, false, false);
         public bool IsEHeld() => Input.IsDown(HappyBot.Input.VK_E);

@@ -1,6 +1,5 @@
 using HappyBot.Combat;
 using HappyBot.Infrastructure.Input;
-using HappyBot.Vision;
 
 namespace HappyBot.Automation;
 
@@ -11,7 +10,7 @@ internal interface IAutomationHost
     CancellationToken ShutdownToken { get; }
     IInputGateway Input { get; }
     bool IsReactionActive { get; }
-    VisionTrackingSnapshot GetTrackingSnapshot(long observationTimestamp);
+    bool MarkerFound { get; }
     bool OrangeParryEnabled { get; }
     OutgoingOrangeGuardResult OutgoingOrangeState { get; }
     bool IsEHeld();
@@ -55,9 +54,7 @@ internal sealed class ReactionActionExecutor
             bool bulwarkEligible = settings.Autoblock && settings.Parry && settings.Legit &&
                 _host.IsYourChar("Blackprior") && _host.Input.CanSendBulwark;
             bool crushingEligible = settings.Autoblock && settings.Parry && settings.Crushing && settings.Legit;
-            bool deflectDirectionEligible = ReactionPolicy.IsDeflectDirectionEligible(settings, command.Direction);
-            bool deflectEligible = settings.Autoblock && settings.Parry && settings.Deflect && settings.Legit &&
-                deflectDirectionEligible;
+            bool deflectEligible = settings.Autoblock && settings.Parry && settings.Deflect && settings.Legit;
             ParryResolution resolution = ParryResolution.Create(command, settings.Legit,
                 settings.LegitParryChance, _parryRolls, settings.BulwarkFallback,
                 bulwarkEligible, crushingEligible, settings.CrushingFallbackChance,
@@ -83,20 +80,6 @@ internal sealed class ReactionActionExecutor
                 fallbackRoll = resolution.FallbackRoll,
                 deflectRoll = resolution.DeflectRoll
             });
-
-            if (!decision.ShouldParry && settings.Deflect && !deflectDirectionEligible)
-            {
-                _host.RecordTelemetry("deflect-direction-suppressed", new
-                {
-                    candidateId = decision.CandidateId,
-                    hero = "Nuxia",
-                    direction = decision.Direction.ToString(),
-                    path = "legit-fallback",
-                    reason = "nuxia-top-deflect-disabled",
-                    finalOutcome = resolution.Outcome.ToString().ToUpperInvariant(),
-                    deflectRoll = resolution.DeflectRoll
-                });
-            }
 
             if (resolution.Outcome == ParryOutcome.Deflect)
             {
@@ -177,20 +160,7 @@ internal sealed class ReactionActionExecutor
             int delay = command.Direction == CombatDirection.Left ? _host.Settings.Left
                 : command.Direction == CombatDirection.Right ? _host.Settings.Right : 0;
             await Task.Delay(Math.Max(0, delay), token);
-            if (!CanCommitAction(command, token))
-            {
-                if (!ReactionPolicy.IsDeflectDirectionEligible(_host.Settings, command.Direction))
-                    ReportDeflectDirectionSuppressed(command, "nuxia-top-deflect-disabled");
-                return false;
-            }
-            // Re-read eligibility immediately before the first deflect input.
-            // A hero/mode change during the configured delay must not send a
-            // top deflect that is no longer allowed for Nuxia.
-            if (!ReactionPolicy.IsDeflectDirectionEligible(_host.Settings, command.Direction))
-            {
-                ReportDeflectDirectionSuppressed(command, "nuxia-top-deflect-disabled");
-                return false;
-            }
+            if (!CanCommitAction(command, token)) return false;
             _scheduler.SetCommitted(true);
             if (SendDeflect(command.Direction))
             {
@@ -228,27 +198,11 @@ internal sealed class ReactionActionExecutor
             ReactionCommandKind.Crushing => command.Hold == "E"
                 ? settings.Crushing2
                 : settings.Crushing || (settings.Parry && command.Direction == CombatDirection.Top && _host.IsYourChar("Warden")),
-            ReactionCommandKind.Deflect => settings.Deflect &&
-                ReactionPolicy.IsDeflectDirectionEligible(settings, command.Direction),
+            ReactionCommandKind.Deflect => settings.Deflect,
             ReactionCommandKind.Bulwark => settings.BulwarkFallback && settings.Legit && settings.Parry && _host.IsYourChar("Blackprior"),
             ReactionCommandKind.Hero => _host.HasHeroAction,
             _ => false
         };
-    }
-
-    private void ReportDeflectDirectionSuppressed(ReactionCommand command, string reason)
-    {
-        _host.RecordTelemetry("deflect-direction-suppressed", new
-        {
-            candidateId = command.CandidateId,
-            hero = "Nuxia",
-            direction = command.Direction.ToString(),
-            path = "delayed-deflect",
-            reason,
-            finalOutcome = "BLOCK"
-        });
-        _host.SetVisionReaction("BLOCK ONLY · NUXIA TOP",
-            "Auto deflect suppressed; auto guard retained", DirectionName(command.Direction), 1100);
     }
 
     private bool SendDeflect(CombatDirection direction)

@@ -118,21 +118,17 @@ public sealed class VisionOverlayForm : Form
         DrawFeatureList(e.Graphics, features);
         if (_showAnchorScan) DrawAnchorScan(e.Graphics, s);
 
-        // Keep the last atomic geometry visible during the short tracking
-        // grace period, but never present stale coordinates as a live anchor.
-        if (!s.TrackingUsable) return;
+        if (!s.MarkerFound) return;
 
         DrawRegion(e.Graphics, ToClient(s.CombatRoi), Cyan, "COMBAT ROI", 1.5f);
         DrawRegion(e.Graphics, ToClient(s.TopZone), ZoneColor(s, "TOP"), "TOP", 1.5f);
         DrawRegion(e.Graphics, ToClient(s.LeftZone), ZoneColor(s, "LEFT"), "LEFT", 1.5f);
         DrawRegion(e.Graphics, ToClient(s.RightZone), ZoneColor(s, "RIGHT"), "RIGHT", 1.5f);
 
-        Color anchorColor = !s.RawMarkerFound ? CyanDim : s.MarkerKind == "YELLOW" ? Yellow : Green;
-        if (s.RawMarkerFound)
-            DrawTarget(e.Graphics, ToClient(s.Anchor), anchorColor, "ANCHOR " + s.MarkerKind);
+        Color anchorColor = s.MarkerKind == "YELLOW" ? Yellow : Green;
+        DrawTarget(e.Graphics, ToClient(s.Anchor), anchorColor, "ANCHOR " + s.MarkerKind);
         if (s.AttackIndicator && s.Indicator.X >= 0)
-            DrawTarget(e.Graphics, ToClient(s.Indicator), s.RawMarkerFound ? Red : CyanDim,
-                s.RawMarkerFound ? "INDICATOR" : "INDICATOR STALE");
+            DrawTarget(e.Graphics, ToClient(s.Indicator), Red, "INDICATOR");
 
         string direction = string.IsNullOrEmpty(s.DecisionDirection) ? DirectionLabel(s.GuardDirection) : s.DecisionDirection;
         Color decisionColor = StateColor(s.ReactionState);
@@ -182,18 +178,14 @@ public sealed class VisionOverlayForm : Form
         string mode = s.Running ? "LIVE" : "IDLE";
         string line = $"DANBOT // VISION    {mode}    {s.LoopHz} FPS";
         DrawChip(g, new Point(16, 16), line, s.Running ? Green : Cyan);
-        string tracking = s.RawMarkerFound && s.TrackingUsable
-            ? "FRESH"
-            : s.TrackingStale ? $"STALE {s.MarkerAgeMs}ms" : s.RawMarkerFound ? $"EXPIRED {s.MarkerAgeMs}ms" : "MISSING";
-        string diagnostics = $"BOX {s.Box}   MARKER {tracking} V{s.TrackingVersion}   ANCHOR {s.AnchorAgeMs}ms   GUARD {s.GuardRemainingMs}ms   CAND {s.CandidateId}/{s.CandidateAgeMs}ms   {s.ActionWorkerState}   {s.LegitParryStatus}   TELEMETRY {(s.TelemetryRecording ? "ON" : "OFF")}";
+        string diagnostics = $"BOX {s.Box}   ANCHOR {s.AnchorAgeMs}ms   GUARD {s.GuardRemainingMs}ms   CAND {s.CandidateId}/{s.CandidateAgeMs}ms   {s.ActionWorkerState}   {s.LegitParryStatus}   TELEMETRY {(s.TelemetryRecording ? "ON" : "OFF")}";
         DrawChip(g, new Point(16, 43), diagnostics, s.TelemetryRecording ? Green : CyanDim);
     }
 
     private void DrawAnchorScan(Graphics g, VisionSnapshot s)
     {
         RectangleF region = ToClient(s.AnchorScan);
-        Color color = s.RawMarkerFound ? Cyan : s.TrackingStale ? Yellow : CyanDim;
-        DrawRegion(g, region, color, s.TrackingStale ? "ANCHOR SCAN STALE" : "ANCHOR SCAN", 1f);
+        DrawRegion(g, region, s.MarkerFound ? Cyan : CyanDim, "ANCHOR SCAN", 1f);
     }
 
     private static void DrawFeatureList(Graphics g, OverlayFeatureSnapshot features)

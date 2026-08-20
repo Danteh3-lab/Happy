@@ -32,8 +32,7 @@ internal sealed class OrangeResponseController
     {
         Settings settings = _host.Settings;
         if (!settings.Unblockables) return;
-        bool freshTracking = observation.RawMarkerFrame && observation.UsableTracking;
-        if (OrangeResponseLatch.IsConfirmedClear(freshTracking, observation.OrangeIndicator))
+        if (OrangeResponseLatch.IsConfirmedClear(observation.MarkerFound, observation.OrangeIndicator))
         {
             _orangeMustClear = false;
             Interlocked.Exchange(ref _orangeFeintLastSeen, 0);
@@ -41,7 +40,7 @@ internal sealed class OrangeResponseController
         }
         if (suppressOrange && observation.OrangeIndicator) return;
         // Marker loss is unknown, not a clear frame; preserve the one-response latch.
-        if (!freshTracking) return;
+        if (!observation.MarkerFound) return;
 
         long now = observation.TimestampMs;
         Interlocked.Exchange(ref _orangeLastSeen, now);
@@ -99,7 +98,6 @@ internal sealed class OrangeResponseController
             await Task.Delay(Math.Max(0, settings.ParryDelay), token);
             if (!_host.OrangeParryEnabled || !CanCommitOrangeAction(token)) return false;
             _scheduler.SetCommitted(true);
-            if (!CanCommitOrangeAction(token)) return false;
             if (_host.Input.MouseClick(Input.VK_RBUTTON))
             {
                 _host.IncrementParryCount();
@@ -110,37 +108,30 @@ internal sealed class OrangeResponseController
         }
         if (response == OrangeResponseKind.Light)
         {
-            return SendOrangeLight(token);
+            _scheduler.SetCommitted(true);
+            SendOrangeLight();
+            return true;
         }
 
         if (!CanCommitOrangeAction(token)) return false;
-        OrangeDodgeResult dodgeResult = await SendOrangeDodgeSequenceAsync(token);
-        if (dodgeResult == OrangeDodgeResult.Cancelled) return false;
-        if (dodgeResult == OrangeDodgeResult.DodgeSent)
+        _scheduler.SetCommitted(true);
+        bool handledByBulwark = await SendOrangeDodgeSequenceAsync(token);
+        if (!handledByBulwark)
             _host.SetVisionReaction("ORANGE DODGE SENT",
                 redOrFeint ? "Orange parry is disabled" : "Orange indicator detected", "", 1300);
         return true;
     }
 
-    private bool CanCommitOrangeAction(CancellationToken token)
-    {
-        long now = Environment.TickCount64;
-        var tracking = _host.GetTrackingSnapshot(now);
-        return !token.IsCancellationRequested && _host.IsReactionActive &&
-            tracking.RawMarkerFound && tracking.TrackingUsable &&
-            _host.Settings.Unblockables && _orangeMustClear &&
-            !_host.OutgoingOrangeState.SuppressesOrange && _scheduler.IsCurrent(0) &&
-            now - Interlocked.Read(ref _orangeLastSeen) <= ReactionCoordinator.MissingGraceMs;
-    }
+    private bool CanCommitOrangeAction(CancellationToken token) =>
+        !token.IsCancellationRequested && _host.IsReactionActive && _host.MarkerFound &&
+        _host.Settings.Unblockables && _orangeMustClear &&
+        !_host.OutgoingOrangeState.SuppressesOrange && _scheduler.IsCurrent(0) &&
+        Environment.TickCount64 - Interlocked.Read(ref _orangeLastSeen) <= ReactionCoordinator.MissingGraceMs;
 
-    private bool SendOrangeLight(CancellationToken token)
+    private void SendOrangeLight()
     {
-        if (!CanCommitOrangeLight(token)) return false;
         OrangeLightDecision decision = OrangeLightDecision.Create(_orangeLightDirections);
         _scheduler.SetState("ORANGE LIGHT");
-        if (!CanCommitOrangeLight(token)) return false;
-        _scheduler.SetCommitted(true);
-        if (!CanCommitOrangeLight(token)) return false;
         bool delivered = _host.Input.DirectionalLight(GuardKey(decision.Direction));
         _host.RestoreAutoGuardAfterDirectionalLight();
         string direction = DirectionName(decision.Direction);
@@ -153,74 +144,48 @@ internal sealed class OrangeResponseController
             delivered,
             bridge = _host.Input.Diagnostics
         }, !delivered);
-        return true;
     }
 
-    private bool CanCommitOrangeLight(CancellationToken token) =>
-        _host.Settings.OrangeLight && CanCommitOrangeAction(token);
-
-    private enum OrangeDodgeResult
-    {
-        Cancelled,
-        DodgeSent,
-        BulwarkSent
-    }
-
-    private bool SendConfiguredDodge(CancellationToken token)
+    private string SendConfiguredDodge()
     {
         Settings settings = _host.Settings;
         if (!settings.Leftdodge && !settings.Rightdodge)
         {
-            if (!CanCommitOrangeAction(token)) return false;
-            _scheduler.SetCommitted(true);
-            if (!CanCommitOrangeAction(token)) return false;
             _host.Input.KeyTap(Input.VK_SPACE);
-            return true;
+            return "neutral";
         }
         int direction = settings.Leftdodge ? Input.VK_LEFT : Input.VK_RIGHT;
         IInputGateway input = _host.Input;
         input.Block(true);
         try
         {
-            if (!CanCommitOrangeAction(token)) return false;
-            _scheduler.SetCommitted(true);
-            if (!CanCommitOrangeAction(token)) return false;
             input.KeyDown(direction);
-            try
-            {
-                if (!CanCommitOrangeAction(token)) return false;
-                input.KeyTap(Input.VK_SPACE);
-                return true;
-            }
+            try { input.KeyTap(Input.VK_SPACE); }
             finally { input.KeyUp(direction); }
         }
         finally { input.Block(false); }
+        return settings.Leftdodge ? "left" : "right";
     }
 
-    private async Task<OrangeDodgeResult> SendOrangeDodgeSequenceAsync(CancellationToken token)
+    private async Task<bool> SendOrangeDodgeSequenceAsync(CancellationToken token)
     {
         Settings settings = _host.Settings;
         IInputGateway input = _host.Input;
         if (settings.Ch("Blackprior") && input.MovingForwardHeld())
         {
-            if (!CanCommitOrangeAction(token)) return OrangeDodgeResult.Cancelled;
             _scheduler.SetState("BULWARK STANCE");
             _host.SetVisionReaction("BULWARK READY", "Orange response: RS down -> 50ms -> RB", "", 900);
             _host.RecordTelemetry("bulwark-ready", new { candidateId = 0, path = "orange", bridge = input.Diagnostics });
-            if (!CanCommitOrangeAction(token)) return OrangeDodgeResult.Cancelled;
-            _scheduler.SetCommitted(true);
-            if (!CanCommitOrangeAction(token)) return OrangeDodgeResult.Cancelled;
             if (!input.BeginBulwarkStance())
             {
                 _host.SetVisionReaction("BULWARK FAILED", "Controller input was not delivered", "", 1300);
                 _host.RecordTelemetry("bulwark-failed", new { candidateId = 0, path = "orange", reason = "stance-input", bridge = input.Diagnostics });
-                return OrangeDodgeResult.BulwarkSent;
+                return true;
             }
             try
             {
                 await Task.Delay(50, token);
-                if (!_host.IsReactionActive || !CanCommitOrangeAction(token)) return OrangeDodgeResult.Cancelled;
-                if (!CanCommitOrangeAction(token)) return OrangeDodgeResult.Cancelled;
+                if (!_host.IsReactionActive) return true;
                 if (input.MouseClick(Input.VK_LBUTTON))
                 {
                     _host.SetVisionReaction("BULWARK SENT", "Orange response: RS down + RB", "", 1300);
@@ -233,84 +198,53 @@ internal sealed class OrangeResponseController
                 }
             }
             finally { input.EndBulwarkStance(); }
-            return OrangeDodgeResult.BulwarkSent;
+            return true;
         }
 
         if (input.IsDown(Input.VK_W))
         {
-            if (!CanCommitOrangeAction(token)) return OrangeDodgeResult.Cancelled;
             input.Block(true);
             try
             {
-                _scheduler.SetCommitted(true);
-                if (!CanCommitOrangeAction(token)) return OrangeDodgeResult.Cancelled;
                 input.KeyDown(Input.VK_DOWN);
-                try
-                {
-                    if (!CanCommitOrangeAction(token)) return OrangeDodgeResult.Cancelled;
-                    input.KeyTap(Input.VK_SPACE);
-                }
-                finally { input.KeyUp(Input.VK_DOWN); }
+                input.KeyTap(Input.VK_SPACE);
+                input.KeyUp(Input.VK_DOWN);
             }
             finally { input.Block(false); }
-            return OrangeDodgeResult.DodgeSent;
+            return false;
         }
 
-        if (!SendConfiguredDodge(token)) return OrangeDodgeResult.Cancelled;
+        SendConfiguredDodge();
         if (settings.DodgeL)
         {
             await Task.Delay(Math.Max(0, settings.Pause2), token);
-            if (!CanCommitOrangeAction(token)) return OrangeDodgeResult.Cancelled;
             input.MouseClick(Input.VK_LBUTTON);
         }
         if (settings.DodgeH)
         {
             await Task.Delay(Math.Max(0, settings.Pause2), token);
-            if (!CanCommitOrangeAction(token)) return OrangeDodgeResult.Cancelled;
             input.MouseClick(Input.VK_RBUTTON);
         }
         if (settings.Lightbash)
         {
             await Task.Delay(Math.Max(0, settings.Pause2), token);
-            if (!CanCommitOrangeAction(token)) return OrangeDodgeResult.Cancelled;
             input.KeyTap(Input.VK_NUMPAD5);
         }
 
-        if (settings.Nohero) return OrangeDodgeResult.DodgeSent;
-        if (settings.Ch("Nobushi"))
-        {
-            if (!CanCommitOrangeAction(token)) return OrangeDodgeResult.Cancelled;
-            input.KeyTap(Input.VK_C);
-        }
-        if (settings.Ch("Shaman"))
-        {
-            if (!CanCommitOrangeAction(token)) return OrangeDodgeResult.Cancelled;
-            input.KeyTap(Input.VK_SPACE);
-            if (!CanCommitOrangeAction(token)) return OrangeDodgeResult.Cancelled;
-            input.KeyTap(Input.VK_NUMPAD5);
-        }
-        if (settings.Ch("Orochi"))
-        {
-            if (!CanCommitOrangeAction(token)) return OrangeDodgeResult.Cancelled;
-            input.KeyTap(Input.VK_SPACE);
-            if (!CanCommitOrangeAction(token)) return OrangeDodgeResult.Cancelled;
-            input.KeyTap(Input.VK_NUMPAD9);
-        }
-        if (!settings.Ch("Jiangjun")) return OrangeDodgeResult.DodgeSent;
-        if (!CanCommitOrangeAction(token)) return OrangeDodgeResult.Cancelled;
-        _scheduler.SetCommitted(true);
-        if (!CanCommitOrangeAction(token)) return OrangeDodgeResult.Cancelled;
+        if (settings.Nohero) return false;
+        if (settings.Ch("Nobushi")) input.KeyTap(Input.VK_C);
+        if (settings.Ch("Shaman")) { input.KeyTap(Input.VK_SPACE); input.KeyTap(Input.VK_NUMPAD5); }
+        if (settings.Ch("Orochi")) { input.KeyTap(Input.VK_SPACE); input.KeyTap(Input.VK_NUMPAD9); }
+        if (!settings.Ch("Jiangjun")) return false;
         input.KeyDown(Input.VK_C);
         try
         {
             await Task.Delay(250, token);
-            if (!CanCommitOrangeAction(token)) return OrangeDodgeResult.Cancelled;
             input.MouseClick(Input.VK_LBUTTON);
-            if (!CanCommitOrangeAction(token)) return OrangeDodgeResult.Cancelled;
             input.MouseClick(Input.VK_RBUTTON);
         }
         finally { input.KeyUp(Input.VK_C); }
-        return OrangeDodgeResult.DodgeSent;
+        return false;
     }
 
     private static string DirectionName(CombatDirection direction) => direction switch

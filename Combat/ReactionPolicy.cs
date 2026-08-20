@@ -53,20 +53,6 @@ internal static class ReactionPolicy
     public static bool IsYourChar(Settings settings, string name) =>
         settings.YourHero && !settings.Nohero && settings.Ch(name);
 
-    /// <summary>
-    /// Nuxia's automated deflect path is intentionally limited to side
-    /// attacks.  This is a reliability rule only; all other heroes and
-    /// generic/no-hero modes retain the existing directional behavior.
-    /// </summary>
-    public static bool IsDeflectDirectionEligible(Settings settings, CombatDirection direction)
-    {
-        if (!IsYourChar(settings, "Nuxia")) return true;
-        return direction is CombatDirection.Left or CombatDirection.Right;
-    }
-
-    public static bool IsNuxiaTopDeflectSuppressed(Settings settings, CombatDirection direction) =>
-        IsYourChar(settings, "Nuxia") && direction == CombatDirection.Top;
-
     public static bool OrangeHasPriority(CombatObservation observation, Settings settings, bool actionBusy) =>
         (settings.Unblockables && observation.OrangeIndicator) || actionBusy;
 }

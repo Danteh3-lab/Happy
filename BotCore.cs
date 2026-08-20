@@ -11,14 +11,11 @@ public sealed class BotCore : IAutomationHost, IDisposable
     private Settings _settings = new();
     public Settings S => Volatile.Read(ref _settings);
 
-    // Geometry and marker state are published as one immutable reference.
-    // Read-only compatibility properties below keep diagnostics and the UI
-    // source-compatible without exposing independently mutable coordinates.
-    private readonly object _trackingSync = new();
-    private VisionTrackingSnapshot _tracking = VisionTrackingSnapshot.Empty;
-    private long _trackingVersion;
+    public double B55, Y55;
+    public double X2, Y2, X3, Y3, X4, Y4, X5, Y5, X6, Y6, X7, Y7;
+    public double X8, Y8, X9, Y9, X16, Y16, X17, Y17, X18, Y18, X19, Y19;
 
-    public bool MarkerFound => ReadTrackingSnapshot().RawMarkerFound;
+    public volatile bool MarkerFound;
     public volatile bool AttackIndicator;
     public volatile bool EHeld;
     public volatile bool FHeld;
@@ -30,41 +27,13 @@ public sealed class BotCore : IAutomationHost, IDisposable
     public volatile string LastError = "";
     public volatile int ScreenWidth;
     public volatile int ScreenHeight;
-    public int Ax => ReadTrackingSnapshot().Anchor.X;
-    public int Ay => ReadTrackingSnapshot().Anchor.Y;
-    public int Box => ReadTrackingSnapshot().Box;
-    public double B55 => ReadTrackingSnapshot().Geometry.B55;
-    public double Y55 => ReadTrackingSnapshot().Geometry.Y55;
-    public double X2 => ReadTrackingSnapshot().Geometry.X2;
-    public double Y2 => ReadTrackingSnapshot().Geometry.Y2;
-    public double X3 => ReadTrackingSnapshot().Geometry.X3;
-    public double Y3 => ReadTrackingSnapshot().Geometry.Y3;
-    public double X4 => ReadTrackingSnapshot().Geometry.X4;
-    public double Y4 => ReadTrackingSnapshot().Geometry.Y4;
-    public double X5 => ReadTrackingSnapshot().Geometry.X5;
-    public double Y5 => ReadTrackingSnapshot().Geometry.Y5;
-    public double X6 => ReadTrackingSnapshot().Geometry.X6;
-    public double Y6 => ReadTrackingSnapshot().Geometry.Y6;
-    public double X7 => ReadTrackingSnapshot().Geometry.X7;
-    public double Y7 => ReadTrackingSnapshot().Geometry.Y7;
-    public double X8 => ReadTrackingSnapshot().Geometry.AnchorScan.Left;
-    public double Y8 => ReadTrackingSnapshot().Geometry.AnchorScan.Top;
-    public double X9 => ReadTrackingSnapshot().Geometry.AnchorScan.Right;
-    public double Y9 => ReadTrackingSnapshot().Geometry.AnchorScan.Bottom;
-    public double X16 => ReadTrackingSnapshot().Geometry.X16;
-    public double Y16 => ReadTrackingSnapshot().Geometry.Y16;
-    public double X17 => ReadTrackingSnapshot().Geometry.X17;
-    public double Y17 => ReadTrackingSnapshot().Geometry.Y17;
-    public double X18 => ReadTrackingSnapshot().Geometry.BoxScan.Left;
-    public double Y18 => ReadTrackingSnapshot().Geometry.BoxScan.Top;
-    public double X19 => ReadTrackingSnapshot().Geometry.BoxScan.Right;
-    public double Y19 => ReadTrackingSnapshot().Geometry.BoxScan.Bottom;
+    public int Ax;
+    public int Ay;
+    public int Box;
 
     private readonly ManualResetEventSlim _paused = new(true);
     private CancellationTokenSource _cts = new();
     private readonly object _visionSync = new();
-    private readonly object _observationSync = new();
-    private CombatObservation _latestObservation;
     // Serializes pause/stop transitions with the coordinator portion of each frame.
     private readonly object _combatStateSync = new();
     private readonly TelemetryRecorder _telemetry = new();
@@ -77,7 +46,9 @@ public sealed class BotCore : IAutomationHost, IDisposable
     private readonly AutoGuardController _autoGuard;
     private long _reactionWaitTick;
     private long _lastTelemetryHeartbeatTick;
-    private long _lastAnchorChangedTick;
+    private long _anchorChangedTick;
+    private int _anchorDeltaX;
+    private int _anchorDeltaY;
     private string _reactionWaitKind = "";
     private bool _waitImageCaptured;
     private int _lastRedMatchCount;
@@ -87,8 +58,8 @@ public sealed class BotCore : IAutomationHost, IDisposable
     private OutgoingOrangeGuardResult _outgoingOrangeState = new(false, false, "", false, false, 0, false, false, false);
     private bool _lastSourceHeavyHeld;
     private bool _lastSourceLightHeld;
-    private bool _staleOrangeReported;
     private long _reactionDisplayUntil;
+    private string _markerKind = "NONE";
     private int _indicatorX = -1;
     private int _indicatorY = -1;
     private string _reactionState = "SEARCHING";
@@ -136,8 +107,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
     CancellationToken IAutomationHost.ShutdownToken => _cts.Token;
     IInputGateway IAutomationHost.Input => _input;
     bool IAutomationHost.IsReactionActive => ReactionActive();
-    VisionTrackingSnapshot IAutomationHost.GetTrackingSnapshot(long observationTimestamp) =>
-        ReadTrackingSnapshot().At(observationTimestamp);
+    bool IAutomationHost.MarkerFound => MarkerFound;
     bool IAutomationHost.OrangeParryEnabled => OrangeParry;
     OutgoingOrangeGuardResult IAutomationHost.OutgoingOrangeState => _outgoingOrangeState;
     bool IAutomationHost.IsEHeld() => IsEHeld();
@@ -241,47 +211,6 @@ public sealed class BotCore : IAutomationHost, IDisposable
         lock (_visionSync) return _vision;
     }
 
-    internal VisionTrackingSnapshot GetTrackingSnapshot() => ReadTrackingSnapshot();
-
-    /// <summary>
-    /// Publishes resolution geometry as one snapshot. A known anchor is
-    /// rebased with the new scalers, while its last-seen timestamp is kept.
-    /// </summary>
-    public void ConfigureResolution(int width, int height)
-    {
-        if (width <= 0 || height <= 0) return;
-
-        long now = Environment.TickCount64;
-        lock (_trackingSync)
-        {
-            VisionTrackingSnapshot previous = _tracking;
-            VisionGeometry geometry = VisionGeometry.CreateResolution(width, height);
-            if (previous.Anchor.X >= 0 && previous.LastMarkerKind != null && previous.LastMarkerKind != "NONE")
-                geometry = geometry.WithAnchor(previous.Anchor, previous.Box, previous.LastMarkerKind);
-
-            _tracking = VisionTrackingSnapshot.Create(
-                Interlocked.Increment(ref _trackingVersion),
-                now,
-                false,
-                previous.LastMarkerKind,
-                previous.Anchor,
-                previous.Box,
-                geometry,
-                previous.LastSeenMs,
-                previous.AnchorDeltaX,
-                previous.AnchorDeltaY,
-                previous.LastMarkerKind);
-            ScreenWidth = width;
-            ScreenHeight = height;
-        }
-        lock (_observationSync) _latestObservation = null;
-        AttackIndicator = false;
-        Flash = false;
-        _indicatorX = -1;
-        _indicatorY = -1;
-        PublishVision();
-    }
-
     public OverlayFeatureSnapshot GetOverlayFeatures()
     {
         Settings settings = S;
@@ -305,22 +234,6 @@ public sealed class BotCore : IAutomationHost, IDisposable
     }
 
     public void RefreshVisionSnapshot() => PublishVision();
-
-    private VisionTrackingSnapshot ReadTrackingSnapshot() { lock (_trackingSync) return _tracking; }
-
-    private CombatObservation ReadLatestObservation()
-    {
-        lock (_observationSync) return _latestObservation;
-    }
-
-    private void ClearLatestObservation()
-    {
-        lock (_observationSync) _latestObservation = null;
-        AttackIndicator = false;
-        Flash = false;
-        _indicatorX = -1;
-        _indicatorY = -1;
-    }
 
     private bool IsEHeld() => _input.IsDown(Input.VK_E);
 
@@ -385,13 +298,23 @@ public sealed class BotCore : IAutomationHost, IDisposable
     private CombatObservation CaptureCombatObservation()
     {
         long now = Environment.TickCount64;
-        VisionTrackingSnapshot tracking = ReadTrackingSnapshot().At(now);
         bool eHeld = IsEHeld();
         bool ltHeld = _input.HoldButtonHeld();
         bool fHeld = _input.IsDown(Input.VK_F) || ltHeld;
         VisionAnalysisResult result = _visionAnalyzer.Scan(_frame, new VisionScanRequest(
             now,
-            tracking,
+            MarkerFound,
+            new Point(Ax, Ay),
+            Box,
+            CombatRoiRectangle(),
+            X2,
+            Y2,
+            X3,
+            Y3,
+            X4,
+            Y4,
+            X7,
+            Y4,
             Screen.PrimaryScreen.Bounds,
             eHeld,
             fHeld,
@@ -402,19 +325,6 @@ public sealed class BotCore : IAutomationHost, IDisposable
             _telemetry.IsRecording));
 
         CombatObservation observation = result.Observation;
-        VisionTrackingSnapshot currentTracking = ReadTrackingSnapshot();
-        if (currentTracking.Version != tracking.Version)
-        {
-            // Resolution publication won the race while this frame was being
-            // analyzed. Do not publish or process pixels measured against the
-            // old ROI; the next capture will use the new atomic geometry.
-            ClearLatestObservation();
-            VisionTrackingSnapshot rebased = currentTracking.At(now);
-            return new CombatObservation(now, rebased.RawMarkerFound, rebased.Anchor, rebased.Box,
-                rebased.Geometry.CombatRoiRectangle, false, new Point(-1, -1), CombatDirection.None,
-                false, false, false, false, eHeld, fHeld, ltHeld, _input.IsReady,
-                _input.PhysicalHeavyAttackHeld(), _input.PhysicalLightAttackHeld(), rebased);
-        }
         AttackIndicator = observation.HasIndicator;
         _indicatorX = observation.Indicator.X;
         _indicatorY = observation.Indicator.Y;
@@ -424,7 +334,6 @@ public sealed class BotCore : IAutomationHost, IDisposable
             _lastRedMatchCount = result.RedProbe.MatchCount;
             _lastClosestRed = result.RedProbe.ClosestRgb;
         }
-        lock (_observationSync) _latestObservation = observation;
         return observation;
     }
 
@@ -433,42 +342,16 @@ public sealed class BotCore : IAutomationHost, IDisposable
         lock (_combatStateSync)
         {
             if (!ReactionActive()) return;
-            VisionTrackingSnapshot currentTracking = ReadTrackingSnapshot();
-            if (observation.Tracking != null && observation.Tracking.Version != currentTracking.Version)
-                return;
             ProcessCombatObservationCore(observation);
         }
     }
 
     private void ProcessCombatObservationCore(CombatObservation observation)
     {
-        bool freshTracking = observation.RawMarkerFrame && observation.UsableTracking;
-        bool staleOrange = !freshTracking && (observation.OrangeIndicator || observation.OrangeFeint);
-        if (staleOrange && !_staleOrangeReported)
-        {
-            RecordTelemetry("orange-stale-rejected", new
-            {
-                indicator = observation.OrangeIndicator,
-                feint = observation.OrangeFeint,
-                markerAgeMs = observation.MarkerAgeMs,
-                trackingVersion = observation.TrackingVersion,
-                roi = observation.CombatRoi
-            });
-            _staleOrangeReported = true;
-        }
-        else if (!staleOrange)
-        {
-            _staleOrangeReported = false;
-        }
-        // A stale ROI is useful only for an already-armed directional
-        // candidate. It must never enter the orange priority/action path.
-        CombatObservation orangeObservation = freshTracking
-            ? observation
-            : observation with { OrangeIndicator = false, OrangeFeint = false };
         OutgoingOrangeGuardResult outgoingOrange = _outgoingOrangeGuard.Observe(
             observation.TimestampMs,
-            freshTracking,
-            orangeObservation.OrangeIndicator,
+            observation.MarkerFound,
+            observation.OrangeIndicator,
             observation.SourceHeavyHeld,
             observation.SourceLightHeld);
         _outgoingOrangeState = outgoingOrange;
@@ -479,7 +362,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
                 held = outgoingOrange.SourceHeavyHeld,
                 sourceRbHeld = outgoingOrange.SourceLightHeld,
                 markerFound = observation.MarkerFound,
-                orangeIndicator = orangeObservation.OrangeIndicator,
+                orangeIndicator = observation.OrangeIndicator,
                 suppressionUntilMs = outgoingOrange.SuppressionUntilMs,
                 windowActive = outgoingOrange.WindowActive,
                 selfOrangeLatched = outgoingOrange.SelfOrangeLatched
@@ -493,7 +376,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
                 held = outgoingOrange.SourceLightHeld,
                 sourceRtHeld = outgoingOrange.SourceHeavyHeld,
                 markerFound = observation.MarkerFound,
-                orangeIndicator = orangeObservation.OrangeIndicator,
+                orangeIndicator = observation.OrangeIndicator,
                 suppressionUntilMs = outgoingOrange.SuppressionUntilMs,
                 windowActive = outgoingOrange.WindowActive,
                 selfOrangeLatched = outgoingOrange.SelfOrangeLatched
@@ -526,12 +409,12 @@ public sealed class BotCore : IAutomationHost, IDisposable
             });
         }
 
-        _actions.ProcessOrangeObservation(orangeObservation, outgoingOrange.SuppressesOrange);
+        _actions.ProcessOrangeObservation(observation, outgoingOrange.SuppressesOrange);
         if (!observation.EHeld && !observation.FHeld)
             _actions.CancelPendingAction("hold-released");
         CombatObservation effectiveObservation = outgoingOrange.SuppressesOrange
-            ? orangeObservation with { OrangeIndicator = false, OrangeFeint = false }
-            : orangeObservation;
+            ? observation with { OrangeIndicator = false, OrangeFeint = false }
+            : observation;
         bool orangePriority = ReactionPolicy.OrangeHasPriority(effectiveObservation, S, _actions.IsBusy);
         (ReactionCommandKind kind, string hold) = orangePriority ? (ReactionCommandKind.None, "") : ResolveReactionCommand(effectiveObservation);
         CoordinatorTick tick = _reactionCoordinator.Tick(effectiveObservation with
@@ -546,10 +429,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
                 id = tick.Candidate?.Id,
                 direction = tick.Candidate?.Direction.ToString(),
                 indicator = observation.Indicator,
-                box = observation.Box,
-                markerAgeMs = observation.MarkerAgeMs,
-                trackingStale = observation.StaleTracking,
-                trackingVersion = observation.TrackingVersion
+                box = observation.Box
             });
             if (tick.Candidate != null && (tick.Transition.StartsWith("armed", StringComparison.Ordinal) || tick.Transition.StartsWith("replaced", StringComparison.Ordinal)))
             {
@@ -560,11 +440,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
                     y = observation.Indicator.Y,
                     matches = _lastRedMatchCount,
                     closestRgb = _lastClosestRed,
-                    box = observation.Box,
-                    markerAgeMs = observation.MarkerAgeMs,
-                    trackingUsable = observation.UsableTracking,
-                    trackingStale = observation.StaleTracking,
-                    trackingVersion = observation.TrackingVersion
+                    box = observation.Box
                 });
                 _telemetry.CaptureRoi("indicator-" + tick.Candidate.Direction, observation.CombatRoi);
                 SetVisionReaction("GUARD", "Current classified red indicator", DirectionName(tick.Candidate.Direction), 900);
@@ -574,57 +450,19 @@ public sealed class BotCore : IAutomationHost, IDisposable
         }
         if (!string.IsNullOrEmpty(tick.CancellationReason))
         {
-            RecordTelemetry("candidate-cancelled", new
-            {
-                reason = tick.CancellationReason,
-                markerAgeMs = observation.MarkerAgeMs,
-                trackingUsable = observation.UsableTracking,
-                trackingStale = observation.StaleTracking,
-                trackingVersion = observation.TrackingVersion
-            }, true);
+            RecordTelemetry("candidate-cancelled", new { reason = tick.CancellationReason }, true);
             _telemetry.CaptureRoi("candidate-" + tick.CancellationReason, observation.CombatRoi);
             SetVisionReaction("REACTION CANCELLED", tick.CancellationReason, "", 800);
             _actions.CancelPendingAction(tick.CancellationReason);
         }
         if (tick.IgnoredStaleFlash)
         {
-            RecordTelemetry("flash-ignored-stale", new
-            {
-                observation.CombatRoi,
-                observation.Box,
-                trackingUsable = observation.UsableTracking,
-                trackingStale = observation.StaleTracking,
-                markerAgeMs = observation.MarkerAgeMs,
-                trackingVersion = observation.TrackingVersion,
-                direction = observation.Direction.ToString()
-            });
+            RecordTelemetry("flash-ignored-stale", new { observation.CombatRoi, observation.Box });
             _telemetry.CaptureRoi("flash-ignored-stale", observation.CombatRoi);
-        }
-        if (tick.StaleDirectionMismatch)
-        {
-            RecordTelemetry("stale-direction-rejected", new
-            {
-                candidateId = tick.Candidate?.Id,
-                candidateDirection = tick.Candidate?.Direction.ToString(),
-                observedDirection = observation.Direction.ToString(),
-                markerAgeMs = observation.MarkerAgeMs,
-                trackingVersion = observation.TrackingVersion
-            });
-        }
-        if (tick.StaleCandidateSuppressed)
-        {
-            RecordTelemetry("stale-candidate-suppressed", new
-            {
-                candidateId = tick.Candidate?.Id,
-                candidateDirection = tick.Candidate?.Direction.ToString(),
-                observedDirection = observation.Direction.ToString(),
-                markerAgeMs = observation.MarkerAgeMs,
-                trackingVersion = observation.TrackingVersion
-            });
         }
 
         ApplyCoordinatorGuard(tick.Candidate);
-        if (observation.RawMarkerFrame && observation.UsableTracking && observation.HasIndicator && observation.Direction == CombatDirection.None)
+        if (observation.HasIndicator && observation.Direction == CombatDirection.None)
         {
             RecordTelemetry("indicator-unknown", new { x = observation.Indicator.X, y = observation.Indicator.Y, box = Box }, true);
             SetVisionReaction("INDICATOR UNKNOWN", "Red indicator was outside the directional zones", "", 800);
@@ -637,38 +475,8 @@ public sealed class BotCore : IAutomationHost, IDisposable
             {
                 RequiresParryEnabled = tick.Command.Kind == ReactionCommandKind.Parry || wardenTopParry
             };
-            RecordTelemetry("flash-accepted", new
-            {
-                candidateId = command.CandidateId,
-                direction = command.Direction.ToString(),
-                kind = command.Kind.ToString(),
-                markerAgeMs = observation.MarkerAgeMs,
-                trackingStale = observation.StaleTracking,
-                trackingVersion = observation.TrackingVersion
-            });
+            RecordTelemetry("flash-accepted", new { candidateId = command.CandidateId, direction = command.Direction.ToString(), kind = command.Kind.ToString() });
             _telemetry.CaptureRoi("flash-accepted", observation.CombatRoi);
-
-            if (command.Kind == ReactionCommandKind.Deflect &&
-                command.Hold == "F" &&
-                ReactionPolicy.IsNuxiaTopDeflectSuppressed(S, command.Direction))
-            {
-                RecordTelemetry("deflect-direction-suppressed", new
-                {
-                    candidateId = command.CandidateId,
-                    hero = "Nuxia",
-                    direction = command.Direction.ToString(),
-                    path = "direct-deflect",
-                    reason = "nuxia-top-deflect-disabled",
-                    finalOutcome = "BLOCK",
-                    markerAgeMs = observation.MarkerAgeMs,
-                    trackingVersion = observation.TrackingVersion
-                });
-                _telemetry.CaptureRoi("deflect-direction-suppressed", observation.CombatRoi);
-                SetVisionReaction("BLOCK ONLY · NUXIA TOP",
-                    "Auto deflect suppressed; auto guard retained", DirectionName(command.Direction), 1100);
-                return;
-            }
-
             _actions.QueueReaction(command);
         }
     }
@@ -693,11 +501,10 @@ public sealed class BotCore : IAutomationHost, IDisposable
     public string DebugScan()
     {
         var f = ScreenCapture.Capture(null);
-        VisionGeometry geometry = ReadTrackingSnapshot().Geometry;
         var sb = new System.Text.StringBuilder();
         sb.AppendLine($"Screen captured: {f.Width}x{f.Height}");
-        sb.AppendLine($"Search region: ({geometry.AnchorScan.Left:0},{geometry.AnchorScan.Top:0})-({geometry.AnchorScan.Right:0},{geometry.AnchorScan.Bottom:0})");
-        sb.AppendLine($"Scalers: B55={geometry.B55:0.###} Y55={geometry.Y55:0.###}");
+        sb.AppendLine($"Search region: ({X8:0},{Y8:0})-({X9:0},{Y9:0})");
+        sb.AppendLine($"Scalers: B55={B55:0.###} Y55={Y55:0.###}");
         sb.AppendLine();
 
         int black = 0;
@@ -712,10 +519,10 @@ public sealed class BotCore : IAutomationHost, IDisposable
         sb.AppendLine($"Frame is {(black > 300 ? "BLACK (capture likely blocked)" : "OK (not black)")}");
         sb.AppendLine();
 
-        int sx = Math.Max(0, Math.Min((int)geometry.AnchorScan.Left, f.Width - 1));
-        int ex = Math.Max(0, Math.Min((int)geometry.AnchorScan.Right, f.Width - 1));
-        int sy = Math.Max(0, Math.Min((int)geometry.AnchorScan.Top, f.Height - 1));
-        int ey = Math.Max(0, Math.Min((int)geometry.AnchorScan.Bottom, f.Height - 1));
+        int sx = Math.Max(0, Math.Min((int)X8, f.Width - 1));
+        int ex = Math.Max(0, Math.Min((int)X9, f.Width - 1));
+        int sy = Math.Max(0, Math.Min((int)Y8, f.Height - 1));
+        int ey = Math.Max(0, Math.Min((int)Y9, f.Height - 1));
 
         int fx, fy;
         int inRegionGreen = 0, inRegionYellow = 0;
@@ -744,7 +551,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
         sb.AppendLine($"Yellow anywhere (var10): {yellows}" + (yellows > 0 ? $" first at ({fx},{fy})" : ""));
         sb.AppendLine();
 
-        int cx = (int)((geometry.AnchorScan.Left + geometry.AnchorScan.Right) / 2);
+        int cx = (int)((X8 + X9) / 2);
         sb.AppendLine("Vertical strip at region center X=" + cx + ":");
         for (int y = sy; y <= ey; y += Math.Max(1, (ey - sy) / 10))
             sb.AppendLine($"  y={y}: {Sample(f, cx, y)}");
@@ -771,6 +578,20 @@ public sealed class BotCore : IAutomationHost, IDisposable
 
     private void ApplyCoordinatorGuard(ReactionCandidate candidate) => _autoGuard.Apply(candidate);
 
+    private void SetCoords(double nx2, double ny2, double nx3, double ny3, double nx4, double ny4,
+                          double nx5, double ny5, double nx6, double ny6, double nx7, double ny7,
+                          double nx16, double ny16, double nx17, double ny17)
+    {
+        X2 = nx2; Y2 = ny2;
+        X3 = nx3; Y3 = ny3;
+        X4 = nx4; Y4 = ny4;
+        X5 = nx5; Y5 = ny5;
+        X6 = nx6; Y6 = ny6;
+        X7 = nx7; Y7 = ny7;
+        X16 = nx16; Y16 = ny16;
+        X17 = nx17; Y17 = ny17;
+    }
+
     private bool IsReactionWaiting => Volatile.Read(ref _reactionWaitTick) != 0;
 
     private long ReactionWaitMilliseconds
@@ -782,7 +603,14 @@ public sealed class BotCore : IAutomationHost, IDisposable
         }
     }
 
-    private Rectangle CombatRoiRectangle() => ReadTrackingSnapshot().Geometry.CombatRoiRectangle;
+    private Rectangle CombatRoiRectangle()
+    {
+        int left = (int)Math.Floor(Math.Min(X16, X17));
+        int top = (int)Math.Floor(Math.Min(Y16, Y17));
+        int right = (int)Math.Ceiling(Math.Max(X16, X17));
+        int bottom = (int)Math.Ceiling(Math.Max(Y16, Y17));
+        return Rectangle.FromLTRB(left, top, right, bottom);
+    }
 
     private void BeginReactionWait(string kind)
     {
@@ -825,55 +653,15 @@ public sealed class BotCore : IAutomationHost, IDisposable
         long now = Environment.TickCount64;
         if (now - _lastTelemetryHeartbeatTick < 100) return;
         _lastTelemetryHeartbeatTick = now;
-        VisionTrackingSnapshot currentTracking = ReadTrackingSnapshot().At(now);
-        CombatObservation observation = ReadLatestObservation();
-        bool coherentObservation = observation?.Tracking != null &&
-            observation.Tracking.Version == currentTracking.Version;
-        VisionTrackingSnapshot tracking = coherentObservation
-            ? observation.Tracking.At(now)
-            : currentTracking;
-        VisionGeometry geometry = tracking.Geometry;
         InputBridgeSnapshot bridge = ViGEmInput.GetDiagnostics();
         ReactionCandidate candidate = _reactionCoordinator.CurrentCandidate;
         _telemetry.Record("heartbeat", new
         {
-            marker = new
-            {
-                found = tracking.RawMarkerFound,
-                rawMarkerFound = tracking.RawMarkerFound,
-                trackingUsable = tracking.TrackingUsable,
-                trackingStale = tracking.TrackingStale,
-                kind = tracking.MarkerKind,
-                lastKind = tracking.LastMarkerKind,
-                x = tracking.Anchor.X,
-                y = tracking.Anchor.Y,
-                deltaX = tracking.AnchorDeltaX,
-                deltaY = tracking.AnchorDeltaY,
-                // Compatibility: ageMs historically measured time since the
-                // anchor last moved. markerAgeMs is the additive raw-marker
-                // freshness age used by the temporal tracking plan.
-                ageMs = _lastAnchorChangedTick == 0 ? 0 : Math.Max(0, now - _lastAnchorChangedTick),
-                markerAgeMs = tracking.MarkerAgeMs,
-                lastSeenMs = tracking.LastSeenMs,
-                trackingVersion = tracking.Version,
-                anchorMovementAgeMs = _lastAnchorChangedTick == 0 ? -1 : Math.Max(0, now - _lastAnchorChangedTick)
-            },
-            box = tracking.Box,
-            roi = geometry.CombatRoiRectangle,
-            zones = new
-            {
-                top = new { X2 = geometry.X2, Y2 = geometry.Y2, X3 = geometry.X3, Y3 = geometry.Y3 },
-                left = new { X6 = geometry.X6, Y6 = geometry.Y6, X7 = geometry.X7, Y7 = geometry.Y7 },
-                right = new { X4 = geometry.X4, Y4 = geometry.Y4, X5 = geometry.X5, Y5 = geometry.Y5 }
-            },
-            indicator = new
-            {
-                present = coherentObservation && observation.HasIndicator,
-                x = coherentObservation ? observation.Indicator.X : -1,
-                y = coherentObservation ? observation.Indicator.Y : -1,
-                matches = _lastRedMatchCount,
-                closestRgb = _lastClosestRed
-            },
+            marker = new { found = MarkerFound, kind = _markerKind, x = Ax, y = Ay, deltaX = _anchorDeltaX, deltaY = _anchorDeltaY, ageMs = Math.Max(0, now - _anchorChangedTick) },
+            box = Box,
+            roi = CombatRoiRectangle(),
+            zones = new { top = new { X2, Y2, X3, Y3 }, left = new { X6, Y6, X7, Y7 }, right = new { X4, Y4, X5, Y5 } },
+            indicator = new { present = AttackIndicator, x = _indicatorX, y = _indicatorY, matches = _lastRedMatchCount, closestRgb = _lastClosestRed },
             reaction = new
             {
                 state = _reactionState,
@@ -882,10 +670,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
                 candidateAgeMs = candidate == null ? 0 : now - candidate.StartedMs,
                 lastValidAgeMs = candidate == null ? 0 : now - candidate.LastValidMs,
                 candidateDirection = candidate?.Direction.ToString() ?? "NONE",
-                EHeld = coherentObservation ? observation.EHeld : EHeld,
-                FHeld = coherentObservation ? observation.FHeld : FHeld,
-                ltHeld = coherentObservation ? observation.LtHeld : _input.HoldButtonHeld(),
-                Flash = coherentObservation && observation.LightFlash
+                EHeld, FHeld, ltHeld = _input.HoldButtonHeld(), Flash
             },
             outgoingOrange = new
             {
@@ -919,22 +704,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
 
     private void UpdateVisionTracking()
     {
-        VisionTrackingSnapshot tracking = ReadTrackingSnapshot().At(Environment.TickCount64);
-        if (!tracking.TrackingUsable)
-        {
-            _reactionState = "SEARCHING";
-            _reactionReason = tracking.MarkerAgeMs >= 0
-                ? "Marker age exceeded the 150ms tracking window"
-                : "Waiting for a green or yellow anchor";
-            _reactionDirection = "";
-        }
-        else if (tracking.TrackingStale)
-        {
-            _reactionState = "TRACKING STALE";
-            _reactionReason = "Marker missing; preserving only the short tracking grace";
-            _reactionDirection = "";
-        }
-        else if (!tracking.RawMarkerFound)
+        if (!MarkerFound)
         {
             _reactionState = "SEARCHING";
             _reactionReason = "Waiting for a green or yellow anchor";
@@ -1004,49 +774,39 @@ public sealed class BotCore : IAutomationHost, IDisposable
     {
         ReactionCandidate candidate = _reactionCoordinator.CurrentCandidate;
         long now = Environment.TickCount64;
-        VisionTrackingSnapshot currentTracking = ReadTrackingSnapshot().At(now);
-        CombatObservation observation = ReadLatestObservation();
-        bool coherentObservation = observation?.Tracking != null &&
-            observation.Tracking.Version == currentTracking.Version;
-        VisionTrackingSnapshot tracking = coherentObservation
-            ? observation.Tracking.At(now)
-            : currentTracking;
-        VisionGeometry geometry = tracking.Geometry;
-        bool frameIndicator = coherentObservation && observation.HasIndicator;
-        Point frameIndicatorPoint = coherentObservation ? observation.Indicator : new Point(-1, -1);
-        bool frameFlash = coherentObservation && observation.LightFlash;
+        var anchorScan = RectangleF.FromLTRB((float)X8, (float)Y8, (float)X9, (float)Y9);
+        var combatRoi = RectangleF.FromLTRB((float)Math.Min(X16, X17), (float)Math.Min(Y16, Y17),
+            (float)Math.Max(X16, X17), (float)Math.Max(Y16, Y17));
+        // The active coordinator searches only inside CombatRoi, then applies
+        // these exact half-plane thresholds. Clip the visual zones to that ROI.
+        var topZone = RectangleF.FromLTRB(combatRoi.Left, Math.Max(combatRoi.Top, (float)Math.Min(Y2, Y3)),
+            combatRoi.Right, Math.Min(combatRoi.Bottom, (float)Math.Max(Y2, Y3)));
+        var rightZone = RectangleF.FromLTRB(Math.Max(combatRoi.Left, (float)X4), Math.Max(combatRoi.Top, (float)Y4),
+            combatRoi.Right, combatRoi.Bottom);
+        var leftZone = RectangleF.FromLTRB(combatRoi.Left, Math.Max(combatRoi.Top, (float)Y4),
+            Math.Min(combatRoi.Right, (float)X7), combatRoi.Bottom);
 
         var snapshot = new VisionSnapshot
         {
             Running = IsRunning,
-            MarkerFound = tracking.RawMarkerFound,
-            RawMarkerFound = tracking.RawMarkerFound,
-            TrackingUsable = tracking.TrackingUsable,
-            TrackingStale = tracking.TrackingStale,
-            MarkerKind = tracking.MarkerKind,
-            Anchor = tracking.Anchor,
-            AnchorScan = geometry.AnchorScan,
-            CombatRoi = geometry.CombatRoi,
-            TopZone = geometry.TopZone,
-            LeftZone = geometry.LeftZone,
-            RightZone = geometry.RightZone,
-            AttackIndicator = frameIndicator,
-            Indicator = frameIndicatorPoint,
+            MarkerFound = MarkerFound,
+            MarkerKind = _markerKind,
+            Anchor = new Point(Ax, Ay),
+            AnchorScan = anchorScan,
+            CombatRoi = combatRoi,
+            TopZone = topZone,
+            LeftZone = leftZone,
+            RightZone = rightZone,
+            AttackIndicator = AttackIndicator,
+            Indicator = new Point(_indicatorX, _indicatorY),
             GuardDirection = GuardDir,
             DecisionDirection = _reactionDirection,
             ReactionState = _reactionState,
             ReactionReason = _reactionReason,
-            Flash = frameFlash,
+            Flash = Flash,
             LoopHz = LoopHz,
-            Box = tracking.Box,
-            AnchorAgeMs = tracking.RawMarkerFound && _lastAnchorChangedTick > 0
-                ? Math.Max(0, now - _lastAnchorChangedTick)
-                : 0,
-            MarkerAgeMs = tracking.MarkerAgeMs,
-            LastMarkerSeenMs = tracking.LastSeenMs,
-            TrackingVersion = tracking.Version,
-            AnchorDeltaX = tracking.AnchorDeltaX,
-            AnchorDeltaY = tracking.AnchorDeltaY,
+            Box = Box,
+            AnchorAgeMs = MarkerFound && _anchorChangedTick > 0 ? Math.Max(0, now - _anchorChangedTick) : 0,
             GuardRemainingMs = GuardRemainingMilliseconds,
             ReactionWaitMs = candidate == null ? 0 : Math.Max(0, now - candidate.StartedMs),
             CandidateId = candidate?.Id ?? 0,
@@ -1061,133 +821,93 @@ public sealed class BotCore : IAutomationHost, IDisposable
 
     private void Calculate()
     {
-        VisionTrackingSnapshot previous;
-        VisionTrackingSnapshot current;
-        lock (_trackingSync)
+        bool wasFound = MarkerFound;
+        int oldAx = Ax, oldAy = Ay, oldBox = Box;
+        ScreenWidth = _frame.Width;
+        ScreenHeight = _frame.Height;
+
+        if (CurrentPx(X18, Y18, X19, Y19, 5, 131, 65, 0, out _, out _)) Box = 1;
+        else Box = 2;
+
+        if (CurrentPx(X8, Y8, X9, Y9, 5, 131, 65, 0, out int ax, out int ay))
         {
-            // Resolution changes publish through the same lock. Keeping the
-            // scan and publication in one critical section prevents a frame
-            // calculated with the old scalers from clobbering a newer atomic
-            // geometry snapshot.
-            long now = Environment.TickCount64;
-            previous = _tracking;
-            VisionGeometry geometry = previous.Geometry;
-            ScreenWidth = _frame.Width;
-            ScreenHeight = _frame.Height;
-
-            RectangleF boxScan = geometry.BoxScan;
-            int scannedBox = CurrentPx(boxScan.Left, boxScan.Top, boxScan.Right, boxScan.Bottom,
-                5, 131, 65, 0, out _, out _) ? 1 : 2;
-            int box = previous.Box;
-
-            Point anchor = previous.Anchor;
-            string markerKind = previous.LastMarkerKind;
-            bool rawMarkerFound = false;
-            RectangleF anchorScan = geometry.AnchorScan;
-            if (CurrentPx(anchorScan.Left, anchorScan.Top, anchorScan.Right, anchorScan.Bottom,
-                5, 131, 65, 0, out int ax, out int ay))
-            {
-                anchor = new Point(ax, ay);
-                markerKind = "GREEN";
-                rawMarkerFound = true;
-            }
-            else if (CurrentPx(anchorScan.Left, anchorScan.Top, anchorScan.Right, anchorScan.Bottom,
-                255, 255, 10, 0, out ax, out ay))
-            {
-                anchor = new Point(ax, ay);
-                markerKind = "YELLOW";
-                rawMarkerFound = true;
-            }
-
-            // A new Box is valid only when this frame also contains a fresh
-            // anchor. Marker-loss frames retain the complete last-valid
-            // Box/anchor/geometry tuple instead of mixing a new Box with old
-            // anchor-relative coordinates.
-            if (rawMarkerFound)
-            {
-                box = scannedBox;
-                geometry = geometry.WithAnchor(anchor, box, markerKind);
-            }
-
-            int deltaX = rawMarkerFound && previous.RawMarkerFound ? anchor.X - previous.Anchor.X : 0;
-            int deltaY = rawMarkerFound && previous.RawMarkerFound ? anchor.Y - previous.Anchor.Y : 0;
-            long lastSeenMs = rawMarkerFound ? now : previous.LastSeenMs;
-            string lastMarkerKind = rawMarkerFound ? markerKind : previous.LastMarkerKind;
-            current = VisionTrackingSnapshot.Create(
-                Interlocked.Increment(ref _trackingVersion),
-                now,
-                rawMarkerFound,
-                markerKind,
-                anchor,
-                box,
-                geometry,
-                lastSeenMs,
-                deltaX,
-                deltaY,
-                lastMarkerKind);
-
-            _tracking = current;
+            Ax = ax;
+            Ay = ay;
+            MarkerFound = true;
+            _markerKind = "GREEN";
+            if (Box == 2)
+                SetCoords(ax - 200 * B55, ay + 20 * Y55, ax + 160 * B55, ay + 170 * Y55,
+                          ax + 5 * B55, ay + 195 * Y55, ax + 160 * B55, ay + 430 * Y55,
+                          ax - 200 * B55, ay + 195 * Y55, ax - 30 * B55, ay + 430 * Y55,
+                          ax - 200 * B55, ay + 20 * Y55, ax + 160 * B55, ay + 430 * Y55);
+            else
+                SetCoords(ax - 100 * B55, ay + 10 * Y55, ax + 80 * B55, ay + 85 * Y55,
+                          ax + 2.5 * B55, ay + 97.5 * Y55, ax + 80 * B55, ay + 227.7 * Y55,
+                          ax - 100 * B55, ay + 97.5 * Y55, ax - 15 * B55, ay + 227.7 * Y55,
+                          ax - 117.6 * B55, ay + 10 * Y55, ax + 94.11 * B55, ay + 227.7 * Y55);
         }
-        ObserveAnchorTracking(previous, current);
+        else if (CurrentPx(X8, Y8, X9, Y9, 255, 255, 10, 0, out ax, out ay))
+        {
+            Ax = ax;
+            Ay = ay;
+            MarkerFound = true;
+            _markerKind = "YELLOW";
+            if (Box == 2)
+                SetCoords(ax - 175 * B55, ay + 65 * Y55, ax + 185 * B55, ay + 185 * Y55,
+                          ax + 30 * B55, ay + 215 * Y55, ax + 185 * B55, ay + 430 * Y55,
+                          ax - 175 * B55, ay + 215 * Y55, ax - 5 * B55, ay + 430 * Y55,
+                          ax - 175 * B55, ay + 65 * Y55, ax + 185 * B55, ay + 430 * Y55);
+            else
+                SetCoords(ax - 87.5 * B55, ay + 35 * Y55, ax + 92.5 * B55, ay + 92.5 * Y55,
+                          ax + 15 * B55, ay + 107.5 * Y55, ax + 92.5 * B55, ay + 215 * Y55,
+                          ax - 87.5 * B55, ay + 107.5 * Y55, ax - 2.5 * B55, ay + 215 * Y55,
+                          ax - 87.5 * B55, ay + 35 * Y55, ax + 92.5 * B55, ay + 215 * Y55);
+        }
+        else
+        {
+            MarkerFound = false;
+            _markerKind = "NONE";
+        }
+        ObserveAnchorTracking(wasFound, oldAx, oldAy, oldBox);
     }
 
-    private void ObserveAnchorTracking(VisionTrackingSnapshot previous, VisionTrackingSnapshot current)
+    private void ObserveAnchorTracking(bool wasFound, int oldAx, int oldAy, int oldBox)
     {
         long now = Environment.TickCount64;
-        if (!current.RawMarkerFound)
+        if (!MarkerFound)
         {
-            if (previous.RawMarkerFound)
+            if (wasFound)
             {
-                RecordTelemetry("marker-lost", new
-                {
-                    oldAx = previous.Anchor.X,
-                    oldAy = previous.Anchor.Y,
-                    oldBox = previous.Box,
-                    markerAgeMs = current.MarkerAgeMs,
-                    lastSeenMs = current.LastSeenMs,
-                    trackingUsable = current.TrackingUsable,
-                    trackingVersion = current.Version
-                }, true);
-                _telemetry.CaptureRoi("marker-lost", current.Geometry.CombatRoiRectangle);
+                RecordTelemetry("marker-lost", new { oldAx, oldAy, oldBox }, true);
+                _telemetry.CaptureRoi("marker-lost", CombatRoiRectangle());
             }
             return;
         }
 
-        int deltaX = current.AnchorDeltaX;
-        int deltaY = current.AnchorDeltaY;
+        int deltaX = wasFound ? Ax - oldAx : 0;
+        int deltaY = wasFound ? Ay - oldAy : 0;
+        _anchorDeltaX = deltaX;
+        _anchorDeltaY = deltaY;
         int distance = Math.Max(Math.Abs(deltaX), Math.Abs(deltaY));
-        if (!previous.RawMarkerFound)
+        if (!wasFound)
         {
-            _lastAnchorChangedTick = now;
-            RecordTelemetry("marker-found", new { kind = current.MarkerKind, x = current.Anchor.X, y = current.Anchor.Y, box = current.Box, trackingVersion = current.Version });
-            _telemetry.CaptureRoi("marker-found", current.Geometry.CombatRoiRectangle);
-            if (previous.LastSeenMs >= 0)
-            {
-                RecordTelemetry("marker-recovered", new
-                {
-                    kind = current.MarkerKind,
-                    x = current.Anchor.X,
-                    y = current.Anchor.Y,
-                    box = current.Box,
-                    markerAgeMs = current.MarkerAgeMs,
-                    trackingVersion = current.Version
-                });
-                _telemetry.CaptureRoi("marker-recovered", current.Geometry.CombatRoiRectangle);
-            }
+            _anchorChangedTick = now;
+            RecordTelemetry("marker-found", new { kind = _markerKind, x = Ax, y = Ay, box = Box });
+            _telemetry.CaptureRoi("marker-found", CombatRoiRectangle());
         }
         else if (distance > 2)
         {
-            _lastAnchorChangedTick = now;
+            _anchorChangedTick = now;
             if (distance >= 40)
             {
-                RecordTelemetry("anchor-jump", new { x = current.Anchor.X, y = current.Anchor.Y, deltaX, deltaY, distance, box = current.Box, trackingVersion = current.Version }, true);
-                _telemetry.CaptureRoi("anchor-jump", current.Geometry.CombatRoiRectangle);
+                RecordTelemetry("anchor-jump", new { x = Ax, y = Ay, deltaX, deltaY, distance, box = Box }, true);
+                _telemetry.CaptureRoi("anchor-jump", CombatRoiRectangle());
             }
         }
-        if (previous.Box != current.Box)
+        if (oldBox != Box)
         {
-            RecordTelemetry("box-flip", new { from = previous.Box, to = current.Box, x = current.Anchor.X, y = current.Anchor.Y, trackingVersion = current.Version }, true);
-            _telemetry.CaptureRoi("box-flip", current.Geometry.CombatRoiRectangle);
+            RecordTelemetry("box-flip", new { from = oldBox, to = Box, x = Ax, y = Ay }, true);
+            _telemetry.CaptureRoi("box-flip", CombatRoiRectangle());
         }
     }
 
