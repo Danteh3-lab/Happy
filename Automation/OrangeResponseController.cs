@@ -101,6 +101,7 @@ internal sealed class OrangeResponseController
             if (_host.Input.MouseClick(Input.VK_RBUTTON))
             {
                 _host.IncrementParryCount();
+                _host.RequestParryEvidence(0, CombatDirection.None);
                 _host.SetVisionReaction("ORANGE PARRY SENT", "RT input sent", "", 1300);
             }
             else _host.SetVisionReaction("ORANGE PARRY FAILED", "RT input was not delivered", "", 1300);

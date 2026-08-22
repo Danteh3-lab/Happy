@@ -21,6 +21,7 @@ internal interface IAutomationHost
     void SetVisionReaction(string state, string reason, string direction = "", int displayMs = 1100);
     void RecordTelemetry(string name, object data, bool failure = false);
     void IncrementParryCount();
+    void RequestParryEvidence(long candidateId, CombatDirection direction);
     void RegisterAutomationLight();
     void RestoreAutoGuardAfterDirectionalLight();
 }
@@ -143,6 +144,7 @@ internal sealed class ReactionActionExecutor
             else
             {
                 _host.IncrementParryCount();
+                _host.RequestParryEvidence(command.CandidateId, command.Direction);
                 _host.SetVisionReaction("PARRY SENT", "RT input sent", DirectionName(command.Direction), 1300);
             }
             return true;

@@ -29,6 +29,13 @@ internal enum ParryOutcome
     Block
 }
 
+internal enum VisionScanMode
+{
+    Tracked,
+    MarkerGrace,
+    AnchorGrace
+}
+
 /// <summary>Provides a testable 0-99 roll for legitimate parry selection.</summary>
 internal interface IParryRollSource
 {
@@ -285,7 +292,17 @@ internal sealed record CombatObservation(
     bool LtHeld,
     bool InputReady,
     bool SourceHeavyHeld = false,
-    bool SourceLightHeld = false);
+    bool SourceLightHeld = false,
+    VisionScanMode ScanMode = VisionScanMode.Tracked,
+    Rectangle CachedCombatRoi = default,
+    long MarkerLossAgeMs = 0,
+    int FlashClusterMatches = 0,
+    int TemporalFlashMatches = 0,
+    int TemporalFlashLargestCluster = 0,
+    long TrackingGraceAgeMs = 0,
+    Point StrictFlashPoint = default,
+    int IndicatorFlashClusterMatches = 0,
+    Rectangle IndicatorFlashClusterBounds = default);
 
 internal sealed record ReactionCandidate(
     long Id,
@@ -343,6 +360,7 @@ internal sealed class ReactionCoordinator
         lock (_sync)
         {
             long now = observation.TimestampMs != 0 ? observation.TimestampMs : _clock.GetUtcNow().ToUnixTimeMilliseconds();
+            bool candidateGrace = observation.ScanMode is VisionScanMode.MarkerGrace or VisionScanMode.AnchorGrace;
             bool validThreat = observation.MarkerFound && observation.HasIndicator && observation.Direction != CombatDirection.None;
             string transition = "";
             string cancellation = "";
@@ -368,6 +386,12 @@ internal sealed class ReactionCoordinator
                     _candidate = _candidate with { LastValidMs = now };
                 }
             }
+
+            // A cached candidate scan is deliberately flash-only.  It must not
+            // arm, replace, or change direction, but it does preserve the
+            // existing candidate while tracking is briefly unreliable.
+            if (candidateGrace && _candidate is { Consumed: false })
+                _candidate = _candidate with { LastValidMs = now };
 
             if (_candidate != null)
             {

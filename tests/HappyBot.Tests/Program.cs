@@ -36,9 +36,16 @@ static class Program
             FullFrameScreenCoordinatesPreserveRoiDetection();
             ReactionPolicySelectionCoversEAndFWardenPriority();
             VisionAnalyzerUsesExplicitBoundsAndPreservesMarkerLoss();
+            VisionAnalyzerUsesOriginalRoiAndStrictFlashPixel();
+            VisionAnalyzerProfilesStrictFlashAtArmedIndicator();
+            VisionAnalyzerGraceScanAcceptsFlashWithoutMarker();
+            AnchorGraceKeepsExistingCandidateFlashOnly();
+            TemporalFlashCalibrationExcludesArmedIndicator();
             AutoGuardFakeInputAppliesReplacesAndReleases();
             SchedulerImmediateStateIsAuthoritative();
             ZeroDelayReactionActionsCommit();
+            ParryConfirmationTrackerConfirmsLightAndHeavyImpacts();
+            ParryConfirmationTrackerRespectsTimingAndScaledThresholds();
             DeflectSendsLightOnlyAfterSuccessfulDodge();
             Console.WriteLine("ReactionCoordinator and seam tests passed.");
             return 0;
@@ -438,6 +445,188 @@ static class Program
             "marker loss should retain the configured combat ROI for diagnostics");
     }
 
+    private static void VisionAnalyzerUsesOriginalRoiAndStrictFlashPixel()
+    {
+        Rectangle raw = new(100, 220, 360, 456);
+        Require(raw == new Rectangle(100, 220, 360, 456),
+            "combat ROI should retain the original marker-relative size");
+
+        var analyzer = new VisionAnalyzer();
+        Rectangle combatRoi = new(100, 220, 80, 80);
+        VisionScanRequest request = new(
+            100,
+            true,
+            new Point(140, 240),
+            2,
+            combatRoi,
+            0,
+            250,
+            0,
+            280,
+            150,
+            250,
+            130,
+            250,
+            new Rectangle(0, 0, 400, 500),
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true);
+
+        ScreenFrame sideFlash = SyntheticClusterFrame(400, 500,
+            new[] { (120, 260), (121, 260), (120, 261), (121, 261) }, 255, 154, 141);
+        SetPixel(sideFlash, 110, 260, 255, 49, 41);
+        VisionAnalysisResult result = analyzer.Scan(sideFlash, request);
+        Require(result.Observation.LightFlash && result.Observation.FlashClusterMatches >= 4 &&
+            result.Observation.Direction == CombatDirection.Left && result.Observation.Indicator.X == 110,
+            "a left indicator inside the original ROI should classify correctly");
+
+        ScreenFrame rightSide = SyntheticClusterFrame(400, 500,
+            new[] { (150, 260), (151, 260), (150, 261), (151, 261) }, 255, 154, 141);
+        SetPixel(rightSide, 170, 260, 255, 49, 41);
+        VisionAnalysisResult rightResult = analyzer.Scan(rightSide, request);
+        Require(rightResult.Observation.Direction == CombatDirection.Right && rightResult.Observation.Indicator.X == 170,
+            "a right indicator inside the original ROI should classify correctly");
+
+        ScreenFrame noise = SyntheticClusterFrame(400, 500,
+            new[] { (120, 260), (121, 260), (120, 261) }, 255, 160, 150);
+        VisionAnalysisResult belowMinimum = analyzer.Scan(noise, request);
+        Require(!belowMinimum.Observation.LightFlash && belowMinimum.Observation.FlashClusterMatches == 3,
+            "a near-color flash cluster must remain noise under the strict parry pixel rule");
+    }
+
+    private static void VisionAnalyzerProfilesStrictFlashAtArmedIndicator()
+    {
+        var analyzer = new VisionAnalyzer();
+        Rectangle roi = new(0, 0, 300, 300);
+        FlashTemporalBaseline baseline = VisionAnalyzer.CaptureTemporalBaseline(
+            SyntheticClusterFrame(300, 300, Array.Empty<(int x, int y)>(), 0, 0, 0), roi, new Point(100, 100));
+        ScreenFrame frame = SyntheticClusterFrame(300, 300,
+            new[] { (110, 110), (111, 110), (110, 111), (111, 111) }, 255, 154, 141);
+        VisionAnalysisResult result = analyzer.Scan(frame, new VisionScanRequest(
+            100, true, new Point(150, 150), 2, roi,
+            0, 100, 0, 150, 200, 100, 100, 100,
+            new Rectangle(0, 0, 300, 300), false, true, true, true, false, false, true,
+            TemporalBaseline: baseline));
+
+        Require(result.Observation.LightFlash && result.Observation.StrictFlashPoint == new Point(110, 110),
+            "strict flash telemetry must preserve the actual exact-pixel location");
+        Require(result.Observation.IndicatorFlashClusterMatches == 4 &&
+            result.Observation.IndicatorFlashClusterBounds == new Rectangle(110, 110, 2, 2),
+            "calibration must profile tolerant matches only around the armed indicator");
+
+        VisionAnalysisResult live = analyzer.Scan(frame, new VisionScanRequest(
+            101, true, new Point(150, 150), 2, roi,
+            0, 100, 0, 150, 200, 100, 100, 100,
+            new Rectangle(0, 0, 300, 300), false, true, true, true, false, false, false));
+        Require(live.Observation.LightFlash && live.Observation.FlashClusterMatches == 0 &&
+            live.Observation.IndicatorFlashClusterMatches == 0,
+            "normal play must retain strict flash detection without running calibration scans");
+    }
+
+    private static void VisionAnalyzerGraceScanAcceptsFlashWithoutMarker()
+    {
+        var analyzer = new VisionAnalyzer();
+        Rectangle cachedRoi = new(20, 20, 180, 160);
+        VisionScanRequest request = new(
+            500,
+            false,
+            new Point(100, 100),
+            2,
+            new Rectangle(50, 20, 100, 160),
+            0,
+            60,
+            0,
+            100,
+            120,
+            60,
+            80,
+            60,
+            new Rectangle(0, 0, 240, 220),
+            false,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            cachedRoi,
+            100,
+            CombatDirection.Left,
+            true);
+
+        ScreenFrame frame = SyntheticClusterFrame(240, 220,
+            new[] { (30, 80), (31, 80), (30, 81), (31, 81) }, 255, 154, 141);
+        VisionAnalysisResult grace = analyzer.Scan(frame, request);
+        Require(grace.Observation.ScanMode == VisionScanMode.MarkerGrace &&
+            !grace.Observation.MarkerFound && !grace.Observation.HasIndicator &&
+            grace.Observation.Direction == CombatDirection.Left && grace.Observation.LightFlash &&
+            grace.Observation.CombatRoi == cachedRoi && grace.Observation.MarkerLossAgeMs == 100,
+            "marker-grace scan should use cached geometry for flash-only detection");
+
+        var coordinator = new ReactionCoordinator();
+        coordinator.Tick(Observation(400, CombatDirection.Left), ReactionCommandKind.None, "");
+        CoordinatorTick graceCommand = coordinator.Tick(grace.Observation with
+            { TimestampMs = 500, Direction = CombatDirection.Right },
+            ReactionCommandKind.Parry, "F");
+        Require(graceCommand.Command is { Kind: ReactionCommandKind.Parry, Direction: CombatDirection.Left },
+            "a flash during marker grace should accept only the already armed candidate");
+
+        VisionAnalysisResult expired = analyzer.Scan(frame, request with { MarkerLossAgeMs = 251 });
+        Require(expired.Observation.ScanMode == VisionScanMode.Tracked &&
+            !expired.Observation.LightFlash && expired.Observation.Direction == CombatDirection.None,
+            "marker grace must stop after 250ms and cannot react to a late flash");
+    }
+
+    private static void AnchorGraceKeepsExistingCandidateFlashOnly()
+    {
+        var coordinator = new ReactionCoordinator();
+        coordinator.Tick(Observation(1, CombatDirection.Right), ReactionCommandKind.None, "");
+
+        CombatObservation grace = Observation(300, CombatDirection.None, hasThreat: false) with
+        {
+            MarkerFound = false,
+            ScanMode = VisionScanMode.AnchorGrace,
+            TrackingGraceAgeMs = 50
+        };
+        CoordinatorTick held = coordinator.Tick(grace, ReactionCommandKind.None, "");
+        Require(held.Candidate is { Direction: CombatDirection.Right },
+            "anchor grace must preserve the frozen candidate through a tracking interruption");
+
+        CoordinatorTick accepted = coordinator.Tick(grace with { TimestampMs = 310, LightFlash = true }, ReactionCommandKind.Parry, "F");
+        Require(accepted.Command is { Kind: ReactionCommandKind.Parry, Direction: CombatDirection.Right },
+            "anchor grace must preserve only the existing candidate for a flash");
+    }
+
+    private static void TemporalFlashCalibrationExcludesArmedIndicator()
+    {
+        var analyzer = new VisionAnalyzer();
+        Rectangle roi = new(0, 0, 300, 300);
+        ScreenFrame baselineFrame = SyntheticClusterFrame(300, 300, Array.Empty<(int x, int y)>(), 0, 0, 0);
+        FlashTemporalBaseline baseline = VisionAnalyzer.CaptureTemporalBaseline(baselineFrame, roi, new Point(100, 100));
+
+        ScreenFrame frame = SyntheticClusterFrame(300, 300,
+            new[] { (100, 100), (101, 100), (100, 101), (101, 101), (250, 250), (251, 250), (250, 251), (251, 251) },
+            255, 230, 180);
+        VisionScanRequest request = new(
+            100, true, new Point(150, 150), 2, roi,
+            0, 100, 0, 150, 200, 100, 100, 100,
+            new Rectangle(0, 0, 300, 300), false, true, true, true, false, false, true,
+            TemporalBaseline: baseline);
+        VisionAnalysisResult result = analyzer.Scan(frame, request);
+        Require(result.Observation.TemporalFlashMatches == 4,
+            "temporal calibration must ignore the armed red-indicator area and keep the external bloom");
+        Require(!result.Observation.LightFlash,
+            "temporal calibration remains diagnostic-only until explicitly activated");
+
+        VisionAnalysisResult unchanged = analyzer.Scan(frame, request);
+        Require(unchanged.Observation.TemporalFlashMatches == 0,
+            "temporal calibration must compare against the immediately previous frame, not the arm frame");
+    }
+
     private static ScreenFrame SyntheticIndicatorFrame(int screenX, int screenY)
     {
         var frame = new ScreenFrame
@@ -455,6 +644,61 @@ static class Program
         frame.Buffer[offset] = 41;
         frame.Buffer[offset + 1] = 49;
         frame.Buffer[offset + 2] = 255;
+        return frame;
+    }
+
+    private static ScreenFrame SyntheticClusterFrame(int width, int height, (int x, int y)[] pixels,
+        int red, int green, int blue)
+    {
+        var frame = new ScreenFrame
+        {
+            Width = width,
+            Height = height,
+            Stride = width * 4,
+            Buffer = new byte[width * height * 4]
+        };
+        foreach ((int x, int y) in pixels)
+        {
+            int offset = y * frame.Stride + x * 4;
+            frame.Buffer[offset] = (byte)blue;
+            frame.Buffer[offset + 1] = (byte)green;
+            frame.Buffer[offset + 2] = (byte)red;
+            frame.Buffer[offset + 3] = 255;
+        }
+        return frame;
+    }
+
+    private static void SetPixel(ScreenFrame frame, int x, int y, int red, int green, int blue)
+    {
+        int offset = y * frame.Stride + x * 4;
+        frame.Buffer[offset] = (byte)blue;
+        frame.Buffer[offset + 1] = (byte)green;
+        frame.Buffer[offset + 2] = (byte)red;
+        frame.Buffer[offset + 3] = 255;
+    }
+
+    private static ScreenFrame SyntheticImpactFrame(int width, int height, int brightPixels,
+        int red, int green, int blue)
+    {
+        var frame = new ScreenFrame
+        {
+            Width = width,
+            Height = height,
+            Stride = width * 4,
+            Buffer = new byte[width * height * 4]
+        };
+        Rectangle region = ParryConfirmationTracker.NormalizedRegion(width, height);
+        int count = Math.Min(Math.Max(0, brightPixels), region.Width * region.Height);
+        for (int i = 0; i < count; i++)
+        {
+            int x = region.Left + i % region.Width;
+            int y = region.Top + i / region.Width;
+            int offset = y * frame.Stride + x * 4;
+            frame.Buffer[offset] = (byte)blue;
+            frame.Buffer[offset + 1] = (byte)green;
+            frame.Buffer[offset + 2] = (byte)red;
+            frame.Buffer[offset + 3] = 255;
+        }
         return frame;
     }
 
@@ -530,9 +774,21 @@ static class Program
         var parryScheduler = new ActionScheduler(parryHost.ShutdownToken);
         var parryExecutor = new ReactionActionExecutor(parryHost, parryScheduler, new FixedRollSource(0));
         parryExecutor.QueueReaction(new ReactionCommand(101, ReactionCommandKind.Parry, "F", CombatDirection.Left));
-        Require(parryHost.ParryCount == 1 && parryInput.Events.Contains("click:" + Input.VK_RBUTTON),
-            "a zero-delay parry should commit RT input and increment the parry count");
+        Require(parryHost.ParryCount == 1 && parryInput.Events.Contains("click:" + Input.VK_RBUTTON) &&
+            parryHost.ParryEvidenceRequests.SequenceEqual(new[] { "101:Left" }),
+            "a delivered zero-delay parry should increment RT sent and request one evidence attempt");
         parryScheduler.Dispose();
+
+        var failedParryInput = new FakeInputGateway { FailHeavy = true };
+        failedParryInput.HeldKeys.Add(Input.VK_F);
+        var failedParryHost = new FakeAutomationHost(failedParryInput, parrySettings, 103);
+        var failedParryScheduler = new ActionScheduler(failedParryHost.ShutdownToken);
+        var failedParryExecutor = new ReactionActionExecutor(failedParryHost, failedParryScheduler, new FixedRollSource(0));
+        failedParryExecutor.QueueReaction(new ReactionCommand(103, ReactionCommandKind.Parry, "F", CombatDirection.Right));
+        Require(failedParryHost.ParryCount == 0 && failedParryHost.ParryEvidenceRequests.Count == 0 &&
+            failedParryHost.VisionStates.Contains("PARRY FAILED"),
+            "an undelivered RT must not increment attempts or request evidence");
+        failedParryScheduler.Dispose();
 
         var crushingInput = new FakeInputGateway();
         crushingInput.HeldKeys.Add(Input.VK_F);
@@ -544,6 +800,80 @@ static class Program
         Require(crushingInput.Events.Contains("click:" + Input.VK_LBUTTON),
             "a zero-delay crushing action should commit RB input");
         crushingScheduler.Dispose();
+    }
+
+    private static void ParryConfirmationTrackerConfirmsLightAndHeavyImpacts()
+    {
+        var cases = new[]
+        {
+            (id: "light", direction: CombatDirection.Left, pixels: 900, red: 255, green: 255, blue: 255),
+            (id: "heavy", direction: CombatDirection.Top, pixels: 500, red: 255, green: 225, blue: 110)
+        };
+        foreach (var testCase in cases)
+        {
+            var tracker = new ParryConfirmationTracker();
+            const long sent = 1000;
+            tracker.Start(testCase.id, 7, testCase.direction, sent);
+            ScreenFrame baseline = SyntheticImpactFrame(1920, 1200, 0, 0, 0, 0);
+            Require(tracker.Scan(baseline, sent + 10).Single().Result == ParryConfirmationResult.None,
+                "the first post-RT scan should only seed the baseline");
+            ParryConfirmationScan baselineScan = tracker.Scan(baseline, sent + 50).Single();
+            Require(baselineScan.BaselineEstablished && baselineScan.Baseline == 0,
+                "the second post-RT scan should establish a zero baseline");
+
+            ScreenFrame impact = SyntheticImpactFrame(1920, 1200, testCase.pixels,
+                testCase.red, testCase.green, testCase.blue);
+            ParryConfirmationScan firstBright = tracker.Scan(impact, sent + 150).Single();
+            Require(firstBright.Qualifying && firstBright.Result == ParryConfirmationResult.None,
+                testCase.id + " impact should qualify once without confirming");
+            ParryConfirmationScan secondBright = tracker.Scan(impact, sent + 180).Single();
+            Require(secondBright.Qualifying && secondBright.Result == ParryConfirmationResult.Confirmed,
+                testCase.id + " impact should confirm on two consecutive qualifying scans");
+        }
+    }
+
+    private static void ParryConfirmationTrackerRespectsTimingAndScaledThresholds()
+    {
+        var early = new ParryConfirmationTracker();
+        early.Start("early", 1, CombatDirection.Right, 2000);
+        ScreenFrame clear = SyntheticImpactFrame(1920, 1200, 0, 0, 0, 0);
+        early.Scan(clear, 2010);
+        early.Scan(SyntheticImpactFrame(1920, 1200, 900, 255, 255, 255), 2040);
+        ParryConfirmationScan earlyBright = early.Scan(SyntheticImpactFrame(1920, 1200, 900, 255, 255, 255), 2150).Single();
+        Require(!earlyBright.Qualifying, "a bright scene before 150ms must remain part of the baseline");
+
+        var oneScan = new ParryConfirmationTracker();
+        oneScan.Start("one", 2, CombatDirection.Left, 3000);
+        oneScan.Scan(clear, 3010);
+        oneScan.Scan(clear, 3050);
+        ScreenFrame impact = SyntheticImpactFrame(1920, 1200, 500, 255, 255, 255);
+        Require(oneScan.Scan(impact, 3150).Single().Qualifying,
+            "the first post-window impact scan should qualify");
+        ParryConfirmationScan expired = oneScan.Scan(impact, 3701).Single();
+        Require(expired.Result == ParryConfirmationResult.Unconfirmed,
+            "one qualifying scan must expire as unconfirmed");
+
+        var late = new ParryConfirmationTracker();
+        late.Start("late", 3, CombatDirection.Top, 4000);
+        late.Scan(clear, 4010);
+        late.Scan(clear, 4050);
+        ParryConfirmationScan lateScan = late.Scan(impact, 4651).Single();
+        Require(lateScan.Result == ParryConfirmationResult.Unconfirmed,
+            "a scan after 650ms must not confirm");
+
+        Require(ParryConfirmationTracker.ScaledThreshold(0, 1920, 1200) == 400 &&
+            ParryConfirmationTracker.ScaledThreshold(0, 960, 600) == 100,
+            "confirmation thresholds should scale by screen area");
+        var scaled = new ParryConfirmationTracker();
+        scaled.Start("scaled", 4, CombatDirection.Left, 5000);
+        ScreenFrame smallClear = SyntheticImpactFrame(960, 600, 0, 0, 0, 0);
+        scaled.Scan(smallClear, 5010);
+        scaled.Scan(smallClear, 5050);
+        ScreenFrame smallImpact = SyntheticImpactFrame(960, 600, 110, 255, 225, 110);
+        Require(scaled.Scan(smallImpact, 5150).Single().Qualifying,
+            "a scaled frame should use the scaled bright-pixel threshold");
+        Require(scaled.Scan(smallImpact, 5180).Single().Result == ParryConfirmationResult.Confirmed,
+            "a scaled frame should confirm after two qualifying scans");
     }
 
     private static void DeflectSendsLightOnlyAfterSuccessfulDodge()
@@ -623,6 +953,7 @@ static class Program
         public HashSet<int> HeldKeys { get; } = new();
         public bool FailDeflect { get; set; }
         public bool FailLight { get; set; }
+        public bool FailHeavy { get; set; }
         public bool IsReady => true;
         public bool UsesControllerBridge => false;
         public bool CanSendBulwark => true;
@@ -642,7 +973,7 @@ static class Program
         public bool MouseClick(int virtualKey)
         {
             Events.Add("click:" + virtualKey);
-            return !(FailLight && virtualKey == Input.VK_LBUTTON);
+            return !(FailLight && virtualKey == Input.VK_LBUTTON) && !(FailHeavy && virtualKey == Input.VK_RBUTTON);
         }
         public void Block(bool on) => Events.Add("block:" + on);
         public bool BeginBulwarkStance() { Events.Add("bulwark-down"); return true; }
@@ -676,11 +1007,14 @@ static class Program
         public bool IsYourChar(string name) => ReactionPolicy.IsYourChar(Settings, name);
         public bool HasHeroAction => ReactionPolicy.HasHeroAction(Settings);
         public int ParryCount { get; private set; }
+        public List<string> ParryEvidenceRequests { get; } = new();
         public int AutomationLightRegistrations { get; private set; }
         public List<string> VisionStates { get; } = new();
         public void SetVisionReaction(string state, string reason, string direction = "", int displayMs = 1100) => VisionStates.Add(state);
         public void RecordTelemetry(string name, object data, bool failure = false) { }
         public void IncrementParryCount() => ParryCount++;
+        public void RequestParryEvidence(long candidateId, CombatDirection direction) =>
+            ParryEvidenceRequests.Add(candidateId + ":" + direction);
         public void RegisterAutomationLight() => AutomationLightRegistrations++;
         public void RestoreAutoGuardAfterDirectionalLight() { }
     }

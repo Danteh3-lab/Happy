@@ -238,6 +238,7 @@ h3 { margin-top: 6px; font-size: 0.98rem; letter-spacing: -0.012em; }
 .metric strong.good { color: var(--success); }
 .metric strong.alert { color: var(--accent-hover); }
 .badge { padding: 5px 8px; white-space: nowrap; }
+.badge-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .badge-accent { color: var(--accent-hover); background: var(--accent-soft); border-color: rgba(226, 85, 74, 0.2); }
 .badge-muted { color: var(--text-muted); }
 .badge-success { color: var(--success); background: rgba(61, 207, 142, 0.1); border-color: rgba(61, 207, 142, 0.24); }
