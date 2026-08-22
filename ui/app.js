@@ -65,6 +65,8 @@
     const sourceSlot = Number(state.status.sourceSlot);
     const virtual = String(state.status.virtualState || "OFF").toUpperCase();
     const mode = state.status.mode || "ViGEm";
+    const version = String(state.status.version || "2.0.0");
+    const build = String(state.status.build || "");
     const loop = Number(state.status.loop || 0);
     const orangeParry = state.status.orangeParry === true;
     const visionOverlay = state.status.visionOverlay === true;
@@ -91,6 +93,8 @@
     setMetric("metric-virtual", virtual, virtual === "ON");
     setMetric("metric-loop", loop + " Hz", loop > 0);
     $("#sidebar-input").textContent = mode + " / " + (source === "ON" ? "source " + sourceSlot : "idle");
+    const versionLabel = $("#sidebar-version");
+    if (versionLabel) versionLabel.textContent = "DANBOT / v" + version + (build ? " · " + build : "");
     const rtSent = state.status.rtSent ?? state.status.parryAttempts ?? state.status.parryCount ?? 0;
     $("#parry-count").textContent = String(rtSent) + " RT sent";
     const confirmed = state.status.parriesConfirmed || 0;
@@ -208,7 +212,7 @@
         state.settings[otherName] = false;
       }
       state.settings[control.dataset.setting] = control.type === "checkbox" ? control.checked : control.value;
-      if (["Autoblock", "Legit", "Parry", "Crushing", "Deflect", "BulwarkFallback", "YourHero", "Nohero", "Blackprior", "Unblockables"].includes(control.dataset.setting)) syncLegitChanceControl();
+      if (["Autoblock", "Legit", "Parry", "Crushing", "Deflect", "BulwarkFallback", "YourHero", "Nohero", "Blackprior", "Nuxia", "Unblockables"].includes(control.dataset.setting)) syncLegitChanceControl();
       sendSettings();
     });
   });

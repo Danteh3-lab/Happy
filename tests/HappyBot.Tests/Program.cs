@@ -37,6 +37,7 @@ static class Program
             CroppedSearchDoesNotRepeatEdgePixels();
             CapturePlannerCoversBootstrapAndTrackedRegions();
             ReactionPolicySelectionCoversEAndFWardenPriority();
+            NuxiaTopDeflectIsDisabledForYourHero();
             VisionAnalyzerUsesExplicitBoundsAndPreservesMarkerLoss();
             VisionAnalyzerUsesOriginalRoiAndStrictFlashPixel();
             VisionAnalyzerProfilesStrictFlashAtArmedIndicator();
@@ -435,6 +436,23 @@ static class Program
             "an orange indicator must win before reaction selection");
         Require(ReactionPolicy.OrangeHasPriority(orange with { OrangeIndicator = false }, orangeSettings, true),
             "an active action must remain a priority gate even without orange");
+    }
+
+    private static void NuxiaTopDeflectIsDisabledForYourHero()
+    {
+        Settings nuxia = new() { Autoblock = true, Deflect = true, YourHero = true };
+        nuxia.Chars["Nuxia"] = true;
+        ReactionSelection top = ReactionPolicy.ResolveCommand(Observation(11, CombatDirection.Top), nuxia);
+        ReactionSelection side = ReactionPolicy.ResolveCommand(Observation(12, CombatDirection.Left), nuxia);
+        Require(top.Kind == ReactionCommandKind.None,
+            "Your Hero Nuxia must not select a top deflect");
+        Require(side.Kind == ReactionCommandKind.Deflect,
+            "Your Hero Nuxia must retain side deflects");
+
+        nuxia.Nohero = true;
+        ReactionSelection disabledHero = ReactionPolicy.ResolveCommand(Observation(13, CombatDirection.Top), nuxia);
+        Require(disabledHero.Kind == ReactionCommandKind.Deflect,
+            "Nuxia top deflect should return when Your Hero is disabled");
     }
 
     private static void VisionAnalyzerUsesExplicitBoundsAndPreservesMarkerLoss()

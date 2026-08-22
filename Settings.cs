@@ -14,6 +14,7 @@ public sealed class Settings
     public int GuardHold = 750;
     public int Left;
     public int Right;
+    public int TopDeflect;
     public string AutoDodgeBind = "";
 
     public bool DodgeH;

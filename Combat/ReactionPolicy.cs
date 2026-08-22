@@ -31,7 +31,7 @@ internal static class ReactionPolicy
         }
         if (settings.Crushing)
             return new ReactionSelection(ReactionCommandKind.Crushing, "F");
-        if (settings.Deflect)
+        if (settings.Deflect && !IsNuxiaTopDeflectBlocked(settings, observation.Direction))
             return new ReactionSelection(ReactionCommandKind.Deflect, "F");
         return HasHeroAction(settings)
             ? new ReactionSelection(ReactionCommandKind.Hero, "F")
@@ -52,6 +52,9 @@ internal static class ReactionPolicy
 
     public static bool IsYourChar(Settings settings, string name) =>
         settings.YourHero && !settings.Nohero && settings.Ch(name);
+
+    public static bool IsNuxiaTopDeflectBlocked(Settings settings, CombatDirection direction) =>
+        direction == CombatDirection.Top && IsYourChar(settings, "Nuxia");
 
     public static bool OrangeHasPriority(CombatObservation observation, Settings settings, bool actionBusy) =>
         (settings.Unblockables && observation.OrangeIndicator) || actionBusy;

@@ -55,7 +55,8 @@ internal sealed class ReactionActionExecutor
             bool bulwarkEligible = settings.Autoblock && settings.Parry && settings.Legit &&
                 _host.IsYourChar("Blackprior") && _host.Input.CanSendBulwark;
             bool crushingEligible = settings.Autoblock && settings.Parry && settings.Crushing && settings.Legit;
-            bool deflectEligible = settings.Autoblock && settings.Parry && settings.Deflect && settings.Legit;
+            bool deflectEligible = settings.Autoblock && settings.Parry && settings.Deflect && settings.Legit &&
+                !ReactionPolicy.IsNuxiaTopDeflectBlocked(settings, command.Direction);
             ParryResolution resolution = ParryResolution.Create(command, settings.Legit,
                 settings.LegitParryChance, _parryRolls, settings.BulwarkFallback,
                 bulwarkEligible, crushingEligible, settings.CrushingFallbackChance,
@@ -160,7 +161,7 @@ internal sealed class ReactionActionExecutor
         if (command.Kind == ReactionCommandKind.Deflect)
         {
             int delay = command.Direction == CombatDirection.Left ? _host.Settings.Left
-                : command.Direction == CombatDirection.Right ? _host.Settings.Right : 0;
+                : command.Direction == CombatDirection.Right ? _host.Settings.Right : _host.Settings.TopDeflect;
             await Task.Delay(Math.Max(0, delay), token);
             if (!CanCommitAction(command, token)) return false;
             _scheduler.SetCommitted(true);

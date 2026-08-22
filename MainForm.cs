@@ -24,7 +24,7 @@ public sealed class MainForm : Form
     private const int WmNcLButtonDown = 0xA1;
     private const int HtCaption = 0x2;
 
-    private static readonly string[] EditKeys = { "res1", "res2", "Pause", "Pause1", "Pause2", "Pause3", "ParryDelay", "LegitParryChance", "CrushingFallbackChance", "DeflectFallbackChance", "GuardHold", "Left", "Right", "AutoDodgeBind" };
+    private static readonly string[] EditKeys = { "res1", "res2", "Pause", "Pause1", "Pause2", "Pause3", "ParryDelay", "LegitParryChance", "CrushingFallbackChance", "DeflectFallbackChance", "GuardHold", "Left", "Right", "TopDeflect", "AutoDodgeBind" };
 
     private static readonly string[] CheckKeys =
     {
@@ -73,7 +73,7 @@ public sealed class MainForm : Form
 
     public MainForm()
     {
-        Text = "DANBOT Control Deck";
+        Text = $"DANBOT Control Deck {BuildInfo.Display}";
         BackColor = Color.FromArgb(12, 12, 15);
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.CenterScreen;
@@ -244,6 +244,8 @@ public sealed class MainForm : Form
         TelemetryStatus telemetry = _bot.Telemetry;
         return new
         {
+            version = BuildInfo.Version,
+            build = BuildInfo.Configuration,
             running = _bot.IsRunning,
             error = _bot.LastError,
             marker = _bot.MarkerFound ? "FOUND" : "MISSING",
@@ -297,6 +299,7 @@ public sealed class MainForm : Form
             ["GuardHold"] = s.GuardHold,
             ["Left"] = s.Left,
             ["Right"] = s.Right,
+            ["TopDeflect"] = s.TopDeflect,
             ["AutoDodgeBind"] = s.AutoDodgeBind
         };
         foreach (string key in CheckKeys) values[key] = GetCheck(s, key);
@@ -372,6 +375,7 @@ public sealed class MainForm : Form
             s.GuardHold = Math.Clamp(ReadInt(values, "GuardHold", s.GuardHold), 60, MaxDelayMs);
             s.Left = ClampDelay(ReadInt(values, "Left", s.Left));
             s.Right = ClampDelay(ReadInt(values, "Right", s.Right));
+            s.TopDeflect = ClampDelay(ReadInt(values, "TopDeflect", s.TopDeflect));
             s.AutoDodgeBind = ReadString(values, "AutoDodgeBind", s.AutoDodgeBind).Trim();
             foreach (string key in CheckKeys)
             {
@@ -570,6 +574,7 @@ public sealed class MainForm : Form
             "GuardHold" => s.GuardHold.ToString(),
             "Left" => s.Left.ToString(),
             "Right" => s.Right.ToString(),
+            "TopDeflect" => s.TopDeflect.ToString(),
             "AutoDodgeBind" => s.AutoDodgeBind,
             _ => ""
         };
@@ -592,6 +597,7 @@ public sealed class MainForm : Form
             case "GuardHold": s.GuardHold = Math.Clamp(ToInt(value), 60, MaxDelayMs); break;
             case "Left": s.Left = ClampDelay(ToInt(value)); break;
             case "Right": s.Right = ClampDelay(ToInt(value)); break;
+            case "TopDeflect": s.TopDeflect = ClampDelay(ToInt(value)); break;
             case "AutoDodgeBind": s.AutoDodgeBind = value.Trim(); break;
         }
     }
