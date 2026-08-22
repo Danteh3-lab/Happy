@@ -17,12 +17,20 @@ public sealed class ScreenFrame
     {
         px = 0;
         py = 0;
-        if (Width == 0 || Height == 0) return false;
+        if (Width <= 0 || Height <= 0 || Buffer == null) return false;
 
-        int sx = Math.Clamp((int)Math.Min(x1, x2), 0, Width - 1);
-        int ex = Math.Clamp((int)Math.Max(x1, x2), 0, Width - 1);
-        int sy = Math.Clamp((int)Math.Min(y1, y2), 0, Height - 1);
-        int ey = Math.Clamp((int)Math.Max(y1, y2), 0, Height - 1);
+        int requestedLeft = (int)Math.Min(x1, x2);
+        int requestedRight = (int)Math.Max(x1, x2);
+        int requestedTop = (int)Math.Min(y1, y2);
+        int requestedBottom = (int)Math.Max(y1, y2);
+        if (requestedRight < 0 || requestedTop > Height - 1 ||
+            requestedLeft > Width - 1 || requestedBottom < 0)
+            return false;
+
+        int sx = Math.Clamp(requestedLeft, 0, Width - 1);
+        int ex = Math.Clamp(requestedRight, 0, Width - 1);
+        int sy = Math.Clamp(requestedTop, 0, Height - 1);
+        int ey = Math.Clamp(requestedBottom, 0, Height - 1);
 
         for (int y = sy; y <= ey; y++)
         {
@@ -46,7 +54,22 @@ public sealed class ScreenFrame
     /// <summary>Searches using primary-screen coordinates and returns screen coordinates.</summary>
     public bool ScreenPixelSearch(double x1, double y1, double x2, double y2, int r, int g, int b, int variation, out int px, out int py)
     {
-        if (!PixelSearch(x1 - OriginX, y1 - OriginY, x2 - OriginX, y2 - OriginY, r, g, b, variation, out px, out py))
+        double requestedLeft = Math.Min(x1, x2);
+        double requestedRight = Math.Max(x1, x2);
+        double requestedTop = Math.Min(y1, y2);
+        double requestedBottom = Math.Max(y1, y2);
+        Rectangle frameBounds = new(OriginX, OriginY, Width, Height);
+        if (Width <= 0 || Height <= 0 ||
+            requestedRight < frameBounds.Left || requestedLeft > frameBounds.Right - 1 ||
+            requestedBottom < frameBounds.Top || requestedTop > frameBounds.Bottom - 1)
+        {
+            px = py = 0;
+            return false;
+        }
+
+        if (!PixelSearch(requestedLeft - OriginX, requestedTop - OriginY,
+                requestedRight - OriginX, requestedBottom - OriginY,
+                r, g, b, variation, out px, out py))
             return false;
         px += OriginX;
         py += OriginY;
@@ -101,12 +124,20 @@ public sealed class ScreenFrame
         int count = 0;
         int closestDistance = int.MaxValue;
         int closestR = 0, closestG = 0, closestB = 0;
-        if (Width == 0 || Height == 0) return new ColorProbe(0, -1, -1, "n/a", -1);
+        if (Width <= 0 || Height <= 0 || Buffer == null) return new ColorProbe(0, -1, -1, "n/a", -1);
 
-        int sx = Math.Clamp((int)Math.Min(x1, x2), 0, Width - 1);
-        int ex = Math.Clamp((int)Math.Max(x1, x2), 0, Width - 1);
-        int sy = Math.Clamp((int)Math.Min(y1, y2), 0, Height - 1);
-        int ey = Math.Clamp((int)Math.Max(y1, y2), 0, Height - 1);
+        int requestedLeft = (int)Math.Min(x1, x2);
+        int requestedRight = (int)Math.Max(x1, x2);
+        int requestedTop = (int)Math.Min(y1, y2);
+        int requestedBottom = (int)Math.Max(y1, y2);
+        if (requestedRight < 0 || requestedTop > Height - 1 ||
+            requestedLeft > Width - 1 || requestedBottom < 0)
+            return new ColorProbe(0, -1, -1, "n/a", -1);
+
+        int sx = Math.Clamp(requestedLeft, 0, Width - 1);
+        int ex = Math.Clamp(requestedRight, 0, Width - 1);
+        int sy = Math.Clamp(requestedTop, 0, Height - 1);
+        int ey = Math.Clamp(requestedBottom, 0, Height - 1);
         for (int y = sy; y <= ey; y++)
         {
             int row = y * Stride;
@@ -148,21 +179,37 @@ public static class ScreenCapture
 
     public static ScreenFrame Capture(ScreenFrame reusable, Rectangle region)
     {
+        using var session = new ScreenCaptureSession();
+        return session.Capture(reusable, region);
+    }
+}
+
+/// <summary>
+/// Vision-thread-owned capture resources. Reusing the bitmap and Graphics
+/// surface avoids allocating and tearing down GDI objects on every loop.
+/// </summary>
+public sealed class ScreenCaptureSession : IDisposable
+{
+    private Bitmap _bitmap;
+    private Graphics _graphics;
+    private int _surfaceWidth;
+    private int _surfaceHeight;
+    private bool _disposed;
+
+    public ScreenFrame Capture(ScreenFrame reusable, Rectangle region)
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(ScreenCaptureSession));
         if (region.Width <= 0 || region.Height <= 0)
-        {
             region = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
-        }
 
-        using var bmp = new Bitmap(region.Width, region.Height, PixelFormat.Format32bppArgb);
-        using (var g = Graphics.FromImage(bmp))
-        {
-            g.CopyFromScreen(region.Left, region.Top, 0, 0, region.Size, CopyPixelOperation.SourceCopy);
-        }
+        EnsureSurface(region.Width, region.Height);
+        _graphics.CopyFromScreen(region.Left, region.Top, 0, 0, region.Size, CopyPixelOperation.SourceCopy);
 
-        var data = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        BitmapData data = _bitmap.LockBits(new Rectangle(0, 0, region.Width, region.Height),
+            ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
         try
         {
-            int bytes = data.Stride * data.Height;
+            int bytes = Math.Abs(data.Stride) * data.Height;
             if (reusable == null || reusable.Buffer == null || reusable.Buffer.Length < bytes)
                 reusable = new ScreenFrame { Buffer = new byte[bytes] };
             Marshal.Copy(data.Scan0, reusable.Buffer, 0, bytes);
@@ -175,7 +222,29 @@ public static class ScreenCapture
         }
         finally
         {
-            bmp.UnlockBits(data);
+            _bitmap.UnlockBits(data);
         }
+    }
+
+    private void EnsureSurface(int width, int height)
+    {
+        if (_bitmap != null && width <= _surfaceWidth && height <= _surfaceHeight) return;
+
+        _graphics?.Dispose();
+        _bitmap?.Dispose();
+        _surfaceWidth = Math.Max(width, _surfaceWidth);
+        _surfaceHeight = Math.Max(height, _surfaceHeight);
+        _bitmap = new Bitmap(_surfaceWidth, _surfaceHeight, PixelFormat.Format32bppArgb);
+        _graphics = Graphics.FromImage(_bitmap);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _graphics?.Dispose();
+        _bitmap?.Dispose();
+        _graphics = null;
+        _bitmap = null;
     }
 }

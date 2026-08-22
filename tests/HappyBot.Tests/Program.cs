@@ -34,6 +34,8 @@ static class Program
             FailedLegitDecisionLeavesCandidateAvailableForGuard();
             AutoBlockOffDoesNotArmCandidate();
             FullFrameScreenCoordinatesPreserveRoiDetection();
+            CroppedSearchDoesNotRepeatEdgePixels();
+            CapturePlannerCoversBootstrapAndTrackedRegions();
             ReactionPolicySelectionCoversEAndFWardenPriority();
             VisionAnalyzerUsesExplicitBoundsAndPreservesMarkerLoss();
             VisionAnalyzerUsesOriginalRoiAndStrictFlashPixel();
@@ -361,6 +363,49 @@ static class Program
         ColorProbe probe = frame.ProbeColor(2, 1, 2, 1, 255, 49, 41, 0);
         Require(found && x == 102 && y == 201, "full-frame ROI search must return screen coordinates");
         Require(probe.MatchCount == 1, "ROI telemetry probe must remain scoped to the combat region");
+    }
+
+    private static void CroppedSearchDoesNotRepeatEdgePixels()
+    {
+        var frame = new ScreenFrame
+        {
+            Width = 4,
+            Height = 3,
+            Stride = 16,
+            OriginX = 100,
+            OriginY = 200,
+            Buffer = new byte[48]
+        };
+        int edge = 0;
+        frame.Buffer[edge] = 41;
+        frame.Buffer[edge + 1] = 49;
+        frame.Buffer[edge + 2] = 255;
+
+        bool outside = frame.ScreenPixelSearch(90, 200, 99, 202, 255, 49, 41, 0, out _, out _);
+        bool partial = frame.ScreenPixelSearch(99, 200, 100, 200, 255, 49, 41, 0, out int x, out int y);
+        Require(!outside, "a screen query wholly outside a crop must not clamp to its edge pixel");
+        Require(partial && x == 100 && y == 200, "a partially overlapping query should still scan the valid crop intersection");
+    }
+
+    private static void CapturePlannerCoversBootstrapAndTrackedRegions()
+    {
+        Rectangle screen = new(0, 0, 1920, 1200);
+        Rectangle marker = new(860, 80, 215, 345);
+        Rectangle box = new(670, 300, 150, 210);
+        Rectangle possible = CaptureRegionPlanner.PossibleCombatBounds(marker, 1920.0 / 1920.0, 1200.0 / 1080.0);
+        CapturePlan bootstrap = CaptureRegionPlanner.Build(screen, marker, box, possible,
+            Rectangle.Empty, Rectangle.Empty, Rectangle.Empty, false);
+        Require(bootstrap.Mode == CaptureMode.Bootstrap && !bootstrap.IsFullScreen &&
+            bootstrap.Region.Contains(new Point(600, 500)),
+            "bootstrap capture must include the padded combat area");
+
+        Rectangle active = new(500, 400, 650, 500);
+        Rectangle confirmation = new(600, 800, 350, 250);
+        CapturePlan tracked = CaptureRegionPlanner.Build(screen, marker, box, possible,
+            active, Rectangle.Empty, confirmation, true);
+        Require(tracked.Mode == CaptureMode.Tracked && tracked.Region.Contains(new Point(1100, 850)) &&
+            tracked.Region.Contains(new Point(700, 900)),
+            "tracked capture must include active combat and confirmation regions");
     }
 
     private static void ReactionPolicySelectionCoversEAndFWardenPriority()

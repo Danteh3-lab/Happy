@@ -43,6 +43,11 @@ internal sealed class ParryConfirmationTracker
     private readonly object _sync = new();
     private readonly List<Attempt> _attempts = new();
 
+    public bool HasPending
+    {
+        get { lock (_sync) return _attempts.Count > 0; }
+    }
+
     public void Start(string attemptId, long candidateId, CombatDirection direction, long sentTick)
     {
         if (string.IsNullOrWhiteSpace(attemptId)) return;
@@ -53,7 +58,7 @@ internal sealed class ParryConfirmationTracker
         }
     }
 
-    public IReadOnlyList<ParryConfirmationScan> Scan(ScreenFrame frame, long nowTick)
+    public IReadOnlyList<ParryConfirmationScan> Scan(ScreenFrame frame, long nowTick, Rectangle screenBounds = default)
     {
         lock (_sync)
         {
@@ -62,7 +67,11 @@ internal sealed class ParryConfirmationTracker
         if (frame == null || frame.Width <= 0 || frame.Height <= 0 || frame.Stride == 0 || frame.Buffer == null)
             return Array.Empty<ParryConfirmationScan>();
 
-        Rectangle region = NormalizedRegion(frame.Width, frame.Height);
+        if (screenBounds.Width <= 0 || screenBounds.Height <= 0)
+            screenBounds = new Rectangle(frame.OriginX, frame.OriginY, frame.Width, frame.Height);
+        Rectangle normalized = NormalizedRegion(screenBounds.Width, screenBounds.Height);
+        Rectangle region = new(screenBounds.Left + normalized.Left, screenBounds.Top + normalized.Top,
+            normalized.Width, normalized.Height);
         int brightPixels = CountBrightPixels(frame, region);
         var results = new List<ParryConfirmationScan>();
         lock (_sync)
@@ -91,7 +100,7 @@ internal sealed class ParryConfirmationTracker
                         // Use the higher of the first two scans so a transient
                         // pre-impact glow cannot lower the confirmation bar.
                         attempt.Baseline = Math.Max(attempt.BaselineSamples[0], attempt.BaselineSamples[1]);
-                        attempt.Threshold = ScaledThreshold(attempt.Baseline, frame.Width, frame.Height);
+                        attempt.Threshold = ScaledThreshold(attempt.Baseline, screenBounds.Width, screenBounds.Height);
                         baselineEstablishedNow = true;
                     }
                 }
@@ -136,12 +145,14 @@ internal sealed class ParryConfirmationTracker
 
     internal static int CountBrightPixels(ScreenFrame frame, Rectangle region)
     {
-        Rectangle clipped = Rectangle.Intersect(region, new Rectangle(0, 0, frame.Width, frame.Height));
+        Rectangle frameBounds = new(frame.OriginX, frame.OriginY, frame.Width, frame.Height);
+        Rectangle clipped = Rectangle.Intersect(region, frameBounds);
+        if (clipped.Width <= 0 || clipped.Height <= 0) return 0;
         int count = 0;
-        for (int y = clipped.Top; y < clipped.Bottom; y++)
+        for (int y = clipped.Top - frame.OriginY; y < clipped.Bottom - frame.OriginY; y++)
         {
             int row = y * frame.Stride;
-            for (int x = clipped.Left; x < clipped.Right; x++)
+            for (int x = clipped.Left - frame.OriginX; x < clipped.Right - frame.OriginX; x++)
             {
                 int index = row + x * 4;
                 int blue = frame.Buffer[index];

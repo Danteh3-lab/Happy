@@ -40,6 +40,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
     private readonly object _combatStateSync = new();
     private readonly object _parryEvidenceSync = new();
     private readonly TelemetryRecorder _telemetry = new();
+    private readonly ScreenCaptureSession _captureSession = new();
     private readonly ParryConfirmationTracker _parryConfirmation = new();
     private readonly ReactionCoordinator _reactionCoordinator = new();
     private readonly IInputGateway _input;
@@ -67,6 +68,13 @@ public sealed class BotCore : IAutomationHost, IDisposable
     private int _lastRedMatchCount;
     private string _lastClosestRed = "";
     private int _lastCaptureDurationMs;
+    private CapturePlan _capturePlan;
+    private CaptureMode _captureMode = CaptureMode.FullFallback;
+    private Rectangle _captureRegion;
+    private int _captureFallbackCount;
+    private long _loopRateWindowStartedTick;
+    private int _loopRateWindowFrames;
+    private int _lastVisionDurationMs;
     private readonly OutgoingOrangeGuard _outgoingOrangeGuard = new();
     private OutgoingOrangeGuardResult _outgoingOrangeState = new(false, false, "", false, false, 0, false, false, false);
     private bool _lastSourceHeavyHeld;
@@ -182,6 +190,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
         Stop();
         _actions.Dispose();
         _autoGuard.Dispose();
+        _captureSession.Dispose();
         _telemetry.Dispose();
         _cts.Dispose();
         _paused.Dispose();
@@ -282,10 +291,12 @@ public sealed class BotCore : IAutomationHost, IDisposable
                     sw.Restart();
                     Flash = false;
                     CapturePrimaryFrame();
-                    ScreenWidth = _frame.Width;
-                    ScreenHeight = _frame.Height;
+                    SetScreenDimensions();
+                    long visionStarted = Environment.TickCount64;
                     Calculate();
+                    EnsureCombatRegionCaptured();
                     CombatObservation observation = CaptureCombatObservation();
+                    _lastVisionDurationMs = (int)Math.Max(0, Environment.TickCount64 - visionStarted);
                     ProcessParryEvidence();
                     UpdateVisionTracking();
                     if (!_input.IsReady)
@@ -293,7 +304,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
                         LastError = "Requested ViGEm input is unavailable; reactions are paused.";
                         AbortCombatState("input-unavailable", true);
                         ProcessParryConfirmation();
-                        LoopHz = (int)(1000.0 / Math.Max(1.0, sw.Elapsed.TotalMilliseconds));
+                        UpdateLoopRate(sw.Elapsed.TotalMilliseconds);
                         RecordTelemetryHeartbeat();
                         PublishVision();
                         Sleep(100);
@@ -301,8 +312,12 @@ public sealed class BotCore : IAutomationHost, IDisposable
                     }
                     if (LastError.StartsWith("Requested ViGEm input", StringComparison.Ordinal)) LastError = "";
                     ProcessCombatObservation(observation);
+                    // An RT sent in the current frame creates a new
+                    // confirmation request. Include its screen region before
+                    // taking the first post-action baseline sample.
+                    EnsureConfirmationRegionCaptured();
                     ProcessParryConfirmation();
-                    LoopHz = (int)(1000.0 / Math.Max(1.0, sw.Elapsed.TotalMilliseconds));
+                    UpdateLoopRate(sw.Elapsed.TotalMilliseconds);
                     RecordTelemetryHeartbeat();
                     PublishVision();
                 }
@@ -994,20 +1009,157 @@ public sealed class BotCore : IAutomationHost, IDisposable
             bridge,
             output = new { Input.LastSendResult, Input.LastSendError, Input.InjectedCount },
             loopHz = LoopHz,
-            captureMs = _lastCaptureDurationMs
+            captureMs = _lastCaptureDurationMs,
+            performance = new
+            {
+                captureMs = _lastCaptureDurationMs,
+                visionMs = _lastVisionDurationMs,
+                captureMode = _captureMode.ToString(),
+                captureRegion = _captureRegion,
+                captureFallbacks = _captureFallbackCount
+            }
         });
+    }
+
+    private void SetScreenDimensions()
+    {
+        Rectangle bounds = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
+        ScreenWidth = bounds.Width;
+        ScreenHeight = bounds.Height;
+    }
+
+    private void UpdateLoopRate(double elapsedMilliseconds)
+    {
+        int instantaneous = (int)(1000.0 / Math.Max(1.0, elapsedMilliseconds));
+        long now = Environment.TickCount64;
+        if (_loopRateWindowStartedTick == 0)
+        {
+            _loopRateWindowStartedTick = now;
+            _loopRateWindowFrames = 1;
+            LoopHz = instantaneous;
+            return;
+        }
+
+        _loopRateWindowFrames++;
+        long windowMs = now - _loopRateWindowStartedTick;
+        if (windowMs >= 1000)
+        {
+            LoopHz = (int)Math.Round(_loopRateWindowFrames * 1000.0 / Math.Max(1, windowMs));
+            _loopRateWindowStartedTick = now;
+            _loopRateWindowFrames = 0;
+        }
+        else if (LoopHz <= 0)
+        {
+            LoopHz = instantaneous;
+        }
     }
 
     private void CapturePrimaryFrame()
     {
-        if (!_telemetry.IsRecording)
-        {
-            _frame = ScreenCapture.Capture(_frame);
-            return;
-        }
+        CapturePlan plan = BuildCapturePlan();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        _frame = ScreenCapture.Capture(_frame);
+        try
+        {
+            _frame = _captureSession.Capture(_frame, plan.Region);
+        }
+        catch when (!plan.IsFullScreen)
+        {
+            plan = CapturePlan.Full(System.Windows.Forms.Screen.PrimaryScreen.Bounds);
+            _captureFallbackCount++;
+            _frame = _captureSession.Capture(_frame, plan.Region);
+        }
+        _capturePlan = plan;
+        _captureMode = plan.Mode;
+        _captureRegion = plan.Region;
         _lastCaptureDurationMs = (int)stopwatch.ElapsedMilliseconds;
+    }
+
+    /// <summary>
+    /// The marker can move to a different valid pixel after the initial crop
+    /// was selected. If the newly accepted marker-relative ROI is not inside
+    /// that crop, take one supplemental crop in the same loop. This keeps the
+    /// optimization lossless while retaining a full-screen fallback for any
+    /// unexpected geometry/capture failure.
+    /// </summary>
+    private void EnsureCombatRegionCaptured()
+    {
+        Rectangle screenBounds = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
+        Rectangle required = MarkerFound
+            ? CombatRoiRectangle()
+            : _cachedCandidateGeometry?.CombatRoi ?? Rectangle.Empty;
+        required = Rectangle.Intersect(required, screenBounds);
+        Rectangle frameBounds = new(_frame.OriginX, _frame.OriginY, _frame.Width, _frame.Height);
+        if (required.Width <= 0 || required.Height <= 0 || frameBounds.Contains(required)) return;
+
+        CapturePlan plan = BuildCapturePlan();
+        if (!plan.Region.Contains(required)) plan = CapturePlan.Full(screenBounds);
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            _frame = _captureSession.Capture(_frame, plan.Region);
+        }
+        catch when (!plan.IsFullScreen)
+        {
+            plan = CapturePlan.Full(screenBounds);
+            _captureFallbackCount++;
+            _frame = _captureSession.Capture(_frame, plan.Region);
+        }
+        _capturePlan = plan;
+        _captureMode = plan.Mode;
+        _captureRegion = plan.Region;
+        _lastCaptureDurationMs += (int)stopwatch.ElapsedMilliseconds;
+    }
+
+    private void EnsureConfirmationRegionCaptured()
+    {
+        if (!_parryConfirmation.HasPending) return;
+        Rectangle screenBounds = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
+        Rectangle normalized = ParryConfirmationTracker.NormalizedRegion(screenBounds.Width, screenBounds.Height);
+        Rectangle required = new(screenBounds.Left + normalized.Left, screenBounds.Top + normalized.Top,
+            normalized.Width, normalized.Height);
+        Rectangle frameBounds = new(_frame.OriginX, _frame.OriginY, _frame.Width, _frame.Height);
+        if (frameBounds.Contains(required)) return;
+
+        CapturePlan plan = BuildCapturePlan();
+        if (!plan.Region.Contains(required)) plan = CapturePlan.Full(screenBounds);
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            _frame = _captureSession.Capture(_frame, plan.Region);
+        }
+        catch when (!plan.IsFullScreen)
+        {
+            plan = CapturePlan.Full(screenBounds);
+            _captureFallbackCount++;
+            _frame = _captureSession.Capture(_frame, plan.Region);
+        }
+        _capturePlan = plan;
+        _captureMode = plan.Mode;
+        _captureRegion = plan.Region;
+        _lastCaptureDurationMs += (int)stopwatch.ElapsedMilliseconds;
+    }
+
+    private CapturePlan BuildCapturePlan()
+    {
+        Rectangle screenBounds = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
+        Rectangle markerScan = Rectangle.FromLTRB((int)Math.Floor(X8), (int)Math.Floor(Y8),
+            (int)Math.Ceiling(X9), (int)Math.Ceiling(Y9));
+        Rectangle boxScan = Rectangle.FromLTRB((int)Math.Floor(X18), (int)Math.Floor(Y18),
+            (int)Math.Ceiling(X19), (int)Math.Ceiling(Y19));
+        Rectangle possibleCombat = CaptureRegionPlanner.PossibleCombatBounds(markerScan, B55, Y55);
+        Rectangle activeCombat = MarkerFound ? CombatRoiRectangle() : Rectangle.Empty;
+        Rectangle cachedCombat = _cachedCandidateGeometry?.CombatRoi ?? Rectangle.Empty;
+        Rectangle confirmation = Rectangle.Empty;
+        if (_parryConfirmation.HasPending)
+        {
+            Rectangle local = ParryConfirmationTracker.NormalizedRegion(screenBounds.Width, screenBounds.Height);
+            confirmation = new Rectangle(screenBounds.Left + local.Left, screenBounds.Top + local.Top,
+                local.Width, local.Height);
+        }
+
+        bool tracked = MarkerFound && markerScan.Width > 0 && markerScan.Height > 0;
+        return CaptureRegionPlanner.Build(screenBounds, markerScan, boxScan, possibleCombat,
+            activeCombat, cachedCombat, confirmation, tracked);
     }
 
     private void RequestParryEvidence(long candidateId, CombatDirection direction)
@@ -1053,7 +1205,8 @@ public sealed class BotCore : IAutomationHost, IDisposable
 
     private void ProcessParryConfirmation()
     {
-        IReadOnlyList<ParryConfirmationScan> scans = _parryConfirmation.Scan(_frame, Environment.TickCount64);
+        IReadOnlyList<ParryConfirmationScan> scans = _parryConfirmation.Scan(_frame, Environment.TickCount64,
+            System.Windows.Forms.Screen.PrimaryScreen.Bounds);
         foreach (ParryConfirmationScan scan in scans)
         {
             if (_telemetry.IsRecording)
@@ -1068,7 +1221,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
                         baseline = scan.Baseline,
                         threshold = scan.Threshold,
                         region = scan.Region,
-                        resolution = new { width = _frame.Width, height = _frame.Height }
+                        resolution = new { width = ScreenWidth, height = ScreenHeight }
                     });
                 }
                 RecordTelemetry("parry-confirmation-scan", new
@@ -1084,7 +1237,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
                     qualifying = scan.Qualifying,
                     consecutiveQualifying = scan.ConsecutiveQualifying,
                     region = scan.Region,
-                    resolution = new { width = _frame.Width, height = _frame.Height }
+                    resolution = new { width = ScreenWidth, height = ScreenHeight }
                 });
             }
 
@@ -1266,8 +1419,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
     {
         bool wasFound = MarkerFound;
         int oldAx = Ax, oldAy = Ay, oldBox = Box;
-        ScreenWidth = _frame.Width;
-        ScreenHeight = _frame.Height;
+        SetScreenDimensions();
 
         int rawBox = CurrentPx(X18, Y18, X19, Y19, 5, 131, 65, 0, out _, out _) ? 1 : 2;
         bool rawFound = CurrentPx(X8, Y8, X9, Y9, 5, 131, 65, 0, out int rawX, out int rawY);

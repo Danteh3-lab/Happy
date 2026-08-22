@@ -85,9 +85,9 @@ internal sealed class VisionAnalyzer
             ? default
             : FindFlashCluster(frame, request.TemporalBaseline.ExcludedIndicatorRegion);
         TemporalFlashMetric temporalFlash = CountTemporalFlash(frame, request.TemporalBaseline);
-        bool strictFlash = frame.ScreenPixelSearch(roi.Left, roi.Top, roi.Right - 1, roi.Bottom - 1,
-            255, 154, 141, 0, out int strictFlashX, out int strictFlashY);
-        Point strictFlashPoint = strictFlash ? new Point(strictFlashX, strictFlashY) : new Point(-1, -1);
+        LiveSignalMetric live = ScanLiveSignals(frame, roi, request.IncludeTelemetryProbe);
+        bool strictFlash = live.StrictFlash;
+        Point strictFlashPoint = live.StrictFlashPoint;
         if (candidateGrace)
         {
             VisionScanMode mode = markerGrace ? VisionScanMode.MarkerGrace : VisionScanMode.AnchorGrace;
@@ -104,24 +104,16 @@ internal sealed class VisionAnalyzer
                 new ColorProbe(0, -1, -1, "n/a", -1));
         }
 
-        bool red = frame.ScreenPixelSearch(roi.Left, roi.Top, roi.Right - 1, roi.Bottom - 1,
-            255, 49, 41, 2, out int indicatorX, out int indicatorY);
-        bool darkRed = frame.ScreenPixelSearch(roi.Left, roi.Top, roi.Right - 1, roi.Bottom - 1,
-            255, 41, 34, 0, out _, out _);
-        bool orange = frame.ScreenPixelSearch(roi.Left, roi.Top, roi.Right - 1, roi.Bottom - 1,
-            246, 98, 8, 0, out _, out _);
-        bool orangeFeint = frame.ScreenPixelSearch(roi.Left, roi.Top, roi.Right - 1, roi.Bottom - 1,
-            255, 34, 28, 3, out _, out _);
+        bool red = live.Red;
+        bool darkRed = live.DarkRed;
+        bool orange = live.Orange;
+        bool orangeFeint = live.OrangeFeint;
 
-        Point indicator = red ? new Point(indicatorX, indicatorY) : new Point(-1, -1);
+        Point indicator = live.Indicator;
         CombatDirection direction = red
             ? ClassifyDirection(indicator.X, indicator.Y, request)
             : CombatDirection.None;
-        ColorProbe probe = request.IncludeTelemetryProbe
-            ? frame.ProbeColor(roi.Left - frame.OriginX, roi.Top - frame.OriginY,
-                roi.Right - 1 - frame.OriginX, roi.Bottom - 1 - frame.OriginY,
-                255, 49, 41, 2)
-            : new ColorProbe(0, -1, -1, "n/a", -1);
+        ColorProbe probe = live.RedProbe;
 
         return new VisionAnalysisResult(
             new CombatObservation(request.TimestampMs, true, request.Anchor, request.Box, roi, red,
@@ -131,6 +123,99 @@ internal sealed class VisionAnalyzer
                 VisionScanMode.Tracked, configuredRoi, 0, flashCluster.MatchCount,
                 temporalFlash.MatchCount, temporalFlash.LargestCluster, 0, strictFlashPoint,
                 indicatorFlashCluster.MatchCount, indicatorFlashCluster.Bounds), probe);
+    }
+
+    /// <summary>
+    /// Performs the live color predicates in one row-major pass.  The old
+    /// implementation walked the same combat ROI once per color, which made
+    /// capture/vision cost scale with the number of indicators.  Each predicate
+    /// still records its first match, so direction classification and strict
+    /// flash behavior remain unchanged.
+    /// </summary>
+    private static LiveSignalMetric ScanLiveSignals(ScreenFrame frame, Rectangle screenRegion,
+        bool includeProbe)
+    {
+        if (frame.Width <= 0 || frame.Height <= 0 || frame.Buffer == null)
+            return LiveSignalMetric.Empty;
+
+        Rectangle frameBounds = new(frame.OriginX, frame.OriginY, frame.Width, frame.Height);
+        Rectangle region = Rectangle.Intersect(screenRegion, frameBounds);
+        if (region.Width <= 0 || region.Height <= 0)
+            return LiveSignalMetric.Empty;
+
+        bool red = false, darkRed = false, strictFlash = false, orange = false, orangeFeint = false;
+        Point indicator = new(-1, -1);
+        Point strictFlashPoint = new(-1, -1);
+        int probeCount = 0;
+        int firstProbeX = -1, firstProbeY = -1;
+        int closestDistance = int.MaxValue;
+        int closestR = 0, closestG = 0, closestB = 0;
+        for (int y = region.Top; y < region.Bottom; y++)
+        {
+            int localY = y - frame.OriginY;
+            int row = localY * frame.Stride;
+            for (int x = region.Left; x < region.Right; x++)
+            {
+                int localX = x - frame.OriginX;
+                int offset = row + localX * 4;
+                int pixelB = frame.Buffer[offset];
+                int pixelG = frame.Buffer[offset + 1];
+                int pixelR = frame.Buffer[offset + 2];
+
+                if (includeProbe)
+                {
+                    int distance = Math.Abs(pixelR - 255) + Math.Abs(pixelG - 49) + Math.Abs(pixelB - 41);
+                    if (distance < closestDistance)
+                    {
+                        closestDistance = distance;
+                        closestR = pixelR;
+                        closestG = pixelG;
+                        closestB = pixelB;
+                    }
+                    if (probeCount < 100 && Math.Abs(pixelR - 255) <= 2 &&
+                        Math.Abs(pixelG - 49) <= 2 && Math.Abs(pixelB - 41) <= 2)
+                    {
+                        if (probeCount == 0)
+                        {
+                            // ProbeColor reports coordinates local to the frame.
+                            firstProbeX = localX;
+                            firstProbeY = localY;
+                        }
+                        probeCount++;
+                    }
+                }
+
+                if (!red && Math.Abs(pixelR - 255) <= 2 && Math.Abs(pixelG - 49) <= 2 &&
+                    Math.Abs(pixelB - 41) <= 2)
+                {
+                    red = true;
+                    indicator = new Point(x, y);
+                }
+                if (!darkRed && pixelR == 255 && pixelG == 41 && pixelB == 34) darkRed = true;
+                if (!strictFlash && pixelR == 255 && pixelG == 154 && pixelB == 141)
+                {
+                    strictFlash = true;
+                    strictFlashPoint = new Point(x, y);
+                }
+                if (!orange && pixelR == 246 && pixelG == 98 && pixelB == 8) orange = true;
+                if (!orangeFeint && Math.Abs(pixelR - 255) <= 3 && Math.Abs(pixelG - 34) <= 3 &&
+                    Math.Abs(pixelB - 28) <= 3) orangeFeint = true;
+
+                if (!includeProbe && red && darkRed && strictFlash && orange && orangeFeint)
+                    return new LiveSignalMetric(red, indicator, darkRed, strictFlash,
+                        strictFlashPoint, orange, orangeFeint,
+                        new ColorProbe(probeCount, firstProbeX, firstProbeY,
+                            $"{closestR},{closestG},{closestB}", closestDistance));
+            }
+        }
+
+        ColorProbe probe = includeProbe
+            ? new ColorProbe(probeCount, firstProbeX, firstProbeY,
+                closestDistance == int.MaxValue ? "n/a" : $"{closestR},{closestG},{closestB}",
+                closestDistance == int.MaxValue ? -1 : closestDistance)
+            : new ColorProbe(0, -1, -1, "n/a", -1);
+        return new LiveSignalMetric(red, indicator, darkRed, strictFlash,
+            strictFlashPoint, orange, orangeFeint, probe);
     }
 
     private static VisionAnalysisResult Empty(ScreenFrame frame, VisionScanRequest request,
@@ -265,6 +350,20 @@ internal sealed class VisionAnalyzer
 
     /// <summary>Calibration-only tolerant peach-colour measure.</summary>
     private readonly record struct FlashClusterMetric(int MatchCount, Rectangle Bounds);
+
+    private readonly record struct LiveSignalMetric(
+        bool Red,
+        Point Indicator,
+        bool DarkRed,
+        bool StrictFlash,
+        Point StrictFlashPoint,
+        bool Orange,
+        bool OrangeFeint,
+        ColorProbe RedProbe)
+    {
+        internal static LiveSignalMetric Empty => new(false, new Point(-1, -1), false, false,
+            new Point(-1, -1), false, false, new ColorProbe(0, -1, -1, "n/a", -1));
+    }
 
     private static CombatDirection ClassifyDirection(int x, int y, VisionScanRequest request)
     {
