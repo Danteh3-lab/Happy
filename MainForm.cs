@@ -18,9 +18,6 @@ public sealed class MainForm : Form
         (0x0010, "Start"), (0x0020, "Back"), (0x0040, "LS"), (0x0080, "RS"),
         (0x0100, "LB"), (0x0200, "RB"), (0x1000, "A"), (0x2000, "B"), (0x4000, "X"), (0x8000, "Y")
     };
-    private int _prevLeftDeflect;
-    private int _prevRightDeflect;
-    private bool _peacekeeperApplied;
     private const int WmNcLButtonDown = 0xA1;
     private const int HtCaption = 0x2;
 
@@ -51,7 +48,7 @@ public sealed class MainForm : Form
     };
 
     private readonly BotCore _bot = new();
-    private readonly ProfileStore _profiles = new(AppContext.BaseDirectory);
+    private readonly ProfileStore _profiles = ProfileStore.ForApplication();
     private readonly KeyboardHook _hook;
     private readonly WebView2 _webView;
     private readonly VisionOverlayForm _visionOverlay;
@@ -91,7 +88,10 @@ public sealed class MainForm : Form
             s.Res2 = screen.Height.ToString();
         });
         _editorSettings = _bot.S.Clone();
-        LoadProfileIntoEditor(ProfileStore.DefaultProfileName);
+        string startupProfile = _profiles.ReadActiveProfile();
+        if (!ProfileNames().Contains(startupProfile, StringComparer.OrdinalIgnoreCase))
+            startupProfile = ProfileStore.DefaultProfileName;
+        LoadProfileIntoEditor(startupProfile);
         ApplyResolution(screen.Width, screen.Height);
 
         _visionOverlay = new VisionOverlayForm(_bot.GetVisionSnapshot, _bot.GetOverlayFeatures);
@@ -186,7 +186,7 @@ public sealed class MainForm : Form
                     OnSave();
                     break;
                 case "load":
-                    OnLoad();
+                    OnLoad(false, false);
                     break;
                 case "apply":
                     OnApply();
@@ -194,10 +194,13 @@ public sealed class MainForm : Form
                 case "profile-select":
                     OnProfileSelect(
                         root.TryGetProperty("name", out JsonElement profileName) ? profileName.GetString() ?? "" : "",
-                        root.TryGetProperty("discard", out JsonElement discard) && discard.ValueKind == JsonValueKind.True);
+                        root.TryGetProperty("discard", out JsonElement discard) && discard.ValueKind == JsonValueKind.True,
+                        root.TryGetProperty("draftDirty", out JsonElement selectDraftDirty) && selectDraftDirty.ValueKind == JsonValueKind.True);
                     break;
                 case "profile-load":
-                    OnLoad();
+                    OnLoad(
+                        root.TryGetProperty("discard", out JsonElement loadDiscard) && loadDiscard.ValueKind == JsonValueKind.True,
+                        root.TryGetProperty("draftDirty", out JsonElement loadDraftDirty) && loadDraftDirty.ValueKind == JsonValueKind.True);
                     break;
                 case "profile-save":
                     OnSave();
@@ -206,7 +209,10 @@ public sealed class MainForm : Form
                     OnProfileSaveAs(root.TryGetProperty("name", out JsonElement saveAsName) ? saveAsName.GetString() ?? "" : "");
                     break;
                 case "profile-delete":
-                    OnProfileDelete(root.TryGetProperty("name", out JsonElement deleteName) ? deleteName.GetString() ?? "" : "");
+                    OnProfileDelete(
+                        root.TryGetProperty("name", out JsonElement deleteName) ? deleteName.GetString() ?? "" : "",
+                        root.TryGetProperty("discard", out JsonElement deleteDiscard) && deleteDiscard.ValueKind == JsonValueKind.True,
+                        root.TryGetProperty("draftDirty", out JsonElement deleteDraftDirty) && deleteDraftDirty.ValueKind == JsonValueKind.True);
                     break;
                 case "howto":
                     SendDialog("How to use", HowToText, "SETUP GUIDE");
@@ -415,29 +421,8 @@ public sealed class MainForm : Form
         }
 
         NormalizeHeroSelection(editor);
-        ApplyPeacekeeperSetting(editor, values.TryGetProperty("Peacekeeper", out _));
         _editorSettings = editor;
         _profileDirty = true;
-    }
-
-    private void ApplyPeacekeeperSetting(Settings settings, bool wasProvided)
-    {
-        if (!wasProvided) return;
-        bool peacekeeperOn = settings.Ch("Peacekeeper");
-        if (peacekeeperOn && !_peacekeeperApplied)
-        {
-            _prevLeftDeflect = settings.Left;
-            _prevRightDeflect = settings.Right;
-            settings.Left = PeacekeeperDeflectDelayMs;
-            settings.Right = PeacekeeperDeflectDelayMs;
-            _peacekeeperApplied = true;
-        }
-        else if (!peacekeeperOn && _peacekeeperApplied)
-        {
-            settings.Left = _prevLeftDeflect;
-            settings.Right = _prevRightDeflect;
-            _peacekeeperApplied = false;
-        }
     }
 
     private static int ClampDelay(int value) => Math.Clamp(value, 0, MaxDelayMs);
@@ -562,15 +547,21 @@ public sealed class MainForm : Form
         SendToast("Settings applied.", "success");
     }
 
-    private void OnLoad()
+    private void OnLoad(bool discard, bool draftDirty)
     {
+        if ((_profileDirty || draftDirty) && !discard)
+        {
+            SendStatus();
+            SendToast("Discard unsaved profile changes before loading.", "error");
+            return;
+        }
         LoadProfileIntoEditor(_activeProfile);
         SendSettings();
         SendStatus();
         SendToast($"Profile loaded: {_activeProfile}.", "success");
     }
 
-    private void OnProfileSelect(string profileName, bool discard)
+    private void OnProfileSelect(string profileName, bool discard, bool draftDirty)
     {
         string normalized;
         try
@@ -586,7 +577,7 @@ public sealed class MainForm : Form
             return;
         }
 
-        if (_profileDirty && !discard)
+        if ((_profileDirty || draftDirty) && !discard)
         {
             SendToast("Discard unsaved profile changes before switching.", "error");
             SendStatus();
@@ -624,13 +615,19 @@ public sealed class MainForm : Form
         }
     }
 
-    private void OnProfileDelete(string profileName)
+    private void OnProfileDelete(string profileName, bool discard, bool draftDirty)
     {
         try
         {
             string normalized = ProfileStore.NormalizeProfileName(profileName);
             if (normalized.Equals(ProfileStore.DefaultProfileName, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("The Default profile cannot be deleted.");
+            if ((_profileDirty || draftDirty) && !discard)
+            {
+                SendStatus();
+                SendToast("Discard unsaved profile changes before deleting.", "error");
+                return;
+            }
             _profiles.Delete(normalized);
             if (_activeProfile.Equals(normalized, StringComparison.OrdinalIgnoreCase))
                 LoadProfileIntoEditor(ProfileStore.DefaultProfileName);
@@ -665,27 +662,49 @@ public sealed class MainForm : Form
 
         NormalizeHeroSelection(loaded);
         _activeProfile = normalized;
-        _peacekeeperApplied = false;
-        ApplyPeacekeeperSetting(loaded, true);
         _editorSettings = loaded;
         _profileDirty = false;
+        PersistActiveProfile();
     }
 
     private void SaveProfile(string profileName)
     {
         string normalized = ProfileStore.NormalizeProfileName(profileName);
         Settings s = _editorSettings;
-        foreach (string key in EditKeys) _profiles.Write(normalized, key, GetEdit(s, key));
-        foreach (string key in CheckKeys) _profiles.Write(normalized, key, GetCheck(s, key) ? "1" : "0");
+        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string key in EditKeys) values[key] = GetEdit(s, key);
+        foreach (string key in CheckKeys) values[key] = GetCheck(s, key) ? "1" : "0";
+        _profiles.WriteAll(normalized, values);
         _activeProfile = normalized;
         _profileDirty = false;
+        PersistActiveProfile();
+    }
+
+    private void PersistActiveProfile()
+    {
+        try
+        {
+            _profiles.WriteActiveProfile(_activeProfile);
+        }
+        catch
+        {
+            // Profile selection should remain usable even if metadata cannot be written.
+        }
     }
 
     private void CommitEditorSettings()
     {
         Settings snapshot = _editorSettings.Clone();
+        ApplyPeacekeeperRuntimeOverride(snapshot);
         _bot.UpdateSettings(s => s.CopyFrom(snapshot));
-        _bot.OrangeParry = snapshot.OrangeParry;
+        _bot.OrangeParry = _editorSettings.OrangeParry;
+    }
+
+    private static void ApplyPeacekeeperRuntimeOverride(Settings settings)
+    {
+        if (!settings.Ch("Peacekeeper")) return;
+        settings.Left = PeacekeeperDeflectDelayMs;
+        settings.Right = PeacekeeperDeflectDelayMs;
     }
 
     private static string GetEdit(Settings s, string key)

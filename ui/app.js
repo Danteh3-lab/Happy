@@ -5,6 +5,10 @@
   const state = { settings: {}, status: {} };
   let hydrating = false;
   let profileHighlighted = -1;
+  let profileRenderedNames = [];
+  let profileRenderedActive = "";
+  let profileDraftDirty = false;
+  let profileAwaitingClean = false;
   let profileTypeahead = "";
   let profileTypeaheadTimer = 0;
   let modalCallback = null;
@@ -59,7 +63,14 @@
   }
 
   function updateStatus(status) {
-    state.status = status || {};
+    const incomingStatus = status || {};
+    if (profileAwaitingClean && incomingStatus.profileDirty === false) {
+      profileDraftDirty = false;
+      profileAwaitingClean = false;
+    }
+    state.status = Object.assign({}, incomingStatus, {
+      profileDirty: profileDraftDirty || incomingStatus.profileDirty === true
+    });
     const running = Boolean(state.status.running);
     const error = state.status.error || "";
     const marker = String(state.status.marker || "MISSING").toUpperCase();
@@ -85,11 +96,7 @@
       ? state.status.profiles
       : ["Default"];
     renderProfileSelect(profiles, profileName);
-    const profileState = $("#profile-state");
-    if (profileState) {
-      profileState.textContent = profileName + (profileDirty ? " · unsaved" : " · saved");
-      profileState.classList.toggle("dirty", profileDirty);
-    }
+    renderProfileState(profileName, profileDirty);
 
     const top = $("#top-runtime");
     top.innerHTML = '<span class="status-dot ' + (running ? "green" : "") + '"></span> ' + (running ? "RUNNING" : "STANDBY");
@@ -162,6 +169,25 @@
     return $$("#profile-select-menu [role=option]");
   }
 
+  function renderProfileState(profileName, dirty) {
+    const profileState = $("#profile-state");
+    if (!profileState) return;
+    profileState.textContent = profileName + (dirty ? " · unsaved" : " · saved");
+    profileState.classList.toggle("dirty", dirty);
+  }
+
+  function markProfileDirty() {
+    profileDraftDirty = true;
+    profileAwaitingClean = false;
+    state.status = Object.assign({}, state.status, { profileDirty: true });
+    renderProfileState(String(state.status.profile || "Default"), true);
+  }
+
+  function postProfileMutation(type, extra) {
+    profileAwaitingClean = true;
+    post(type, extra);
+  }
+
   function renderProfileSelect(profiles, activeName) {
     const root = $("#profile-select");
     const menu = $("#profile-select-menu");
@@ -169,32 +195,50 @@
     const trigger = $("#profile-select-trigger");
     if (!root || !menu || !value || !trigger) return;
 
-    const names = profiles.map((name) => String(name)).filter((name, index, all) => all.indexOf(name) === index);
-    menu.replaceChildren();
-    names.forEach((name, index) => {
-      const option = document.createElement("div");
-      option.className = "profile-select-option";
-      option.id = "profile-option-" + index;
-      option.setAttribute("role", "option");
-      option.dataset.profile = name;
-      option.textContent = name;
-      option.setAttribute("aria-selected", name.toLowerCase() === String(activeName).toLowerCase() ? "true" : "false");
-      option.addEventListener("pointerenter", () => {
-        const index = profileOptions().indexOf(option);
-        if (index >= 0) highlightProfile(index, false);
-      });
-      option.addEventListener("click", (event) => {
-        event.preventDefault();
-        requestProfileSelection(name);
-      });
-      menu.appendChild(option);
+    const names = [];
+    const seen = new Set();
+    profiles.forEach((profile) => {
+      const name = String(profile);
+      const key = name.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      names.push(name);
     });
+    const activeKey = String(activeName).toLowerCase();
+    const listChanged = names.length !== profileRenderedNames.length || names.some((name, index) => name !== profileRenderedNames[index]);
+    const activeChanged = activeKey !== profileRenderedActive.toLowerCase();
 
-    const activeIndex = names.findIndex((name) => name.toLowerCase() === String(activeName).toLowerCase());
+    if (listChanged) {
+      menu.replaceChildren();
+      names.forEach((name, index) => {
+        const option = document.createElement("div");
+        option.className = "profile-select-option";
+        option.id = "profile-option-" + index;
+        option.setAttribute("role", "option");
+        option.dataset.profile = name;
+        option.textContent = name;
+        option.addEventListener("pointerenter", () => {
+          const optionIndex = profileOptions().indexOf(option);
+          if (optionIndex >= 0) highlightProfile(optionIndex, false);
+        });
+        option.addEventListener("click", (event) => {
+          event.preventDefault();
+          requestProfileSelection(name);
+        });
+        menu.appendChild(option);
+      });
+      profileRenderedNames = names;
+      profileHighlighted = 0;
+    }
+
+    const activeIndex = names.findIndex((name) => name.toLowerCase() === activeKey);
     const safeIndex = activeIndex >= 0 ? activeIndex : 0;
-    profileHighlighted = safeIndex;
+    if (listChanged || activeChanged) profileHighlighted = safeIndex;
+    profileRenderedActive = activeName;
     value.textContent = names[safeIndex] || "Default";
-    trigger.setAttribute("aria-activedescendant", "");
+    profileOptions().forEach((option) => {
+      option.setAttribute("aria-selected", option.dataset.profile.toLowerCase() === activeKey ? "true" : "false");
+    });
     highlightProfile(profileHighlighted, false);
   }
 
@@ -252,11 +296,11 @@
         "Discard profile changes?",
         "Unsaved changes in " + current + " will be discarded before loading " + name + ".",
         "Discard",
-        () => post("profile-select", { name, discard: true })
+        () => postProfileMutation("profile-select", { name, discard: true, draftDirty: true })
       );
       return;
     }
-    post("profile-select", { name, discard: false });
+    postProfileMutation("profile-select", { name, discard: false, draftDirty: false });
   }
 
   function showDialog(title, body, eyebrow) {
@@ -339,9 +383,9 @@
     if (action === "test") return post("test");
     if (action === "resolution") return post("resolution");
     if (action === "save") return post("save");
-    if (action === "load") return post("load");
-    if (action === "profile-load") return post("profile-load");
-    if (action === "profile-save") return post("profile-save");
+    if (action === "load") return requestProfileLoad();
+    if (action === "profile-load") return requestProfileLoad();
+    if (action === "profile-save") return postProfileMutation("profile-save");
     if (action === "profile-save-as") {
       showInputDialog(
         "Save profile as",
@@ -357,10 +401,10 @@
               "Overwrite profile?",
               "A profile named " + name + " already exists. Replace its saved settings?",
               "Overwrite",
-              () => post("profile-save-as", { name })
+              () => postProfileMutation("profile-save-as", { name })
             );
           } else {
-            post("profile-save-as", { name });
+            postProfileMutation("profile-save-as", { name });
           }
         }
       );
@@ -369,11 +413,12 @@
     if (action === "profile-delete") {
       const name = state.status.profile || "Default";
       if (name.toLowerCase() === "default") return showToast("The Default profile cannot be deleted.", "error");
+      const draftDirty = state.status.profileDirty === true;
       showConfirmDialog(
         "Delete profile?",
-        "Delete " + name + " and its saved settings? This cannot be undone.",
+        "Delete " + name + " and its saved settings?" + (draftDirty ? " Unsaved changes will also be discarded." : "") + " This cannot be undone.",
         "Delete",
-        () => post("profile-delete", { name })
+        () => postProfileMutation("profile-delete", { name, discard: draftDirty, draftDirty })
       );
       return;
     }
@@ -416,6 +461,7 @@
       }
       state.settings[control.dataset.setting] = control.type === "checkbox" ? control.checked : control.value;
       if (["Autoblock", "Legit", "Parry", "Crushing", "Deflect", "BulwarkFallback", "YourHero", "Nohero", "Blackprior", "Nuxia", "Unblockables"].includes(control.dataset.setting)) syncLegitChanceControl();
+      markProfileDirty();
       sendSettings();
     });
   });
@@ -460,6 +506,18 @@
     document.addEventListener("pointerdown", (event) => {
       if (!profileSelect.contains(event.target)) setProfileOpen(false);
     });
+  }
+
+  function requestProfileLoad() {
+    const profileName = String(state.status.profile || "Default");
+    const draftDirty = state.status.profileDirty === true;
+    if (!draftDirty) return postProfileMutation("profile-load", { discard: false, draftDirty: false });
+    showConfirmDialog(
+      "Discard profile changes?",
+      "Unsaved changes in " + profileName + " will be discarded and the saved profile will be loaded.",
+      "Discard",
+      () => postProfileMutation("profile-load", { discard: true, draftDirty: true })
+    );
   }
   $(".titlebar").addEventListener("pointerdown", (event) => {
     if (!event.target.closest("button")) post("drag");

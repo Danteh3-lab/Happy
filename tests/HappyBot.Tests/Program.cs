@@ -989,6 +989,7 @@ static class Program
     private static void ProfileStoreRoundTripsAndProtectsPaths()
     {
         string root = Path.Combine(Path.GetTempPath(), "HappyBot.ProfileTests", Guid.NewGuid().ToString("N"));
+        string readOnlyFallbackPath = Path.Combine(root, "legacy", "Profiles", "Read Only Legacy.ini");
         Directory.CreateDirectory(root);
         try
         {
@@ -997,10 +998,17 @@ static class Program
                 "a new profile store should expose Default");
 
             store.Write(ProfileStore.DefaultProfileName, "Parry", "1");
+            store.Write(ProfileStore.DefaultProfileName, "HoldButton", "LT");
             store.Write("Side Guard", "Left", "17");
             store.Write("Side Guard", "Right", "23");
             Require(store.Read(ProfileStore.DefaultProfileName, "Parry") == "1",
                 "Default should use the legacy Config.ini path");
+            store.WriteAll(ProfileStore.DefaultProfileName, new Dictionary<string, string>
+            {
+                ["Parry"] = "0"
+            });
+            Require(store.Read(ProfileStore.DefaultProfileName, "Parry") == "0" && store.Read(ProfileStore.DefaultProfileName, "HoldButton") == "LT",
+                "atomic profile saves should update known keys without dropping unrelated settings");
             Require(store.Read("Side Guard", "Left") == "17" && store.Read("Side Guard", "Right") == "23",
                 "named profiles should round-trip independent values");
             Require(store.ListProfiles().SequenceEqual(new[] { "Default", "Side Guard" }),
@@ -1018,9 +1026,40 @@ static class Program
             store.Delete("Side Guard");
             Require(store.ListProfiles().SequenceEqual(new[] { ProfileStore.DefaultProfileName }),
                 "deleted profiles should disappear from the list");
+
+            string legacyRoot = Path.Combine(root, "legacy");
+            string stableRoot = Path.Combine(root, "stable");
+            var legacyStore = new ProfileStore(legacyRoot);
+            legacyStore.Write(ProfileStore.DefaultProfileName, "Parry", "1");
+            legacyStore.Write("Legacy Profile", "Left", "31");
+            var stableStore = new ProfileStore(stableRoot, legacyRoot);
+            Require(stableStore.Read(ProfileStore.DefaultProfileName, "Parry") == "1" &&
+                    stableStore.Read("Legacy Profile", "Left") == "31" &&
+                    stableStore.ListProfiles().SequenceEqual(new[] { "Default", "Legacy Profile" }),
+                "stable stores should read profiles from the legacy executable directory during migration");
+            stableStore.WriteAll("Legacy Profile", new Dictionary<string, string> { ["Left"] = "44" });
+            Require(File.Exists(Path.Combine(stableRoot, "Profiles", "Legacy Profile.ini")) &&
+                    stableStore.Read("Legacy Profile", "Left") == "44",
+                "saving a legacy profile should materialize it in the stable store");
+            stableStore.WriteActiveProfile("Legacy Profile");
+            Require(stableStore.ReadActiveProfile() == "Legacy Profile",
+                "the active profile should persist and round-trip");
+            stableStore.WriteActiveProfile(ProfileStore.DefaultProfileName);
+            Require(stableStore.ReadActiveProfile() == ProfileStore.DefaultProfileName,
+                "the active profile metadata should support Default");
+
+            legacyStore.Write("Read Only Legacy", "Left", "55");
+            File.SetAttributes(readOnlyFallbackPath, FileAttributes.ReadOnly);
+            stableStore.Delete("Read Only Legacy");
+            Require(!stableStore.ListProfiles().Contains("Read Only Legacy", StringComparer.OrdinalIgnoreCase),
+                "a deleted read-only fallback profile must stay hidden by its tombstone");
+            var restartedStore = new ProfileStore(stableRoot, legacyRoot);
+            Require(!restartedStore.ListProfiles().Contains("Read Only Legacy", StringComparer.OrdinalIgnoreCase),
+                "a fallback deletion tombstone must persist across store reloads");
         }
         finally
         {
+            if (File.Exists(readOnlyFallbackPath)) File.SetAttributes(readOnlyFallbackPath, FileAttributes.Normal);
             if (Directory.Exists(root)) Directory.Delete(root, true);
         }
     }
