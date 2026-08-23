@@ -152,6 +152,11 @@ public sealed class BotCore : IAutomationHost, IDisposable
     void IAutomationHost.IncrementParryCount() => ParryCount++;
     void IAutomationHost.RequestParryEvidence(long candidateId, CombatDirection direction) =>
         RequestParryEvidence(candidateId, direction);
+    void IAutomationHost.CaptureOrangeParryEvidence(CombatObservation observation, int delay,
+        int feintTransitionGraceMs, long clearGapAgeMs, bool usedTransitionGrace,
+        long feintDetectedAtMs, long clearStartedAtMs) =>
+        CaptureOrangeParryEvidence(observation, delay, feintTransitionGraceMs, clearGapAgeMs,
+            usedTransitionGrace, feintDetectedAtMs, clearStartedAtMs);
     void IAutomationHost.RegisterAutomationLight() =>
         _outgoingOrangeGuard.RegisterAutomationLight(Environment.TickCount64);
     void IAutomationHost.RestoreAutoGuardAfterDirectionalLight() => RestoreAutoGuardAfterDirectionalLight();
@@ -644,6 +649,34 @@ public sealed class BotCore : IAutomationHost, IDisposable
             _telemetry.CaptureRoi("flash-accepted", observation.CombatRoi);
             _actions.QueueReaction(command);
         }
+    }
+
+    private void CaptureOrangeParryEvidence(CombatObservation observation, int delay,
+        int feintTransitionGraceMs, long clearGapAgeMs, bool usedTransitionGrace,
+        long feintDetectedAtMs, long clearStartedAtMs)
+    {
+        string file = _telemetry.CaptureRegionSnapshot("orange-parry-detected", _frame, observation.CombatRoi);
+        RecordTelemetry("orange-parry-detected", new
+        {
+            response = "parry",
+            orangeParryEnabled = OrangeParry,
+            orangeIndicator = observation.OrangeIndicator,
+            orangeFeint = observation.OrangeFeint,
+            markerFound = observation.MarkerFound,
+            scanMode = ScanModeName(observation.ScanMode),
+            roi = RectangleTelemetry(observation.CombatRoi),
+            cachedRoi = RectangleTelemetry(observation.CachedCombatRoi),
+            markerLossAgeMs = observation.MarkerLossAgeMs,
+            orangeDelayMs = delay,
+            parryDelayMs = S.ParryDelay,
+            totalDelayMs = Math.Max(0, delay) + Math.Max(0, S.ParryDelay),
+            feintTransitionGraceMs,
+            clearGapAgeMs,
+            usedTransitionGrace,
+            feintDetectedAtMs,
+            clearStartedAtMs,
+            file
+        });
     }
 
     private (ReactionCommandKind Kind, string Hold) ResolveReactionCommand(CombatObservation observation)

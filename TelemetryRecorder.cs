@@ -202,6 +202,50 @@ public sealed class TelemetryRecorder : IDisposable
             capturedElapsedMs, region, relativePath, snapshot)) ? relativePath : "";
     }
 
+    /// <summary>
+    /// Queues an exact crop of the frame currently being processed for a named
+    /// detector event. Unlike CaptureRoi, this never performs a later screen
+    /// recapture, so the image shows precisely what the detector saw.
+    /// </summary>
+    public string CaptureRegionSnapshot(string reason, ScreenFrame frame, Rectangle screenRegion)
+    {
+        if (!_recording || frame == null || frame.Width <= 0 || frame.Height <= 0 ||
+            frame.Stride == 0 || frame.Buffer == null)
+            return "";
+
+        Rectangle frameBounds = new(frame.OriginX, frame.OriginY, frame.Width, frame.Height);
+        Rectangle region = Rectangle.Intersect(frameBounds, screenRegion);
+        if (region.Width <= 0 || region.Height <= 0) return "";
+
+        lock (_sync)
+        {
+            if (!_recording || _bytesWritten >= SessionLimitBytes || _queue.Count >= QueueCapacity)
+                return "";
+        }
+
+        int sourceStride = Math.Abs(frame.Stride);
+        int rowBytes = region.Width * 4;
+        byte[] buffer = new byte[rowBytes * region.Height];
+        int sourceX = region.Left - frame.OriginX;
+        int sourceY = region.Top - frame.OriginY;
+        for (int y = 0; y < region.Height; y++)
+        {
+            int sourceRow = frame.Stride >= 0 ? sourceY + y : frame.Height - 1 - (sourceY + y);
+            Buffer.BlockCopy(frame.Buffer, sourceRow * sourceStride + sourceX * 4,
+                buffer, y * rowBytes, rowBytes);
+        }
+
+        long capturedElapsedMs = ElapsedMilliseconds();
+        string safeReason = SanitizeLabel(reason);
+        string fileName = $"{capturedElapsedMs:D8}-{Guid.NewGuid().ToString("N")[..8]}.png";
+        string relativePath = Path.Combine("snapshots", safeReason, fileName)
+            .Replace(Path.DirectorySeparatorChar, '/');
+        var snapshot = new TelemetryFrameSnapshot(region.Width, region.Height, rowBytes,
+            region.Left, region.Top, buffer);
+        return TryEnqueue(new TelemetrySnapshotFrameWorkItem(safeReason, capturedElapsedMs,
+            region, relativePath, snapshot)) ? relativePath : "";
+    }
+
     public bool ExportLatest(IWin32Window owner, out string result)
     {
         string source;
@@ -287,6 +331,10 @@ public sealed class TelemetryRecorder : IDisposable
                 else if (item is TelemetryCalibrationFrameWorkItem calibrationItem)
                 {
                     WriteCalibrationFrame(calibrationItem, sessionPath, eventsPath);
+                }
+                else if (item is TelemetrySnapshotFrameWorkItem snapshotItem)
+                {
+                    WriteSnapshotFrame(snapshotItem, sessionPath, eventsPath);
                 }
             }
             catch
@@ -374,6 +422,31 @@ public sealed class TelemetryRecorder : IDisposable
         lock (_sync) _eventCounts["flash-calibration-frame"] = _eventCounts.GetValueOrDefault("flash-calibration-frame") + 1;
     }
 
+    private void WriteSnapshotFrame(TelemetrySnapshotFrameWorkItem item, string sessionPath, string eventsPath)
+    {
+        if (Interlocked.Read(ref _bytesWritten) >= SessionLimitBytes) return;
+        string file = Path.Combine(sessionPath, item.RelativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(file) ?? sessionPath);
+
+        using (Bitmap bitmap = BitmapFromFrame(item.Frame))
+            bitmap.Save(file, ImageFormat.Png);
+        Interlocked.Add(ref _bytesWritten, new FileInfo(file).Length);
+
+        var imageEvent = new TelemetryEvent(item.CapturedElapsedMs, DateTimeOffset.UtcNow,
+            "telemetry-snapshot", new
+            {
+                reason = item.Reason,
+                capturedElapsedMs = item.CapturedElapsedMs,
+                timestampMs = item.CapturedElapsedMs,
+                region = new { item.Region.X, item.Region.Y, item.Region.Width, item.Region.Height },
+                file = item.RelativePath
+            }, false);
+        string line = JsonSerializer.Serialize(imageEvent) + Environment.NewLine;
+        File.AppendAllText(eventsPath, line);
+        Interlocked.Add(ref _bytesWritten, System.Text.Encoding.UTF8.GetByteCount(line));
+        lock (_sync) _eventCounts["telemetry-snapshot"] = _eventCounts.GetValueOrDefault("telemetry-snapshot") + 1;
+    }
+
     private static Bitmap BitmapFromFrame(TelemetryFrameSnapshot frame)
     {
         var bitmap = new Bitmap(frame.Width, frame.Height, PixelFormat.Format32bppArgb);
@@ -425,6 +498,9 @@ public sealed class TelemetryRecorder : IDisposable
                 parryConfirmationBaselines = status.EventCounts.GetValueOrDefault("parry-confirmation-baseline"),
                 parryConfirmationScans = status.EventCounts.GetValueOrDefault("parry-confirmation-scan"),
                 parryConfirmationResults = status.EventCounts.GetValueOrDefault("parry-confirmation-result"),
+                orangeParryDetections = status.EventCounts.GetValueOrDefault("orange-parry-detected"),
+                orangeFeintGraceUsed = status.EventCounts.GetValueOrDefault("orange-feint-grace-used"),
+                orangeFeintGraceExpired = status.EventCounts.GetValueOrDefault("orange-feint-grace-expired"),
                 flashCalibrationFrames = status.EventCounts.GetValueOrDefault("flash-calibration-frame"),
                 flashCalibrationResults = status.EventCounts.GetValueOrDefault("flash-calibration-result")
             }
@@ -465,5 +541,7 @@ internal sealed record TelemetryFrameWorkItem(string AttemptId, int ScheduledOff
     TelemetryFrameSnapshot Frame) : TelemetryWorkItem;
 internal sealed record TelemetryCalibrationFrameWorkItem(long CandidateId, string Stage, int ClusterMatches,
     long CapturedElapsedMs, Rectangle Region, string RelativePath, TelemetryFrameSnapshot Frame) : TelemetryWorkItem;
+internal sealed record TelemetrySnapshotFrameWorkItem(string Reason, long CapturedElapsedMs,
+    Rectangle Region, string RelativePath, TelemetryFrameSnapshot Frame) : TelemetryWorkItem;
 internal sealed record TelemetryFrameSnapshot(int Width, int Height, int Stride, int OriginX, int OriginY,
     byte[] Buffer);

@@ -10,10 +10,14 @@ namespace HappyBot.Automation;
 /// </summary>
 internal sealed class OrangeResponseController
 {
+    internal const int OrangeFeintTransitionGraceMs = 200;
+
     private readonly IAutomationHost _host;
     private readonly ActionScheduler _scheduler;
     private readonly IOrangeLightDirectionSource _orangeLightDirections;
     private long _orangeFeintLastSeen;
+    private long _orangeFeintClearStartedAt;
+    private bool _orangeFeintConsumed;
     private long _orangeLastActionTick;
     private long _orangeLastSeen;
     private volatile bool _orangeMustClear;
@@ -32,27 +36,35 @@ internal sealed class OrangeResponseController
     {
         Settings settings = _host.Settings;
         if (!settings.Unblockables) return;
-        if (OrangeResponseLatch.IsConfirmedClear(observation.MarkerFound, observation.OrangeIndicator))
-        {
-            _orangeMustClear = false;
-            Interlocked.Exchange(ref _orangeFeintLastSeen, 0);
-            return;
-        }
-        if (suppressOrange && observation.OrangeIndicator) return;
         // Marker loss is unknown, not a clear frame; preserve the one-response latch.
         if (!observation.MarkerFound) return;
 
         long now = observation.TimestampMs;
-        Interlocked.Exchange(ref _orangeLastSeen, now);
         if (observation.OrangeFeint)
         {
+            if (_orangeFeintConsumed) return;
             Interlocked.Exchange(ref _orangeFeintLastSeen, now);
+            _orangeFeintClearStartedAt = 0;
             if (_orangeMustClear) return;
             _host.SetVisionReaction("ORANGE PARRY WINDOW", "Red feint indicator detected", "", 900);
             return;
         }
+
+        if (!observation.OrangeIndicator)
+        {
+            HandleClearFrame(now);
+            return;
+        }
+        if (suppressOrange) return;
+
+        Interlocked.Exchange(ref _orangeLastSeen, now);
         if (_orangeMustClear) return;
-        bool afterFeint = Interlocked.Read(ref _orangeFeintLastSeen) != 0;
+        bool usedTransitionGrace;
+        long clearGapAgeMs;
+        long feintDetectedAtMs;
+        long clearStartedAtMs;
+        bool afterFeint = ResolveAfterFeint(now, out usedTransitionGrace, out clearGapAgeMs,
+            out feintDetectedAtMs, out clearStartedAtMs);
         int delay = afterFeint ? settings.Pause1 : settings.Pause;
         if (now - _orangeLastActionTick < Math.Max(250, delay + 150)) return;
 
@@ -70,7 +82,80 @@ internal sealed class OrangeResponseController
             _orangeMustClear = false;
             return;
         }
+        if (afterFeint)
+        {
+            _orangeFeintConsumed = true;
+            if (usedTransitionGrace)
+            {
+                _host.RecordTelemetry("orange-feint-grace-used", new
+                {
+                    feintTransitionGraceMs = OrangeFeintTransitionGraceMs,
+                    clearGapAgeMs,
+                    feintDetectedAtMs,
+                    clearStartedAtMs
+                });
+            }
+        }
+        if (afterFeint && _host.OrangeParryEnabled)
+            _host.CaptureOrangeParryEvidence(observation, delay,
+                OrangeFeintTransitionGraceMs, clearGapAgeMs, usedTransitionGrace,
+                feintDetectedAtMs, clearStartedAtMs);
         _orangeLastActionTick = now;
+    }
+
+    private void HandleClearFrame(long now)
+    {
+        _orangeMustClear = false;
+        if (Interlocked.Read(ref _orangeFeintLastSeen) == 0) return;
+        if (_orangeFeintClearStartedAt == 0)
+        {
+            _orangeFeintClearStartedAt = now;
+            return;
+        }
+
+        if (now - _orangeFeintClearStartedAt > OrangeFeintTransitionGraceMs)
+            ExpireFeintGrace(now);
+    }
+
+    private bool ResolveAfterFeint(long now, out bool usedTransitionGrace, out long clearGapAgeMs,
+        out long feintDetectedAtMs, out long clearStartedAtMs)
+    {
+        usedTransitionGrace = false;
+        clearGapAgeMs = 0;
+        feintDetectedAtMs = Interlocked.Read(ref _orangeFeintLastSeen);
+        clearStartedAtMs = _orangeFeintClearStartedAt;
+        if (feintDetectedAtMs == 0 || _orangeFeintConsumed) return false;
+        if (clearStartedAtMs == 0) return true;
+
+        clearGapAgeMs = Math.Max(0, now - clearStartedAtMs);
+        if (clearGapAgeMs <= OrangeFeintTransitionGraceMs)
+        {
+            usedTransitionGrace = true;
+            return true;
+        }
+
+        ExpireFeintGrace(now);
+        feintDetectedAtMs = 0;
+        clearStartedAtMs = 0;
+        clearGapAgeMs = 0;
+        return false;
+    }
+
+    private void ExpireFeintGrace(long now)
+    {
+        long feintDetectedAtMs = Interlocked.Read(ref _orangeFeintLastSeen);
+        if (feintDetectedAtMs == 0) return;
+        long clearStartedAtMs = _orangeFeintClearStartedAt;
+        _host.RecordTelemetry("orange-feint-grace-expired", new
+        {
+            feintTransitionGraceMs = OrangeFeintTransitionGraceMs,
+            clearGapAgeMs = clearStartedAtMs == 0 ? 0 : Math.Max(0, now - clearStartedAtMs),
+            feintDetectedAtMs,
+            clearStartedAtMs
+        });
+        Interlocked.Exchange(ref _orangeFeintLastSeen, 0);
+        _orangeFeintClearStartedAt = 0;
+        _orangeFeintConsumed = false;
     }
 
     private bool QueueOrangeAction(bool afterFeint, int delay)
@@ -88,7 +173,7 @@ internal sealed class OrangeResponseController
     {
         await Task.Delay(Math.Max(0, delay), token);
         if (!CanCommitOrangeAction(token)) return false;
-        bool redOrFeint = afterFeint || Interlocked.Read(ref _orangeFeintLastSeen) != 0;
+        bool redOrFeint = afterFeint;
         Settings settings = _host.Settings;
         OrangeResponseKind response = OrangeResponseResolver.Resolve(redOrFeint,
             _host.OrangeParryEnabled, settings.OrangeLight);

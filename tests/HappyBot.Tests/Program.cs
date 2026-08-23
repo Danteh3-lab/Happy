@@ -28,6 +28,8 @@ static class Program
             BulwarkFallbackEligibilityIsStrict();
             OrangeOnlyLightSelectionIsDeterministic();
             OrangeRedResponseKeepsCurrentPriority();
+            OrangeParryEvidenceArmsOnFeint();
+            OrangeFeintGraceExpiresBeforePlainOrange();
             OrangeMarkerLossDoesNotClearResponseLatch();
             OutgoingOrangeGuardSuppressesOwnAttackUntilClear();
             OutgoingOrangeGuardAutomationLightSuppressesUntilClear();
@@ -270,6 +272,54 @@ static class Program
             "orange plus red/feint with parry disabled must retain dodge behavior, never Auto light");
         Require(OrangeResponseResolver.Resolve(false, false, false) == OrangeResponseKind.Dodge,
             "Auto light off must preserve the normal orange dodge");
+    }
+
+    private static void OrangeParryEvidenceArmsOnFeint()
+    {
+        var input = new FakeInputGateway();
+        var settings = new Settings { Unblockables = true, Pause = 0, ParryDelay = 0 };
+        var host = new FakeAutomationHost(input, settings, 107, orangeParryEnabled: true);
+        var scheduler = new ActionScheduler(host.ShutdownToken);
+        var controller = new OrangeResponseController(host, scheduler,
+            new FixedOrangeDirectionSource(CombatDirection.Top));
+
+        controller.ProcessObservation(Observation(100, CombatDirection.None) with
+        {
+            OrangeIndicator = true,
+            OrangeFeint = true
+        }, false);
+        controller.ProcessObservation(Observation(150, CombatDirection.None), false);
+        controller.ProcessObservation(Observation(300, CombatDirection.None) with
+        {
+            OrangeIndicator = true
+        }, false);
+
+        Require(host.OrangeParryEvidenceRequests.Count == 1,
+            "an orange-parry response should capture one exact detection frame through transition grace");
+        Require(host.TelemetryEvents.Contains("orange-feint-grace-used"),
+            "a transition-grace parry should record that grace was used");
+        scheduler.Dispose();
+    }
+
+    private static void OrangeFeintGraceExpiresBeforePlainOrange()
+    {
+        var input = new FakeInputGateway();
+        var settings = new Settings { Unblockables = true, Pause = 0, ParryDelay = 0 };
+        var host = new FakeAutomationHost(input, settings, 108, orangeParryEnabled: true);
+        var scheduler = new ActionScheduler(host.ShutdownToken);
+        var controller = new OrangeResponseController(host, scheduler,
+            new FixedOrangeDirectionSource(CombatDirection.Top));
+
+        controller.ProcessObservation(Observation(100, CombatDirection.None) with { OrangeFeint = true }, false);
+        controller.ProcessObservation(Observation(150, CombatDirection.None), false);
+        controller.ProcessObservation(Observation(351, CombatDirection.None), false);
+        controller.ProcessObservation(Observation(400, CombatDirection.None) with { OrangeIndicator = true }, false);
+
+        Require(host.TelemetryEvents.Contains("orange-feint-grace-expired"),
+            "a clear gap beyond transition grace should expire the feint latch");
+        Require(host.OrangeParryEvidenceRequests.Count == 0,
+            "a plain orange after expired transition grace must not arm Orange Parry");
+        scheduler.Dispose();
     }
 
     private static void OrangeMarkerLossDoesNotClearResponseLatch()
@@ -1128,11 +1178,13 @@ static class Program
     {
         private readonly long _candidateId;
 
-        public FakeAutomationHost(FakeInputGateway input, Settings settings, long candidateId)
+        public FakeAutomationHost(FakeInputGateway input, Settings settings, long candidateId,
+            bool orangeParryEnabled = false)
         {
             Input = input;
             Settings = settings;
             _candidateId = candidateId;
+            OrangeParryEnabled = orangeParryEnabled;
         }
 
         public Settings Settings { get; }
@@ -1140,7 +1192,7 @@ static class Program
         public IInputGateway Input { get; }
         public bool IsReactionActive => true;
         public bool MarkerFound => true;
-        public bool OrangeParryEnabled => false;
+        public bool OrangeParryEnabled { get; }
         public OutgoingOrangeGuardResult OutgoingOrangeState { get; } =
             new(false, false, "", false, false, 0, false, false, false);
         public bool IsEHeld() => Input.IsDown(HappyBot.Input.VK_E);
@@ -1150,13 +1202,19 @@ static class Program
         public bool HasHeroAction => ReactionPolicy.HasHeroAction(Settings);
         public int ParryCount { get; private set; }
         public List<string> ParryEvidenceRequests { get; } = new();
+        public List<string> OrangeParryEvidenceRequests { get; } = new();
+        public List<string> TelemetryEvents { get; } = new();
         public int AutomationLightRegistrations { get; private set; }
         public List<string> VisionStates { get; } = new();
         public void SetVisionReaction(string state, string reason, string direction = "", int displayMs = 1100) => VisionStates.Add(state);
-        public void RecordTelemetry(string name, object data, bool failure = false) { }
+        public void RecordTelemetry(string name, object data, bool failure = false) => TelemetryEvents.Add(name);
         public void IncrementParryCount() => ParryCount++;
         public void RequestParryEvidence(long candidateId, CombatDirection direction) =>
             ParryEvidenceRequests.Add(candidateId + ":" + direction);
+        public void CaptureOrangeParryEvidence(CombatObservation observation, int delay,
+            int feintTransitionGraceMs, long clearGapAgeMs, bool usedTransitionGrace,
+            long feintDetectedAtMs, long clearStartedAtMs) =>
+            OrangeParryEvidenceRequests.Add(observation.TimestampMs + ":" + delay + ":" + clearGapAgeMs);
         public void RegisterAutomationLight() => AutomationLightRegistrations++;
         public void RestoreAutoGuardAfterDirectionalLight() { }
     }

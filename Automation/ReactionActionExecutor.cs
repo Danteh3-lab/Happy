@@ -22,6 +22,9 @@ internal interface IAutomationHost
     void RecordTelemetry(string name, object data, bool failure = false);
     void IncrementParryCount();
     void RequestParryEvidence(long candidateId, CombatDirection direction);
+    void CaptureOrangeParryEvidence(CombatObservation observation, int delay,
+        int feintTransitionGraceMs, long clearGapAgeMs, bool usedTransitionGrace,
+        long feintDetectedAtMs, long clearStartedAtMs);
     void RegisterAutomationLight();
     void RestoreAutoGuardAfterDirectionalLight();
 }
