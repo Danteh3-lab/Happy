@@ -211,7 +211,8 @@
     if (listChanged) {
       menu.replaceChildren();
       names.forEach((name, index) => {
-        const option = document.createElement("div");
+        const option = document.createElement("button");
+        option.type = "button";
         option.className = "profile-select-option";
         option.id = "profile-option-" + index;
         option.setAttribute("role", "option");
@@ -223,6 +224,7 @@
         });
         option.addEventListener("click", (event) => {
           event.preventDefault();
+          event.stopPropagation();
           requestProfileSelection(name);
         });
         menu.appendChild(option);
@@ -261,10 +263,14 @@
   }
 
   function setProfileOpen(open, focusMenu) {
+    const root = $("#profile-select");
     const menu = $("#profile-select-menu");
     const trigger = $("#profile-select-trigger");
-    if (!menu || !trigger) return;
+    if (!root || !menu || !trigger) return;
     menu.hidden = !open;
+    root.classList.toggle("is-open", open);
+    const containingCard = root.closest(".card");
+    if (containingCard) containingCard.classList.toggle("profile-menu-open", open);
     trigger.setAttribute("aria-expanded", open ? "true" : "false");
     if (open) {
       highlightProfile(profileHighlighted, false);
