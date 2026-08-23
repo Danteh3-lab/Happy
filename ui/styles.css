@@ -217,6 +217,29 @@ h3 { margin-top: 6px; font-size: 0.98rem; letter-spacing: -0.012em; }
 .utility-actions { display: flex; flex-wrap: wrap; gap: 5px 13px; margin-top: 14px; }
 .utility-actions button { padding: 0; color: var(--text-dim); background: transparent; border: 0; font-size: 0.65rem; }
 .utility-actions button:hover { color: var(--accent-hover); }
+.profile-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 15px; padding: 10px 12px; background: rgba(0, 0, 0, 0.14); border: 1px solid var(--border); border-radius: 11px; }
+.profile-picker, .profile-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.profile-label { color: var(--text-dim); font-size: 0.58rem; font-weight: 750; letter-spacing: 0.13em; }
+.profile-select { position: relative; min-width: 150px; }
+.profile-select-trigger { display: flex; align-items: center; justify-content: space-between; gap: 14px; width: 100%; min-height: 31px; padding: 6px 9px; color: var(--text); background: var(--bg-input); border: 1px solid var(--border-strong); border-radius: 8px; font-size: 0.7rem; text-align: left; }
+.profile-select-trigger:hover { background: var(--bg-hover); border-color: rgba(226, 85, 74, 0.55); }
+.profile-select-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.profile-select-chevron { width: 7px; height: 7px; flex: 0 0 7px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg) translateY(-2px); transition: transform 0.16s ease; }
+.profile-select-trigger[aria-expanded="true"] .profile-select-chevron { transform: rotate(225deg) translate(-1px, -1px); }
+.profile-select-menu { position: absolute; top: calc(100% + 6px); right: 0; left: 0; z-index: 40; max-height: 240px; padding: 4px; overflow-y: auto; background: rgba(18, 18, 24, 0.98); border: 1px solid var(--border-strong); border-radius: 9px; box-shadow: 0 18px 42px rgba(0, 0, 0, 0.48), var(--glass-highlight); scrollbar-color: rgba(255, 255, 255, 0.24) transparent; scrollbar-width: thin; }
+.profile-select-menu[hidden] { display: none; }
+.profile-select-option { display: flex; align-items: center; width: 100%; min-height: 30px; padding: 7px 9px; color: var(--text-muted); background: transparent; border: 0; border-radius: 6px; font-size: 0.7rem; text-align: left; cursor: pointer; }
+.profile-select-option:hover, .profile-select-option.highlighted { color: var(--text); background: var(--bg-hover); }
+.profile-select-option[aria-selected="true"] { color: var(--accent-hover); background: var(--accent-soft); }
+.profile-select-option[aria-selected="true"].highlighted { background: rgba(226, 85, 74, 0.22); }
+.profile-select-menu::-webkit-scrollbar { width: 7px; }
+.profile-select-menu::-webkit-scrollbar-track { background: transparent; }
+.profile-select-menu::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.24); border: 2px solid transparent; border-radius: 999px; background-clip: padding-box; }
+.profile-select-menu::-webkit-scrollbar-thumb:hover { background: rgba(226, 85, 74, 0.7); }
+.profile-state { color: var(--text-dim); font-size: 0.65rem; }
+.profile-state.dirty { color: var(--accent-hover); }
+.profile-actions button { padding: 5px 9px; color: var(--text-muted); background: transparent; border: 1px solid var(--border); border-radius: 7px; font-size: 0.65rem; }
+.profile-actions button:hover { color: var(--text); background: var(--bg-hover); border-color: var(--border-strong); }
 .btn { min-height: 36px; padding: 9px 14px; border-radius: var(--radius-sm); border: 1px solid transparent; color: var(--text); font-size: 0.74rem; font-weight: 650; transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.16s ease; }
 .btn:active { transform: scale(0.985); }
 .btn:disabled { cursor: default; opacity: 0.45; }
@@ -306,6 +329,10 @@ kbd { min-width: 43px; padding: 4px 6px; color: var(--text); background: rgba(0,
 .modal-close { width: 28px; height: 28px; color: var(--text-muted); background: transparent; border: 1px solid var(--border); border-radius: 8px; }
 .modal-close:hover { color: var(--text); background: var(--bg-hover); }
 .modal-body { max-height: 60vh; margin: 18px 0 0; padding: 15px; overflow: auto; color: var(--text-muted); background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border); border-radius: 10px; white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.7rem; line-height: 1.6; }
+.modal-form { margin-top: 16px; }
+.modal-form .field { display: block; }
+.modal-form .field input { width: 100%; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 .toast-stack { position: fixed; right: 20px; bottom: 20px; z-index: 30; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .toast { min-width: 230px; max-width: 360px; padding: 11px 13px; color: var(--text); background: rgba(22, 22, 28, 0.84); border: 1px solid var(--border-strong); border-radius: 11px; box-shadow: 0 14px 36px rgba(0, 0, 0, 0.3); backdrop-filter: blur(22px) saturate(150%); -webkit-backdrop-filter: blur(22px) saturate(150%); animation: toast-in 0.28s var(--ease-out-soft) both; font-size: 0.72rem; }
 .toast.success { border-color: rgba(61, 207, 142, 0.32); }.toast.error { border-color: rgba(226, 85, 74, 0.42); }

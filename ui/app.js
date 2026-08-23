@@ -4,6 +4,11 @@
   const bridge = window.chrome && window.chrome.webview;
   const state = { settings: {}, status: {} };
   let hydrating = false;
+  let profileHighlighted = -1;
+  let profileTypeahead = "";
+  let profileTypeaheadTimer = 0;
+  let modalCallback = null;
+  let modalReturnFocus = null;
 
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => Array.from(document.querySelectorAll(selector));
@@ -74,6 +79,17 @@
     const telemetry = state.status.telemetry || {};
     const telemetryRecording = telemetry.recording === true;
     const autoDodgeBindButton = $("#auto-dodge-bind-button");
+    const profileName = String(state.status.profile || "Default");
+    const profileDirty = state.status.profileDirty === true;
+    const profiles = Array.isArray(state.status.profiles) && state.status.profiles.length > 0
+      ? state.status.profiles
+      : ["Default"];
+    renderProfileSelect(profiles, profileName);
+    const profileState = $("#profile-state");
+    if (profileState) {
+      profileState.textContent = profileName + (profileDirty ? " · unsaved" : " · saved");
+      profileState.classList.toggle("dirty", profileDirty);
+    }
 
     const top = $("#top-runtime");
     top.innerHTML = '<span class="status-dot ' + (running ? "green" : "") + '"></span> ' + (running ? "RUNNING" : "STANDBY");
@@ -142,15 +158,165 @@
     element.classList.toggle("alert", text === "MISSING" || text === "OFF" || text === "UP");
   }
 
+  function profileOptions() {
+    return $$("#profile-select-menu [role=option]");
+  }
+
+  function renderProfileSelect(profiles, activeName) {
+    const root = $("#profile-select");
+    const menu = $("#profile-select-menu");
+    const value = $("#profile-select-value");
+    const trigger = $("#profile-select-trigger");
+    if (!root || !menu || !value || !trigger) return;
+
+    const names = profiles.map((name) => String(name)).filter((name, index, all) => all.indexOf(name) === index);
+    menu.replaceChildren();
+    names.forEach((name, index) => {
+      const option = document.createElement("div");
+      option.className = "profile-select-option";
+      option.id = "profile-option-" + index;
+      option.setAttribute("role", "option");
+      option.dataset.profile = name;
+      option.textContent = name;
+      option.setAttribute("aria-selected", name.toLowerCase() === String(activeName).toLowerCase() ? "true" : "false");
+      option.addEventListener("pointerenter", () => {
+        const index = profileOptions().indexOf(option);
+        if (index >= 0) highlightProfile(index, false);
+      });
+      option.addEventListener("click", (event) => {
+        event.preventDefault();
+        requestProfileSelection(name);
+      });
+      menu.appendChild(option);
+    });
+
+    const activeIndex = names.findIndex((name) => name.toLowerCase() === String(activeName).toLowerCase());
+    const safeIndex = activeIndex >= 0 ? activeIndex : 0;
+    profileHighlighted = safeIndex;
+    value.textContent = names[safeIndex] || "Default";
+    trigger.setAttribute("aria-activedescendant", "");
+    highlightProfile(profileHighlighted, false);
+  }
+
+  function highlightProfile(index, scroll) {
+    const options = profileOptions();
+    if (!options.length) {
+      profileHighlighted = -1;
+      return;
+    }
+    profileHighlighted = Math.max(0, Math.min(index, options.length - 1));
+    options.forEach((option, optionIndex) => {
+      option.classList.toggle("highlighted", optionIndex === profileHighlighted);
+    });
+    const menu = $("#profile-select-menu");
+    if (menu) {
+      const active = options[profileHighlighted];
+      menu.setAttribute("aria-activedescendant", active.id || "");
+      if (scroll && active) active.scrollIntoView({ block: "nearest" });
+    }
+  }
+
+  function setProfileOpen(open, focusMenu) {
+    const menu = $("#profile-select-menu");
+    const trigger = $("#profile-select-trigger");
+    if (!menu || !trigger) return;
+    menu.hidden = !open;
+    trigger.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) {
+      highlightProfile(profileHighlighted, false);
+      if (focusMenu) menu.focus();
+    } else {
+      profileTypeahead = "";
+    }
+  }
+
+  function moveProfileHighlight(delta) {
+    highlightProfile(profileHighlighted + delta, true);
+  }
+
+  function typeaheadProfile(key) {
+    profileTypeahead += key.toLowerCase();
+    window.clearTimeout(profileTypeaheadTimer);
+    profileTypeaheadTimer = window.setTimeout(() => { profileTypeahead = ""; }, 700);
+    const options = profileOptions();
+    const match = options.findIndex((option) => option.textContent.toLowerCase().startsWith(profileTypeahead));
+    if (match >= 0) highlightProfile(match, true);
+  }
+
+  function requestProfileSelection(name) {
+    const current = String(state.status.profile || "Default");
+    setProfileOpen(false);
+    if (name.toLowerCase() === current.toLowerCase()) return;
+    if (state.status.profileDirty === true) {
+      showConfirmDialog(
+        "Discard profile changes?",
+        "Unsaved changes in " + current + " will be discarded before loading " + name + ".",
+        "Discard",
+        () => post("profile-select", { name, discard: true })
+      );
+      return;
+    }
+    post("profile-select", { name, discard: false });
+  }
+
   function showDialog(title, body, eyebrow) {
+    modalCallback = null;
+    modalReturnFocus = document.activeElement;
     $("#modal-title").textContent = title || "Message";
     $("#modal-eyebrow").textContent = eyebrow || "MESSAGE";
     $("#modal-body").textContent = body || "";
+    $("#modal-form").hidden = true;
+    $("#modal-actions").hidden = true;
     $("#modal-root").hidden = false;
+    $("#modal-close-button")?.focus();
   }
 
   function closeDialog() {
     $("#modal-root").hidden = true;
+    $("#modal-form").hidden = true;
+    $("#modal-actions").hidden = true;
+    modalCallback = null;
+    const returnFocus = modalReturnFocus;
+    modalReturnFocus = null;
+    if (returnFocus && returnFocus.isConnected && typeof returnFocus.focus === "function") returnFocus.focus();
+  }
+
+  function showConfirmDialog(title, body, confirmLabel, callback) {
+    modalReturnFocus = document.activeElement;
+    modalCallback = callback;
+    $("#modal-eyebrow").textContent = "CONFIRM ACTION";
+    $("#modal-title").textContent = title || "Confirm";
+    $("#modal-body").textContent = body || "";
+    $("#modal-form").hidden = true;
+    $("#modal-actions").hidden = false;
+    $("#modal-confirm-button").textContent = confirmLabel || "Confirm";
+    $("#modal-root").hidden = false;
+    $("#modal-cancel-button").focus();
+  }
+
+  function showInputDialog(title, body, label, initialValue, confirmLabel, callback) {
+    modalReturnFocus = document.activeElement;
+    modalCallback = callback;
+    $("#modal-eyebrow").textContent = "PROFILE";
+    $("#modal-title").textContent = title || "Enter a value";
+    $("#modal-body").textContent = body || "";
+    $("#modal-input-label").textContent = label || "Value";
+    $("#modal-input").value = initialValue || "";
+    $("#modal-form").hidden = false;
+    $("#modal-actions").hidden = false;
+    $("#modal-confirm-button").textContent = confirmLabel || "Confirm";
+    $("#modal-root").hidden = false;
+    const input = $("#modal-input");
+    input.focus();
+    input.select();
+  }
+
+  function confirmModal() {
+    const callback = modalCallback;
+    const hasInput = !$("#modal-form").hidden;
+    const value = hasInput ? $("#modal-input").value.trim() : null;
+    closeDialog();
+    if (callback) callback(value);
   }
 
   function showToast(message, kind) {
@@ -174,6 +340,43 @@
     if (action === "resolution") return post("resolution");
     if (action === "save") return post("save");
     if (action === "load") return post("load");
+    if (action === "profile-load") return post("profile-load");
+    if (action === "profile-save") return post("profile-save");
+    if (action === "profile-save-as") {
+      showInputDialog(
+        "Save profile as",
+        "Create a named profile. Use letters, numbers, spaces, dashes, or underscores.",
+        "Profile name",
+        state.status.profile || "",
+        "Save",
+        (name) => {
+          if (!name) return showToast("Enter a profile name.", "error");
+          const exists = Array.isArray(state.status.profiles) && state.status.profiles.some((profile) => profile.toLowerCase() === name.toLowerCase());
+          if (exists) {
+            showConfirmDialog(
+              "Overwrite profile?",
+              "A profile named " + name + " already exists. Replace its saved settings?",
+              "Overwrite",
+              () => post("profile-save-as", { name })
+            );
+          } else {
+            post("profile-save-as", { name });
+          }
+        }
+      );
+      return;
+    }
+    if (action === "profile-delete") {
+      const name = state.status.profile || "Default";
+      if (name.toLowerCase() === "default") return showToast("The Default profile cannot be deleted.", "error");
+      showConfirmDialog(
+        "Delete profile?",
+        "Delete " + name + " and its saved settings? This cannot be undone.",
+        "Delete",
+        () => post("profile-delete", { name })
+      );
+      return;
+    }
     if (action === "apply") return post("apply");
     if (action === "howto") return post("howto");
     if (action === "readme") return post("readme");
@@ -216,11 +419,66 @@
       sendSettings();
     });
   });
+  const profileSelect = $("#profile-select");
+  const profileTrigger = $("#profile-select-trigger");
+  const profileMenu = $("#profile-select-menu");
+  if (profileSelect && profileTrigger && profileMenu) {
+    profileTrigger.addEventListener("click", () => setProfileOpen(profileMenu.hidden));
+    profileTrigger.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        setProfileOpen(true, true);
+        moveProfileHighlight(event.key === "ArrowDown" ? 1 : -1);
+      } else if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        const opening = profileMenu.hidden;
+        setProfileOpen(opening, opening);
+      } else if (event.key === "Escape" && !profileMenu.hidden) {
+        event.preventDefault();
+        setProfileOpen(false);
+      }
+    });
+    profileMenu.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        moveProfileHighlight(event.key === "ArrowDown" ? 1 : -1);
+      } else if (event.key === "Home" || event.key === "End") {
+        event.preventDefault();
+        highlightProfile(event.key === "Home" ? 0 : profileOptions().length - 1, true);
+      } else if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        const option = profileOptions()[profileHighlighted];
+        if (option) requestProfileSelection(option.dataset.profile);
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        setProfileOpen(false);
+        profileTrigger.focus();
+      } else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        typeaheadProfile(event.key);
+      }
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (!profileSelect.contains(event.target)) setProfileOpen(false);
+    });
+  }
   $(".titlebar").addEventListener("pointerdown", (event) => {
     if (!event.target.closest("button")) post("drag");
   });
+  $("#modal-confirm-button").addEventListener("click", confirmModal);
+  $("#modal-cancel-button").addEventListener("click", closeDialog);
   $("#modal-root").addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeDialog();
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeDialog();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = $$("#modal-root button:not([disabled]), #modal-root input:not([disabled])").filter((element) => !element.closest("[hidden]"));
+    if (!focusable.length) return;
+    const current = focusable.indexOf(document.activeElement);
+    const next = (current + (event.shiftKey ? -1 : 1) + focusable.length) % focusable.length;
+    event.preventDefault();
+    focusable[next].focus();
   });
 
   if (bridge) {

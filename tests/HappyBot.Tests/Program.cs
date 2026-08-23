@@ -50,6 +50,7 @@ static class Program
             ParryConfirmationTrackerConfirmsLightAndHeavyImpacts();
             ParryConfirmationTrackerRespectsTimingAndScaledThresholds();
             DeflectSendsLightOnlyAfterSuccessfulDodge();
+            ProfileStoreRoundTripsAndProtectsPaths();
             Console.WriteLine("ReactionCoordinator and seam tests passed.");
             return 0;
         }
@@ -983,6 +984,45 @@ static class Program
         Require(undeliveredHost.AutomationLightRegistrations == 0,
             "an undelivered RB light must not register outgoing-orange suppression");
         undeliveredScheduler.Dispose();
+    }
+
+    private static void ProfileStoreRoundTripsAndProtectsPaths()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "HappyBot.ProfileTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var store = new ProfileStore(root);
+            Require(store.ListProfiles().SequenceEqual(new[] { ProfileStore.DefaultProfileName }),
+                "a new profile store should expose Default");
+
+            store.Write(ProfileStore.DefaultProfileName, "Parry", "1");
+            store.Write("Side Guard", "Left", "17");
+            store.Write("Side Guard", "Right", "23");
+            Require(store.Read(ProfileStore.DefaultProfileName, "Parry") == "1",
+                "Default should use the legacy Config.ini path");
+            Require(store.Read("Side Guard", "Left") == "17" && store.Read("Side Guard", "Right") == "23",
+                "named profiles should round-trip independent values");
+            Require(store.ListProfiles().SequenceEqual(new[] { "Default", "Side Guard" }),
+                "profiles should list Default first and named profiles alphabetically");
+
+            bool traversalRejected = false;
+            try { store.Write("..\\escape", "Value", "1"); }
+            catch (ArgumentException) { traversalRejected = true; }
+            Require(traversalRejected, "profile traversal names must be rejected");
+
+            bool defaultDeleteRejected = false;
+            try { store.Delete(ProfileStore.DefaultProfileName); }
+            catch (InvalidOperationException) { defaultDeleteRejected = true; }
+            Require(defaultDeleteRejected, "Default must not be deletable");
+            store.Delete("Side Guard");
+            Require(store.ListProfiles().SequenceEqual(new[] { ProfileStore.DefaultProfileName }),
+                "deleted profiles should disappear from the list");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
     }
 
     private static CombatObservation Observation(long ms, CombatDirection direction, bool hasThreat = true, bool flash = false) =>

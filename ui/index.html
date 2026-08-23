@@ -71,10 +71,26 @@
               <button class="btn btn-secondary btn-toggle" id="telemetry-button" data-action="telemetry">Telemetry: OFF</button>
               <button class="btn btn-secondary" data-action="export-telemetry">Export latest</button>
             </div>
+            <div class="profile-toolbar">
+              <div class="profile-picker">
+                <span class="profile-label">PROFILE</span>
+                <div class="profile-select" id="profile-select">
+                  <button class="profile-select-trigger" id="profile-select-trigger" type="button" aria-label="Active configuration profile" aria-haspopup="listbox" aria-expanded="false" aria-controls="profile-select-menu">
+                    <span id="profile-select-value">Default</span><span class="profile-select-chevron" aria-hidden="true"></span>
+                  </button>
+                  <div class="profile-select-menu" id="profile-select-menu" role="listbox" tabindex="-1" aria-label="Configuration profiles" hidden></div>
+                </div>
+                <span class="profile-state" id="profile-state">Default · saved</span>
+              </div>
+              <div class="profile-actions">
+                <button data-action="profile-load">Load</button>
+                <button data-action="profile-save">Save</button>
+                <button data-action="profile-save-as">Save as</button>
+                <button data-action="profile-delete">Delete</button>
+              </div>
+            </div>
             <div class="utility-actions">
               <span id="telemetry-status">Telemetry OFF</span>
-              <button data-action="load">Load settings</button>
-              <button data-action="save">Save settings</button>
               <button data-action="apply">Apply settings</button>
               <button data-action="howto">How to use</button>
               <button data-action="readme">Feature notes</button>
@@ -214,8 +230,15 @@
   <div class="modal-root" id="modal-root" hidden>
     <div class="modal-backdrop" data-action="close-modal"></div>
     <section class="modal-panel" role="dialog" aria-modal="true">
-      <div class="modal-head"><div><div class="eyebrow" id="modal-eyebrow">MESSAGE</div><h2 id="modal-title">Message</h2></div><button class="modal-close" data-action="close-modal">x</button></div>
+      <div class="modal-head"><div><div class="eyebrow" id="modal-eyebrow">MESSAGE</div><h2 id="modal-title">Message</h2></div><button class="modal-close" id="modal-close-button" data-action="close-modal" aria-label="Close dialog">x</button></div>
       <pre class="modal-body" id="modal-body"></pre>
+      <div class="modal-form" id="modal-form" hidden>
+        <label class="field"><span id="modal-input-label">Profile name</span><input id="modal-input" type="text" maxlength="48" autocomplete="off"></label>
+      </div>
+      <div class="modal-actions" id="modal-actions" hidden>
+        <button class="btn btn-secondary" id="modal-cancel-button" type="button">Cancel</button>
+        <button class="btn btn-primary" id="modal-confirm-button" type="button">Confirm</button>
+      </div>
     </section>
   </div>
   <div class="toast-stack" id="toast-stack"></div>

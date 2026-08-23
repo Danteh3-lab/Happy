@@ -63,4 +63,43 @@ public sealed class Settings
         copy.Chars = new Dictionary<string, bool>(Chars, StringComparer.OrdinalIgnoreCase);
         return copy;
     }
+
+    public void CopyFrom(Settings source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        Res1 = source.Res1;
+        Res2 = source.Res2;
+        Pause = source.Pause;
+        Pause1 = source.Pause1;
+        Pause2 = source.Pause2;
+        Pause3 = source.Pause3;
+        ParryDelay = source.ParryDelay;
+        LegitParryChance = source.LegitParryChance;
+        GuardHold = source.GuardHold;
+        Left = source.Left;
+        Right = source.Right;
+        TopDeflect = source.TopDeflect;
+        AutoDodgeBind = source.AutoDodgeBind;
+        DodgeH = source.DodgeH;
+        DodgeL = source.DodgeL;
+        Leftdodge = source.Leftdodge;
+        Rightdodge = source.Rightdodge;
+        Unblockables = source.Unblockables;
+        OrangeLight = source.OrangeLight;
+        OrangeParry = source.OrangeParry;
+        Autoblock = source.Autoblock;
+        Lightbash = source.Lightbash;
+        Parry = source.Parry;
+        Crushing = source.Crushing;
+        Deflect = source.Deflect;
+        Parry2 = source.Parry2;
+        Crushing2 = source.Crushing2;
+        Nohero = source.Nohero;
+        YourHero = source.YourHero;
+        Legit = source.Legit;
+        BulwarkFallback = source.BulwarkFallback;
+        CrushingFallbackChance = source.CrushingFallbackChance;
+        DeflectFallbackChance = source.DeflectFallbackChance;
+        Chars = new Dictionary<string, bool>(source.Chars, StringComparer.OrdinalIgnoreCase);
+    }
 }
