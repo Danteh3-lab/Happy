@@ -104,26 +104,8 @@ public sealed class Settings
         Right = source.Right;
         TopDeflect = source.TopDeflect;
         AutoDodgeBind = source.AutoDodgeBind;
-        DodgeH = source.DodgeH;
-        DodgeL = source.DodgeL;
-        Leftdodge = source.Leftdodge;
-        Rightdodge = source.Rightdodge;
-        Unblockables = source.Unblockables;
-        OrangeLight = source.OrangeLight;
-        OrangeParry = source.OrangeParry;
-        Autoblock = source.Autoblock;
-        Lightbash = source.Lightbash;
-        Parry = source.Parry;
-        Crushing = source.Crushing;
-        Deflect = source.Deflect;
-        Parry2 = source.Parry2;
-        Crushing2 = source.Crushing2;
-        Nohero = source.Nohero;
-        YourHero = source.YourHero;
-        Legit = source.Legit;
-        BulwarkFallback = source.BulwarkFallback;
         CrushingFallbackChance = source.CrushingFallbackChance;
         DeflectFallbackChance = source.DeflectFallbackChance;
-        Chars = new Dictionary<string, bool>(source.Chars, StringComparer.OrdinalIgnoreCase);
+        CopyLiveSwitchesFrom(source);
     }
 }
