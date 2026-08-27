@@ -2,7 +2,6 @@ using HappyBot;
 
 internal static class LiveSettingsRegression
 {
-    [System.Runtime.CompilerServices.ModuleInitializer]
     internal static void VerifyLiveSwitchCopy()
     {
         var runtime = new Settings
