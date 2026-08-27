@@ -64,6 +64,30 @@ public sealed class Settings
         return copy;
     }
 
+    public void CopyLiveSwitchesFrom(Settings source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        DodgeH = source.DodgeH;
+        DodgeL = source.DodgeL;
+        Leftdodge = source.Leftdodge;
+        Rightdodge = source.Rightdodge;
+        Unblockables = source.Unblockables;
+        OrangeLight = source.OrangeLight;
+        OrangeParry = source.OrangeParry;
+        Autoblock = source.Autoblock;
+        Lightbash = source.Lightbash;
+        Parry = source.Parry;
+        Crushing = source.Crushing;
+        Deflect = source.Deflect;
+        Parry2 = source.Parry2;
+        Crushing2 = source.Crushing2;
+        Nohero = source.Nohero;
+        YourHero = source.YourHero;
+        Legit = source.Legit;
+        BulwarkFallback = source.BulwarkFallback;
+        Chars = new Dictionary<string, bool>(source.Chars, StringComparer.OrdinalIgnoreCase);
+    }
+
     public void CopyFrom(Settings source)
     {
         ArgumentNullException.ThrowIfNull(source);
