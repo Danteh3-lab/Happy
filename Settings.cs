@@ -64,22 +64,9 @@ public sealed class Settings
         return copy;
     }
 
-    public void CopyFrom(Settings source)
+    public void CopyLiveSwitchesFrom(Settings source)
     {
         ArgumentNullException.ThrowIfNull(source);
-        Res1 = source.Res1;
-        Res2 = source.Res2;
-        Pause = source.Pause;
-        Pause1 = source.Pause1;
-        Pause2 = source.Pause2;
-        Pause3 = source.Pause3;
-        ParryDelay = source.ParryDelay;
-        LegitParryChance = source.LegitParryChance;
-        GuardHold = source.GuardHold;
-        Left = source.Left;
-        Right = source.Right;
-        TopDeflect = source.TopDeflect;
-        AutoDodgeBind = source.AutoDodgeBind;
         DodgeH = source.DodgeH;
         DodgeL = source.DodgeL;
         Leftdodge = source.Leftdodge;
@@ -98,8 +85,27 @@ public sealed class Settings
         YourHero = source.YourHero;
         Legit = source.Legit;
         BulwarkFallback = source.BulwarkFallback;
+        Chars = new Dictionary<string, bool>(source.Chars, StringComparer.OrdinalIgnoreCase);
+    }
+
+    public void CopyFrom(Settings source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        Res1 = source.Res1;
+        Res2 = source.Res2;
+        Pause = source.Pause;
+        Pause1 = source.Pause1;
+        Pause2 = source.Pause2;
+        Pause3 = source.Pause3;
+        ParryDelay = source.ParryDelay;
+        LegitParryChance = source.LegitParryChance;
+        GuardHold = source.GuardHold;
+        Left = source.Left;
+        Right = source.Right;
+        TopDeflect = source.TopDeflect;
+        AutoDodgeBind = source.AutoDodgeBind;
         CrushingFallbackChance = source.CrushingFallbackChance;
         DeflectFallbackChance = source.DeflectFallbackChance;
-        Chars = new Dictionary<string, bool>(source.Chars, StringComparer.OrdinalIgnoreCase);
+        CopyLiveSwitchesFrom(source);
     }
 }
