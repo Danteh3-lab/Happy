@@ -423,6 +423,8 @@ public sealed class MainForm : Form
         NormalizeHeroSelection(editor);
         _editorSettings = editor;
         _profileDirty = true;
+        _bot.UpdateSettings(s => s.CopyLiveSwitchesFrom(editor));
+        _bot.OrangeParry = editor.OrangeParry;
     }
 
     private static int ClampDelay(int value) => Math.Clamp(value, 0, MaxDelayMs);
