@@ -64,29 +64,6 @@ public sealed class Settings
         return copy;
     }
 
-    public bool LiveSwitchesEqual(Settings other)
-    {
-        ArgumentNullException.ThrowIfNull(other);
-        if (DodgeH != other.DodgeH || DodgeL != other.DodgeL ||
-            Leftdodge != other.Leftdodge || Rightdodge != other.Rightdodge ||
-            Unblockables != other.Unblockables || OrangeLight != other.OrangeLight ||
-            OrangeParry != other.OrangeParry || Autoblock != other.Autoblock ||
-            Lightbash != other.Lightbash || Parry != other.Parry ||
-            Crushing != other.Crushing || Deflect != other.Deflect ||
-            Parry2 != other.Parry2 || Crushing2 != other.Crushing2 ||
-            Nohero != other.Nohero || YourHero != other.YourHero ||
-            Legit != other.Legit || BulwarkFallback != other.BulwarkFallback ||
-            Chars.Count != other.Chars.Count)
-            return false;
-
-        foreach ((string key, bool value) in Chars)
-        {
-            if (!other.Chars.TryGetValue(key, out bool otherValue) || otherValue != value)
-                return false;
-        }
-        return true;
-    }
-
     public void CopyLiveSwitchesFrom(Settings source)
     {
         ArgumentNullException.ThrowIfNull(source);
