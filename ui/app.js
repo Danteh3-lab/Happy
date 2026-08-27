@@ -26,6 +26,11 @@
     post("settings", { settings: Object.assign({}, state.settings) });
   }
 
+  function sendSettingsThen(type, extra) {
+    sendSettings();
+    post(type, extra);
+  }
+
   function applySettings(settings) {
     state.settings = Object.assign({}, state.settings, settings || {});
     hydrating = true;
@@ -186,6 +191,11 @@
   function postProfileMutation(type, extra) {
     profileAwaitingClean = true;
     post(type, extra);
+  }
+
+  function sendSettingsThenProfileMutation(type, extra) {
+    sendSettings();
+    postProfileMutation(type, extra);
   }
 
   function renderProfileSelect(profiles, activeName) {
@@ -384,14 +394,14 @@
 
   function handleAction(action) {
     if (action === "close-modal") return closeDialog();
-    if (action === "start") return post("start");
-    if (action === "scan") return post("scan");
+    if (action === "start") return sendSettingsThen("start");
+    if (action === "scan") return sendSettingsThen("scan");
     if (action === "test") return post("test");
-    if (action === "resolution") return post("resolution");
-    if (action === "save") return post("save");
+    if (action === "resolution") return sendSettingsThen("resolution");
+    if (action === "save") return sendSettingsThen("save");
     if (action === "load") return requestProfileLoad();
     if (action === "profile-load") return requestProfileLoad();
-    if (action === "profile-save") return postProfileMutation("profile-save");
+    if (action === "profile-save") return sendSettingsThenProfileMutation("profile-save");
     if (action === "profile-save-as") {
       showInputDialog(
         "Save profile as",
@@ -407,10 +417,10 @@
               "Overwrite profile?",
               "A profile named " + name + " already exists. Replace its saved settings?",
               "Overwrite",
-              () => postProfileMutation("profile-save-as", { name })
+              () => sendSettingsThenProfileMutation("profile-save-as", { name })
             );
           } else {
-            postProfileMutation("profile-save-as", { name });
+            sendSettingsThenProfileMutation("profile-save-as", { name });
           }
         }
       );
@@ -428,7 +438,7 @@
       );
       return;
     }
-    if (action === "apply") return post("apply");
+    if (action === "apply") return sendSettingsThen("apply");
     if (action === "howto") return post("howto");
     if (action === "readme") return post("readme");
     if (action === "reload") return post("reload");
@@ -468,7 +478,7 @@
       state.settings[control.dataset.setting] = control.type === "checkbox" ? control.checked : control.value;
       if (["Autoblock", "Legit", "Parry", "Crushing", "Deflect", "BulwarkFallback", "YourHero", "Nohero", "Blackprior", "Nuxia", "Unblockables"].includes(control.dataset.setting)) syncLegitChanceControl();
       markProfileDirty();
-      sendSettings();
+      if (control.type === "checkbox") sendSettings();
     });
   });
   const profileSelect = $("#profile-select");
