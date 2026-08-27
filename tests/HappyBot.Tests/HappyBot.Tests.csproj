@@ -5,6 +5,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>HappyBot.Tests</AssemblyName>
     <ImplicitUsings>enable</ImplicitUsings>
+    <StartupObject>TestEntryPoint</StartupObject>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\HappyBot.csproj" />
