@@ -41,6 +41,13 @@ Use `HappyBot-ViGEm.bat` from the repository root after building:
 
 The launcher sets `HAPPYBOT_INPUT_MODE=vigem` and starts the built executable.
 
+## Run With Direct DS4 Input
+
+`HappyBot-DirectDS4.bat` reads the physical DualShock 4 HID reports directly,
+then merges them into the same single ViGEm Xbox controller. Close DS4Windows
+before using this launcher so it does not create a second virtual Xbox device.
+The legacy `HappyBot-ViGEm.bat` launcher remains available as a rollback.
+
 Recommended startup order:
 
 1. Connect the DS4 and start DS4Windows using an Xbox 360 profile.
@@ -59,6 +66,9 @@ Add these applications to HidHide's whitelist:
 - `DS4Windows.exe`
 
 Do not whitelist the game. Hide the physical Sony controller and the DS4Windows virtual Xbox controller so the game sees only HappyBot's merged output controller. Reconnect the controller after changing HidHide settings.
+
+For direct DS4 mode, close DS4Windows and hide only the physical Sony
+controller; whitelist `HappyBot.exe` so it can read the hidden HID device.
 
 ## Controller Mapping
 

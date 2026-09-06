@@ -248,6 +248,22 @@ public sealed class BotCore : IAutomationHost, IDisposable
         _telemetry.Stop();
     }
 
+    /// <summary>
+    /// Records bridge-only diagnostics while the combat loop is stopped or
+    /// paused. The UI status timer calls this at a low rate so idle input
+    /// stutter can be compared with active-loop telemetry.
+    /// </summary>
+    public void RecordBridgeHeartbeat()
+    {
+        if (Volatile.Read(ref _disposed) != 0 || !_telemetry.IsRecording) return;
+        _telemetry.Record("bridge-heartbeat", new
+        {
+            running = IsRunning,
+            paused = IsPaused,
+            bridge = ViGEmInput.GetDiagnostics()
+        });
+    }
+
     public bool ExportTelemetry(IWin32Window owner, out string result) => _telemetry.ExportLatest(owner, out result);
 
     public VisionSnapshot GetVisionSnapshot()

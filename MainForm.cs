@@ -61,6 +61,7 @@ public sealed class MainForm : Form
     private bool _visionOverlayVisible;
     private bool _showAnchorScan = true;
     private bool _bindingAutoDodge;
+    private bool _directSourceWarningShown;
     private ushort _autoDodgeBindBaselineButtons;
     private bool _autoDodgeBindBaselineLt;
     private bool _autoDodgeBindBaselineRt;
@@ -110,6 +111,17 @@ public sealed class MainForm : Form
         {
             ViGEmInput.TryRecover();
             _bot.FHeld = _fKeyDown || Input.HoldButtonHeld();
+
+            if (!_bot.IsRunning || _bot.IsPaused)
+                _bot.RecordBridgeHeartbeat();
+
+            InputBridgeSnapshot bridge = ViGEmInput.GetDiagnostics();
+            if (_webReady && bridge.SourceType == "direct-ds4" &&
+                bridge.OtherXInputControllers > 0 && !_directSourceWarningShown)
+            {
+                _directSourceWarningShown = true;
+                SendToast("Direct DS4 mode detected another XInput controller. Close DS4Windows or other virtual-pad tools.", "warning");
+            }
 
             SendStatus();
         };
@@ -294,7 +306,9 @@ public sealed class MainForm : Form
             mode = Input.ActiveMode,
             source = ViGEmInput.SourceConnected ? "ON" : "OFF",
             sourceSlot = ViGEmInput.SourceSlot,
+            sourceType = ViGEmInput.SourceType,
             virtualState = ViGEmInput.IsAvailable ? "ON" : "OFF",
+            bridge = ViGEmInput.GetDiagnostics(),
             loop = _bot.LoopHz,
             legit = _bot.S.Legit,
             orangeParry = _bot.OrangeParry,

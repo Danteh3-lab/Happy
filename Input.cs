@@ -102,10 +102,13 @@ public static class Input
     public static int LastSendError;
 
     public static string ActiveMode =>
-        RequestedMode == InputMode.ViGEm ? (ViGEmInput.IsAvailable ? "ViGEm" : "ViGEm unavailable")
+        RequestedMode == InputMode.ViGEm ? (ViGEmInput.IsAvailable
+            ? ViGEmInput.UsesDirectSource ? "ViGEm · Direct DS4" : "ViGEm"
+            : "ViGEm unavailable")
             : RequestedMode == InputMode.SendInput ? "SendInput" : "Event";
 
-    public static bool IsReady => RequestedMode != InputMode.ViGEm || ViGEmInput.IsAvailable;
+    public static bool IsReady => RequestedMode != InputMode.ViGEm ||
+        (ViGEmInput.IsAvailable && (!ViGEmInput.UsesDirectSource || ViGEmInput.SourceConnected));
 
     public static bool UsesControllerBridge => RequestedMode == InputMode.ViGEm;
 

@@ -12,6 +12,8 @@ public static class ViGEmInput
     private static IXbox360Controller _controller;
     private static IVirtualGamepad _gamepad;
     private static System.Threading.Timer _sourceTimer;
+    private static Ds4HidControllerSource _directSource;
+    private static ControllerSourceMode _sourceMode;
     private static Native.XINPUT_GAMEPAD _source;
     private static Native.XINPUT_GAMEPAD _bot;
     // A short-lived stance may need the right stick without destroying the
@@ -22,8 +24,29 @@ public static class ViGEmInput
     private static bool _sourceConnected;
     private static int _sourceSlot = -1;
     private static long _lastRecoveryTick;
+    private static ushort _lastButtons;
+    private static byte _lastLeftTrigger;
+    private static byte _lastRightTrigger;
+    private static short _lastLeftX;
+    private static short _lastLeftY;
+    private static short _lastRightX;
+    private static short _lastRightY;
+    private static bool _hasLastReport;
+    private static long _sourcePolls;
+    private static long _sourceChanges;
+    private static long _reportsSubmitted;
+    private static long _reportsSkipped;
+    private static long _lastSubmitTick;
+    private static long _lastSubmitIntervalMs;
+    private static long _maxSubmitIntervalMs;
+    private static long _bridgeFailures;
+    private static long _lastSourceReportTick;
+    private static int _otherXInputControllers;
 
     public static bool IsAvailable { get; private set; }
+    public static bool UsesDirectSource => _sourceMode == ControllerSourceMode.DirectDs4;
+    public static string SourceType => _sourceMode == ControllerSourceMode.DirectDs4
+        ? "direct-ds4" : "xinput-legacy";
     public static bool SourceConnected
     {
         get
@@ -47,6 +70,9 @@ public static class ViGEmInput
             bool botRightStick = _bot.sThumbRX != 0 || _bot.sThumbRY != 0;
             short mergedRightX = _rightStickOverrideActive ? _rightStickOverrideX : botRightStick ? _bot.sThumbRX : _source.sThumbRX;
             short mergedRightY = _rightStickOverrideActive ? _rightStickOverrideY : botRightStick ? _bot.sThumbRY : _source.sThumbRY;
+            long lastSubmitAgeMs = _lastSubmitTick == 0
+                ? -1
+                : Math.Max(0, Environment.TickCount64 - _lastSubmitTick);
             return new InputBridgeSnapshot(
                 IsAvailable,
                 _sourceConnected,
@@ -56,7 +82,29 @@ public static class ViGEmInput
                 _bot.sThumbRX,
                 _bot.sThumbRY,
                 mergedRightX,
-                mergedRightY);
+                mergedRightY,
+                _reportsSubmitted,
+                _reportsSkipped,
+                _sourcePolls,
+                _sourceChanges,
+                lastSubmitAgeMs,
+                _lastSubmitIntervalMs,
+                _maxSubmitIntervalMs,
+                _bridgeFailures,
+                SourceType,
+                _directSource?.Diagnostics.Transport ?? "xinput",
+                _directSource?.Diagnostics.Fingerprint ?? "",
+                _directSource?.Diagnostics.Reports ?? _sourcePolls,
+                _directSource?.Diagnostics.StateChanges ?? _sourceChanges,
+                _directSource?.Diagnostics.ParseErrors ?? 0,
+                _directSource?.Diagnostics.ReadErrors ?? 0,
+                _directSource?.Diagnostics.Reconnects ?? 0,
+                _directSource == null
+                    ? (_lastSourceReportTick == 0 ? -1 : Math.Max(0, Environment.TickCount64 - _lastSourceReportTick))
+                    : _directSource.Diagnostics.LastReportAgeMs,
+                _directSource?.Diagnostics.LastReportIntervalMs ?? _lastSubmitIntervalMs,
+                _directSource?.Diagnostics.MaxReportIntervalMs ?? _maxSubmitIntervalMs,
+                _otherXInputControllers);
         }
     }
 
@@ -66,7 +114,11 @@ public static class ViGEmInput
         {
             try
             {
+                _sourceMode = ControllerSourceModeExtensions.Read();
                 if (IsAvailable) return;
+                _otherXInputControllers = _sourceMode == ControllerSourceMode.DirectDs4
+                    ? CountConnectedXInputControllers()
+                    : 0;
                 _client = new ViGEmClient();
                 _controller = _client.CreateXbox360Controller();
                 _gamepad = _controller as IVirtualGamepad
@@ -76,9 +128,18 @@ public static class ViGEmInput
                 IsAvailable = true;
                 lock (Sync)
                 {
+                    _hasLastReport = false;
                     if (!ApplyLocked()) throw new InvalidOperationException("Unable to submit the initial controller report.");
                 }
-                _sourceTimer = new System.Threading.Timer(PollSource, null, 0, 8);
+                if (_sourceMode == ControllerSourceMode.DirectDs4)
+                {
+                    _directSource = new Ds4HidControllerSource(OnDirectSourceState);
+                    _directSource.Start();
+                }
+                else
+                {
+                    _sourceTimer = new System.Threading.Timer(PollSource, null, 0, 8);
+                }
             }
             catch
             {
@@ -99,6 +160,10 @@ public static class ViGEmInput
                 if (timer.Dispose(callbacksStopped)) callbacksStopped.WaitOne(500);
             }
 
+            Ds4HidControllerSource directSource = _directSource;
+            _directSource = null;
+            try { directSource?.Dispose(); } catch { }
+
             lock (Sync)
             {
                 _source = default;
@@ -108,7 +173,10 @@ public static class ViGEmInput
                 _rightStickOverrideY = 0;
                 _sourceConnected = false;
                 _sourceSlot = -1;
+                _lastSourceReportTick = 0;
+                _otherXInputControllers = 0;
                 TrySubmitNeutralLocked();
+                _hasLastReport = false;
             }
             try { _controller?.Disconnect(); } catch { }
             try { _client?.Dispose(); } catch { }
@@ -127,6 +195,51 @@ public static class ViGEmInput
         _lastRecoveryTick = now;
         Shutdown();
         Init();
+    }
+
+    private static void OnDirectSourceState(ControllerState state, Ds4SourceDiagnostics diagnostics)
+    {
+        lock (Sync)
+        {
+            bool connected = diagnostics.Connected;
+            Native.XINPUT_GAMEPAD next = state.ToXInput();
+            if (_sourceConnected != connected || !GamepadEquals(_source, next))
+                _sourceChanges++;
+            _source = next;
+            _sourceConnected = connected;
+            _sourceSlot = connected ? -2 : -1;
+            _sourcePolls++;
+            if (connected) _lastSourceReportTick = Environment.TickCount64;
+            else
+            {
+                // A disconnected physical source must not leave an automated
+                // button, trigger, or guard latched on the virtual output.
+                _bot = default;
+                _rightStickOverrideActive = false;
+                _rightStickOverrideX = 0;
+                _rightStickOverrideY = 0;
+            }
+            if (!ApplyLocked()) IsAvailable = false;
+        }
+    }
+
+    private static bool GamepadEquals(Native.XINPUT_GAMEPAD a, Native.XINPUT_GAMEPAD b) =>
+        a.wButtons == b.wButtons &&
+        a.bLeftTrigger == b.bLeftTrigger &&
+        a.bRightTrigger == b.bRightTrigger &&
+        a.sThumbLX == b.sThumbLX &&
+        a.sThumbLY == b.sThumbLY &&
+        a.sThumbRX == b.sThumbRX &&
+        a.sThumbRY == b.sThumbRY;
+
+    private static int CountConnectedXInputControllers()
+    {
+        int count = 0;
+        for (int slot = 0; slot < 4; slot++)
+        {
+            if (Native.XInputGetState(slot, out _) == 0) count++;
+        }
+        return count;
     }
 
     internal static bool TryGetSourceState(out Native.XINPUT_GAMEPAD state)
@@ -209,6 +322,18 @@ public static class ViGEmInput
 
         lock (Sync)
         {
+            _sourcePolls++;
+            if (sourceSlot != _sourceSlot ||
+                source.wButtons != _source.wButtons ||
+                source.bLeftTrigger != _source.bLeftTrigger ||
+                source.bRightTrigger != _source.bRightTrigger ||
+                source.sThumbLX != _source.sThumbLX ||
+                source.sThumbLY != _source.sThumbLY ||
+                source.sThumbRX != _source.sThumbRX ||
+                source.sThumbRY != _source.sThumbRY)
+            {
+                _sourceChanges++;
+            }
             _source = source;
             _sourceConnected = sourceSlot >= 0;
             _sourceSlot = sourceSlot;
@@ -260,7 +385,7 @@ public static class ViGEmInput
         }
     }
 
-    private static bool ApplyLocked()
+    private static bool ApplyLocked(bool force = false)
     {
         if (!IsAvailable || _controller == null) return false;
         try
@@ -268,18 +393,47 @@ public static class ViGEmInput
             bool botLeftStick = _bot.sThumbLX != 0 || _bot.sThumbLY != 0;
             bool botRightStick = _bot.sThumbRX != 0 || _bot.sThumbRY != 0;
             bool useRightOverride = _rightStickOverrideActive;
-            _controller.SetButtonsFull((ushort)(_source.wButtons | _bot.wButtons));
-            _controller.SetSliderValue(Xbox360Slider.LeftTrigger, Math.Max(_source.bLeftTrigger, _bot.bLeftTrigger));
-            _controller.SetSliderValue(Xbox360Slider.RightTrigger, Math.Max(_source.bRightTrigger, _bot.bRightTrigger));
-            _controller.SetAxisValue(Xbox360Axis.LeftThumbX, botLeftStick ? _bot.sThumbLX : _source.sThumbLX);
-            _controller.SetAxisValue(Xbox360Axis.LeftThumbY, botLeftStick ? _bot.sThumbLY : _source.sThumbLY);
-            _controller.SetAxisValue(Xbox360Axis.RightThumbX, useRightOverride ? _rightStickOverrideX : botRightStick ? _bot.sThumbRX : _source.sThumbRX);
-            _controller.SetAxisValue(Xbox360Axis.RightThumbY, useRightOverride ? _rightStickOverrideY : botRightStick ? _bot.sThumbRY : _source.sThumbRY);
+            ushort buttons = (ushort)(_source.wButtons | _bot.wButtons);
+            byte leftTrigger = Math.Max(_source.bLeftTrigger, _bot.bLeftTrigger);
+            byte rightTrigger = Math.Max(_source.bRightTrigger, _bot.bRightTrigger);
+            short leftX = botLeftStick ? _bot.sThumbLX : _source.sThumbLX;
+            short leftY = botLeftStick ? _bot.sThumbLY : _source.sThumbLY;
+            short rightX = useRightOverride ? _rightStickOverrideX : botRightStick ? _bot.sThumbRX : _source.sThumbRX;
+            short rightY = useRightOverride ? _rightStickOverrideY : botRightStick ? _bot.sThumbRY : _source.sThumbRY;
+
+            if (!force && _hasLastReport &&
+                buttons == _lastButtons &&
+                leftTrigger == _lastLeftTrigger &&
+                rightTrigger == _lastRightTrigger &&
+                leftX == _lastLeftX && leftY == _lastLeftY &&
+                rightX == _lastRightX && rightY == _lastRightY)
+            {
+                _reportsSkipped++;
+                return true;
+            }
+
+            _controller.SetButtonsFull(buttons);
+            _controller.SetSliderValue(Xbox360Slider.LeftTrigger, leftTrigger);
+            _controller.SetSliderValue(Xbox360Slider.RightTrigger, rightTrigger);
+            _controller.SetAxisValue(Xbox360Axis.LeftThumbX, leftX);
+            _controller.SetAxisValue(Xbox360Axis.LeftThumbY, leftY);
+            _controller.SetAxisValue(Xbox360Axis.RightThumbX, rightX);
+            _controller.SetAxisValue(Xbox360Axis.RightThumbY, rightY);
             _gamepad.SubmitReport();
+            _lastButtons = buttons;
+            _lastLeftTrigger = leftTrigger;
+            _lastRightTrigger = rightTrigger;
+            _lastLeftX = leftX;
+            _lastLeftY = leftY;
+            _lastRightX = rightX;
+            _lastRightY = rightY;
+            _hasLastReport = true;
+            NoteReportSubmittedLocked();
             return true;
         }
         catch
         {
+            _bridgeFailures++;
             // The last successfully submitted report may still have a button or
             // trigger down. Attempt a neutral report before declaring the bridge
             // unavailable so a failed key-up cannot remain latched until recovery.
@@ -302,11 +456,32 @@ public static class ViGEmInput
             _controller.SetAxisValue(Xbox360Axis.RightThumbX, 0);
             _controller.SetAxisValue(Xbox360Axis.RightThumbY, 0);
             _gamepad.SubmitReport();
+            NoteReportSubmittedLocked();
+            _lastButtons = 0;
+            _lastLeftTrigger = 0;
+            _lastRightTrigger = 0;
+            _lastLeftX = 0;
+            _lastLeftY = 0;
+            _lastRightX = 0;
+            _lastRightY = 0;
         }
         catch
         {
             // Disconnecting the target remains the final neutralization path.
         }
+    }
+
+    private static void NoteReportSubmittedLocked()
+    {
+        long now = Environment.TickCount64;
+        if (_lastSubmitTick != 0)
+        {
+            long interval = Math.Max(0, now - _lastSubmitTick);
+            _lastSubmitIntervalMs = interval;
+            if (interval > _maxSubmitIntervalMs) _maxSubmitIntervalMs = interval;
+        }
+        _lastSubmitTick = now;
+        _reportsSubmitted++;
     }
 
     private static ushort ButtonMask(Xbox360Button button)
@@ -329,6 +504,33 @@ public static class ViGEmInput
     }
 }
 
+internal enum ControllerSourceMode
+{
+    XInputLegacy,
+    DirectDs4
+}
+
+internal static class ControllerSourceModeExtensions
+{
+    public static ControllerSourceMode Read()
+    {
+        string value = Environment.GetEnvironmentVariable("HAPPYBOT_CONTROLLER_SOURCE")?.Trim();
+        if (string.IsNullOrWhiteSpace(value)) value = Config.Read("ControllerSource")?.Trim();
+        return string.Equals(value, "direct-ds4", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(value, "directds4", StringComparison.OrdinalIgnoreCase)
+            ? ControllerSourceMode.DirectDs4
+            : ControllerSourceMode.XInputLegacy;
+    }
+}
+
 public sealed record InputBridgeSnapshot(bool Available, bool SourceConnected, int SourceSlot,
     short SourceRightX, short SourceRightY, short BotRightX, short BotRightY,
-    short MergedRightX, short MergedRightY);
+    short MergedRightX, short MergedRightY,
+    long ReportsSubmitted = 0, long ReportsSkipped = 0, long SourcePolls = 0,
+    long SourceChanges = 0, long LastSubmitAgeMs = -1, long LastSubmitIntervalMs = 0,
+    long MaxSubmitIntervalMs = 0, long BridgeFailures = 0,
+    string SourceType = "xinput-legacy", string SourceTransport = "xinput",
+    string SourceFingerprint = "", long SourceReports = 0, long SourceStateChanges = 0,
+    long SourceParseErrors = 0, long SourceReadErrors = 0, long SourceReconnects = 0,
+    long LastSourceReportAgeMs = -1, long LastSourceReportIntervalMs = 0,
+    long MaxSourceReportIntervalMs = 0, int OtherXInputControllers = 0);

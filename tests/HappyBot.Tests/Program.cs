@@ -52,6 +52,9 @@ static class Program
             ParryConfirmationTrackerConfirmsLightAndHeavyImpacts();
             ParryConfirmationTrackerRespectsTimingAndScaledThresholds();
             DeflectSendsLightOnlyAfterSuccessfulDodge();
+            Ds4UsbReportMapsToXboxState();
+            Ds4BluetoothReportMapsToXboxState();
+            Ds4MalformedReportIsRejected();
             ProfileStoreRoundTripsAndProtectsPaths();
             Console.WriteLine("ReactionCoordinator and seam tests passed.");
             return 0;
@@ -1034,6 +1037,74 @@ static class Program
         Require(undeliveredHost.AutomationLightRegistrations == 0,
             "an undelivered RB light must not register outgoing-orange suppression");
         undeliveredScheduler.Dispose();
+    }
+
+    private static void Ds4UsbReportMapsToXboxState()
+    {
+        byte[] report = new byte[Ds4ReportParser.UsbReportLength];
+        report[0] = Ds4ReportParser.UsbReportId;
+        report[1] = 0;   // left X
+        report[2] = 255; // left Y down
+        report[3] = 255; // right X
+        report[4] = 0;   // right Y up
+        report[5] = 0x60; // Cross + Circle
+        report[6] = 0x03; // L1 + R1
+        report[7] = 0; // PS/touchpad/counter byte
+        report[8] = 31; // L2
+        report[9] = 220; // R2
+        ControllerState state = RequireDs4Report(report, "usb");
+        Require((state.Buttons & 0x1000) != 0 && (state.Buttons & 0x2000) != 0,
+            "USB face buttons should map to Xbox A/B");
+        Require((state.Buttons & 0x0100) != 0 && (state.Buttons & 0x0200) != 0,
+            "USB shoulders should map to Xbox LB/RB");
+        Require(state.LeftTrigger == 31 && state.RightTrigger == 220 &&
+            state.LeftX < -32000 && state.LeftY < -32000 &&
+            state.RightX > 32000 && state.RightY > 32000,
+            "USB sticks and triggers should preserve direction and range");
+    }
+
+    private static void Ds4BluetoothReportMapsToXboxState()
+    {
+        byte[] report = new byte[Ds4ReportParser.BluetoothReportLength];
+        report[0] = Ds4ReportParser.BluetoothReportId;
+        report[1] = 0xC0; // Bluetooth header
+        report[2] = 0x00;
+        report[3] = 128;
+        report[4] = 128;
+        report[5] = 128;
+        report[6] = 128;
+        report[7] = 0x12; // d-pad right + square
+        report[8] = 0x10; // share
+        report[9] = 0; // PS/touchpad/counter byte
+        report[10] = 100;
+        report[11] = 200;
+        ControllerState state = RequireDs4Report(report, "bluetooth");
+        Require((state.Buttons & 0x0008) != 0 && (state.Buttons & 0x4000) != 0 &&
+            (state.Buttons & 0x0020) != 0 && state.LeftTrigger == 100 && state.RightTrigger == 200,
+            "Bluetooth report should map its header, d-pad, face button, and triggers");
+    }
+
+    private static void Ds4MalformedReportIsRejected()
+    {
+        Require(!Ds4ReportParser.TryParse(new byte[] { Ds4ReportParser.UsbReportId, 1, 2 }, out _),
+            "short DS4 reports must be rejected");
+        Require(!Ds4ReportParser.TryParse(new byte[64], out _),
+            "unknown DS4 report IDs must be rejected");
+        byte[] minimal = new byte[10];
+        minimal[0] = Ds4ReportParser.UsbReportId;
+        minimal[1] = 128;
+        minimal[2] = 128;
+        minimal[3] = 128;
+        minimal[4] = 128;
+        Require(Ds4ReportParser.TryParse(minimal, out _),
+            "the documented minimal DS4 report should be accepted");
+    }
+
+    private static ControllerState RequireDs4Report(byte[] report, string expectedTransport)
+    {
+        Require(Ds4ReportParser.TryParse(report, out ControllerState state, out string transport) &&
+            transport == expectedTransport, expectedTransport + " report should parse");
+        return state;
     }
 
     private static void ProfileStoreRoundTripsAndProtectsPaths()
