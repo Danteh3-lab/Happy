@@ -13,10 +13,21 @@ internal static class Program
     private static void Main()
     {
         SetProcessDpiAwarenessContext(DpiAwarenessContextPerMonitorV2);
-        if (string.IsNullOrEmpty(Config.Read("HoldButton"))) Config.Write("HoldButton", "LT");
-        ViGEmInput.Init();
-        ApplicationConfiguration.Initialize();
-        Application.Run(new MainForm());
-        ViGEmInput.Shutdown();
+        try
+        {
+            if (string.IsNullOrEmpty(Config.Read("HoldButton"))) Config.Write("HoldButton", "LT");
+            ViGEmInput.Init();
+            ApplicationConfiguration.Initialize();
+            Application.Run(new MainForm());
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("DANBOT could not start.\n\n" + ex.Message, "DANBOT Startup Error",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            ViGEmInput.Shutdown();
+        }
     }
 }

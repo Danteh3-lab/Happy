@@ -46,6 +46,11 @@ internal sealed class Ds4HidControllerSource : IControllerSource
     private bool _connected;
     private string _transport = "unknown";
     private string _fingerprint = "";
+    // Incremented on Start, invalidated on Stop. Callbacks capture their
+    // generation and are dropped when it no longer matches, so a delayed
+    // reader/timer callback from a stopped instance can never overwrite a
+    // recovered connection. Guarded by _streamSync.
+    private long _generation;
 
     public Ds4HidControllerSource(Action<ControllerState, Ds4SourceDiagnostics> stateChanged)
     {
@@ -85,14 +90,16 @@ internal sealed class Ds4HidControllerSource : IControllerSource
         {
             if (_disposed) throw new ObjectDisposedException(nameof(Ds4HidControllerSource));
             if (IsRunning) return;
+            _generation++;
+            long generation = _generation;
             _cts = new CancellationTokenSource();
-            _staleTimer = new System.Threading.Timer(_ => CheckStale(), null, 500, 250);
+            _staleTimer = new System.Threading.Timer(_ => CheckStale(generation), null, 500, 250);
             _thread = new Thread(ReadLoop)
             {
                 IsBackground = true,
                 Name = "DANBOT DS4 HID source"
             };
-            _thread.Start(_cts.Token);
+            _thread.Start(Tuple.Create(_cts.Token, generation));
         }
     }
 
@@ -107,20 +114,38 @@ internal sealed class Ds4HidControllerSource : IControllerSource
             thread = _thread;
             staleTimer = _staleTimer;
             _cts = null;
-            _thread = null;
+            // Retain _thread until the worker exits so a new Start() cannot
+            // spawn a second reader while the old one is stuck in Read.
             _staleTimer = null;
+            // Invalidate queued/in-flight callbacks from this generation.
+            _generation++;
             try { cts?.Cancel(); } catch (ObjectDisposedException) { }
             try { _stream?.Dispose(); } catch { }
             _stream = null;
         }
 
-        try { staleTimer?.Dispose(); } catch { }
+        if (staleTimer != null)
+        {
+            using var drained = new ManualResetEvent(false);
+            try { if (staleTimer.Dispose(drained)) drained.WaitOne(500); } catch { }
+        }
 
+        bool exited = true;
         if (thread != null && thread != Thread.CurrentThread)
         {
-            try { thread.Join(1000); } catch { }
+            try { exited = thread.Join(2000); } catch { exited = false; }
         }
-        try { cts?.Dispose(); } catch { }
+
+        lock (_streamSync)
+        {
+            if (!exited) return;
+            _thread = null;
+            try { cts?.Dispose(); } catch { }
+        }
+        // When the worker is stuck (driver ignoring the stream abort), the
+        // thread field stays set so Start() refuses a second reader, and the
+        // CTS is left undisposed (reclaimed by its finalizer) so the worker
+        // cannot touch a disposed token when Read eventually unblocks.
     }
 
     public void Dispose()
@@ -136,8 +161,11 @@ internal sealed class Ds4HidControllerSource : IControllerSource
 
     private void ReadLoop(object argument)
     {
-        CancellationToken token = (CancellationToken)argument;
+        var loopArgs = (Tuple<CancellationToken, long>)argument;
+        CancellationToken token = loopArgs.Item1;
+        long generation = loopArgs.Item2;
         bool wasConnected = false;
+        bool everConnected = false;
         while (!token.IsCancellationRequested)
         {
             FileStream stream = null;
@@ -146,7 +174,7 @@ internal sealed class Ds4HidControllerSource : IControllerSource
                 if (!TryOpen(out stream, out string transport, out string fingerprint,
                     out int inputReportLength))
                 {
-                    PublishDisconnectedIfNeeded(ref wasConnected);
+                    PublishDisconnectedIfNeeded(ref wasConnected, generation);
                     token.WaitHandle.WaitOne(250);
                     continue;
                 }
@@ -154,7 +182,8 @@ internal sealed class Ds4HidControllerSource : IControllerSource
                 _transport = transport;
                 _fingerprint = fingerprint;
                 lock (_stateSync) _connected = true;
-                if (wasConnected) Interlocked.Increment(ref _reconnects);
+                if (everConnected) Interlocked.Increment(ref _reconnects);
+                everConnected = true;
                 wasConnected = true;
                 lock (_streamSync) _stream = stream;
 
@@ -177,7 +206,7 @@ internal sealed class Ds4HidControllerSource : IControllerSource
                     }
 
                     _transport = reportTransport;
-                    PublishState(state);
+                    PublishState(state, generation);
                 }
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested)
@@ -207,20 +236,26 @@ internal sealed class Ds4HidControllerSource : IControllerSource
                     if (ReferenceEquals(_stream, stream)) _stream = null;
                 }
                 try { stream?.Dispose(); } catch { }
-                PublishDisconnectedIfNeeded(ref wasConnected);
+                PublishDisconnectedIfNeeded(ref wasConnected, generation);
             }
 
             if (!token.IsCancellationRequested) token.WaitHandle.WaitOne(100);
         }
 
-        PublishDisconnectedIfNeeded(ref wasConnected);
+        PublishDisconnectedIfNeeded(ref wasConnected, generation);
     }
 
-    private void PublishState(ControllerState state)
+    // All three publishers invoke the bridge while holding _stateSync, so
+    // publications are totally ordered: a fresh Connected=true can never be
+    // followed by an older Connected=false. Lock order is always
+    // _stateSync -> bridge Sync; ViGEmInput.GetDiagnostics snapshots source
+    // state outside Sync, so the reverse edge cannot deadlock.
+    private void PublishState(ControllerState state, long generation)
     {
-        Ds4SourceDiagnostics diagnostics;
+        if (Volatile.Read(ref _generation) != generation) return;
         lock (_stateSync)
         {
+            if (Volatile.Read(ref _generation) != generation) return;
             long now = Environment.TickCount64;
             if (_lastReportTick != 0)
             {
@@ -233,36 +268,38 @@ internal sealed class Ds4HidControllerSource : IControllerSource
             _lastState = state;
             _hasState = true;
             _connected = true;
-            diagnostics = Diagnostics;
+            Ds4SourceDiagnostics diagnostics = Diagnostics;
+            _stateChanged(state, diagnostics with { Connected = true });
         }
-        _stateChanged(state, diagnostics with { Connected = true });
     }
 
-    private void CheckStale()
+    private void CheckStale(long generation)
     {
-        Ds4SourceDiagnostics diagnostics;
+        if (Volatile.Read(ref _generation) != generation) return;
         lock (_stateSync)
         {
+            if (Volatile.Read(ref _generation) != generation) return;
             if (!_connected || _lastReportTick == 0 ||
                 Environment.TickCount64 - _lastReportTick <= 500)
                 return;
             _connected = false;
-            diagnostics = Diagnostics;
+            Ds4SourceDiagnostics diagnostics = Diagnostics;
+            _stateChanged(ControllerState.Empty, diagnostics with { Connected = false });
         }
-        _stateChanged(ControllerState.Empty, diagnostics with { Connected = false });
     }
 
-    private void PublishDisconnectedIfNeeded(ref bool wasConnected)
+    private void PublishDisconnectedIfNeeded(ref bool wasConnected, long generation)
     {
         if (!wasConnected) return;
         wasConnected = false;
-        Ds4SourceDiagnostics diagnostics;
+        if (Volatile.Read(ref _generation) != generation) return;
         lock (_stateSync)
         {
+            if (Volatile.Read(ref _generation) != generation) return;
             _connected = false;
-            diagnostics = Diagnostics;
+            Ds4SourceDiagnostics diagnostics = Diagnostics;
+            _stateChanged(ControllerState.Empty, diagnostics with { Connected = false, Transport = _transport });
         }
-        _stateChanged(ControllerState.Empty, diagnostics with { Connected = false, Transport = _transport });
     }
 
     private static bool TryOpen(out FileStream stream, out string transport, out string fingerprint,

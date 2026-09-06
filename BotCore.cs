@@ -174,47 +174,115 @@ public sealed class BotCore : IAutomationHost, IDisposable
         _thread.Start();
     }
 
+    // Serializes all shutdown work (abort, neutralize, teardown) so
+    // concurrent Stop/Dispose pipelines can never touch resources that
+    // Dispose tore down. Lock order is always _shutdownSync -> _combatStateSync.
+    private readonly object _shutdownSync = new();
+    // Observability for shutdown regression tests.
+    internal volatile bool LoopResourcesDisposed;
+
     public void Stop()
     {
         if (Interlocked.Exchange(ref _stopRequested, 1) != 0) return;
         _cts.Cancel();
         _parryConfirmation.Clear();
-        lock (_combatStateSync)
-        {
-            _paused.Set();
-            AbortCombatState("shutdown", true);
-        }
-        _thread?.Join();
-        _autoGuard.Release("manual-stop");
-        _input.ReleaseAutomationInputs();
+        _paused.Set();
+        // Never wait here: the worker may hold the combat lock inside stalled
+        // capture or device I/O, and the bridge runs independently of
+        // automation — so even a never-started bot could hang the caller on a
+        // stalled controller submission. One shared background pipeline owns
+        // abort and neutralize for every worker state.
+        ThreadPool.QueueUserWorkItem(_ => ShutdownPipeline(teardown: false));
     }
 
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
         Stop();
+        Thread worker = _thread;
+        ThreadPool.QueueUserWorkItem(_ =>
+        {
+            try { worker?.Join(); } catch { }
+            ShutdownPipeline(teardown: true);
+        });
+    }
+
+    /// <summary>
+    /// Shared shutdown pipeline for every worker state. Runs fully on a pool
+    /// thread: callers never wait on input operations or this gate. Abort and
+    /// neutralize are idempotent; teardown runs exactly once (only the Dispose
+    /// pipeline passes teardown: true, queued once).
+    /// </summary>
+    private void ShutdownPipeline(bool teardown)
+    {
+        lock (_shutdownSync)
+        {
+            // A Dispose pipeline owns post-exit work once disposal starts; a
+            // Stop pipeline must not touch torn-down resources.
+            if (!teardown && Volatile.Read(ref _disposed) != 0) return;
+            try
+            {
+                AbortCombatState("shutdown", true);
+                if (!teardown && Volatile.Read(ref _disposed) != 0) return;
+                NeutralizeInputs();
+            }
+            catch (Exception ex)
+            {
+                LastError = $"{ex.GetType().Name}: {ex.Message}";
+            }
+            if (teardown) DisposeLoopResources();
+        }
+    }
+
+    private void NeutralizeInputs()
+    {
+        _autoGuard.Release("manual-stop");
+        _input.ReleaseAutomationInputs();
+    }
+
+    private void DisposeLoopResources()
+    {
         _actions.Dispose();
         _autoGuard.Dispose();
         _captureSession.Dispose();
         _telemetry.Dispose();
         _cts.Dispose();
         _paused.Dispose();
+        LoopResourcesDisposed = true;
     }
 
     public void TogglePause()
     {
         if (Volatile.Read(ref _disposed) != 0) return;
-        lock (_combatStateSync)
+        if (_paused.IsSet)
         {
-            if (_paused.IsSet)
+            // Close the loop gate before releasing input so an in-flight
+            // frame cannot re-arm guard after pause was requested.
+            _paused.Reset();
+            // Bounded like Stop. On timeout the in-flight frame may still
+            // have applied guard, so retry once it releases the lock —
+            // rechecking pause state under the lock so a resume in between
+            // cannot cancel fresh state.
+            if (!TryAbortCombatState("paused", true, 250))
             {
-                // Close the loop gate before releasing input so an in-flight
-                // frame cannot re-arm guard after pause was requested.
-                _paused.Reset();
-                AbortCombatState("paused", true);
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        lock (_combatStateSync)
+                        {
+                            if (Volatile.Read(ref _disposed) != 0 || Volatile.Read(ref _stopRequested) != 0) return;
+                            if (_paused.IsSet) return;
+                            AbortCombatStateLocked("paused-deferred", true);
+                        }
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                    }
+                });
             }
-            else _paused.Set();
         }
+        else _paused.Set();
     }
 
     public void UpdateSettings(Action<Settings> update)
@@ -350,7 +418,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
                 {
                     LastError = $"{ex.GetType().Name}: {ex.Message}";
                     AbortCombatState("vision-error", true);
-                    Thread.Sleep(250);
+                    Sleep(250);
                 }
             }
         }
@@ -860,13 +928,33 @@ public sealed class BotCore : IAutomationHost, IDisposable
     {
         lock (_combatStateSync)
         {
-            _reactionCoordinator.Cancel(reason);
-            _cachedCandidateGeometry = null;
-            _flashCalibration = null;
-            _actions.CancelPendingAction(reason, forceAction);
-            ReleaseAutoGuard();
-            _input.ReleaseAutomationInputs();
+            AbortCombatStateLocked(reason, forceAction);
         }
+    }
+
+    private bool TryAbortCombatState(string reason, bool forceAction, int timeoutMs)
+    {
+        bool entered = Monitor.TryEnter(_combatStateSync, timeoutMs);
+        if (!entered) return false;
+        try
+        {
+            AbortCombatStateLocked(reason, forceAction);
+            return true;
+        }
+        finally
+        {
+            Monitor.Exit(_combatStateSync);
+        }
+    }
+
+    private void AbortCombatStateLocked(string reason, bool forceAction)
+    {
+        _reactionCoordinator.Cancel(reason);
+        _cachedCandidateGeometry = null;
+        _flashCalibration = null;
+        _actions.CancelPendingAction(reason, forceAction);
+        ReleaseAutoGuard();
+        _input.ReleaseAutomationInputs();
     }
 
     public string DebugScan()

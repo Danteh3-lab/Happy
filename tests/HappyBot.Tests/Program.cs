@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Drawing;
 using HappyBot;
 using HappyBot.Automation;
@@ -56,6 +57,8 @@ static class Program
             Ds4BluetoothReportMapsToXboxState();
             Ds4MalformedReportIsRejected();
             ProfileStoreRoundTripsAndProtectsPaths();
+            ShutdownWithoutStartReleasesInputsInBackground();
+            ShutdownDuringBlockedCleanupStillTearsDownAfterUnblock();
             Console.WriteLine("ReactionCoordinator and seam tests passed.");
             return 0;
         }
@@ -1185,6 +1188,76 @@ static class Program
         }
     }
 
+    private static void ShutdownWithoutStartReleasesInputsInBackground()
+    {
+        // Closing without ever starting automation, with input submission
+        // blocked: Dispose must return without waiting on input, and the
+        // shared pipeline must still neutralize and tear down after unblock.
+        var input = new BlockingReleaseInputGateway();
+        input.ReleaseGate.Reset();
+        var bot = new BotCore(input, new FixedRollSource(0), new FixedOrangeDirectionSource(CombatDirection.Top));
+        try
+        {
+            var sw = Stopwatch.StartNew();
+            bot.Dispose();
+            sw.Stop();
+            Require(sw.Elapsed < TimeSpan.FromSeconds(2), "Dispose must not wait on blocked input submission");
+            Require(input.ReleaseEntered.Wait(TimeSpan.FromSeconds(10)), "background pipeline must reach input release");
+            Require(!bot.LoopResourcesDisposed, "teardown must wait for neutralization");
+            input.ReleaseGate.Set();
+            Require(SpinUntil(() => input.SawEvent("release-all"), TimeSpan.FromSeconds(10)), "inputs must be neutralized after unblock");
+            Require(SpinUntil(() => bot.LoopResourcesDisposed, TimeSpan.FromSeconds(10)), "loop resources must be torn down after unblock");
+            Require(!bot.IsRunning, "worker must not be running");
+        }
+        finally
+        {
+            input.ReleaseGate.Set();
+            bot.Dispose();
+        }
+    }
+
+    private static void ShutdownDuringBlockedCleanupStillTearsDownAfterUnblock()
+    {
+        // Worker exit while deferred cleanup holds the shutdown gate: Stop
+        // blocks the gate on stalled input, Dispose must still return
+        // immediately, and teardown must complete after unblock.
+        var input = new BlockingReleaseInputGateway();
+        input.ReleaseGate.Reset();
+        var bot = new BotCore(input, new FixedRollSource(0), new FixedOrangeDirectionSource(CombatDirection.Top));
+        try
+        {
+            bot.Start();
+            Require(SpinUntil(() => bot.IsRunning, TimeSpan.FromSeconds(10)), "worker must start");
+            bot.Stop();
+            Require(input.ReleaseEntered.Wait(TimeSpan.FromSeconds(10)), "Stop pipeline must reach blocked input release");
+            var sw = Stopwatch.StartNew();
+            bot.Dispose();
+            sw.Stop();
+            Require(sw.Elapsed < TimeSpan.FromSeconds(2), "Dispose must not wait on the held shutdown gate");
+            Require(!bot.LoopResourcesDisposed, "teardown must wait for the gate");
+            input.ReleaseGate.Set();
+            Require(SpinUntil(() => input.SawEvent("release-all"), TimeSpan.FromSeconds(10)), "inputs must be neutralized after unblock");
+            Require(SpinUntil(() => bot.LoopResourcesDisposed, TimeSpan.FromSeconds(10)), "teardown must complete after unblock");
+            Require(SpinUntil(() => !bot.IsRunning, TimeSpan.FromSeconds(10)), "worker must exit");
+        }
+        finally
+        {
+            input.ReleaseGate.Set();
+            bot.Dispose();
+        }
+    }
+
+    private static bool SpinUntil(Func<bool> condition, TimeSpan timeout)
+    {
+        var sw = Stopwatch.StartNew();
+        while (!condition())
+        {
+            if (sw.Elapsed >= timeout) return false;
+            Thread.Sleep(10);
+        }
+        return true;
+    }
+
     private static CombatObservation Observation(long ms, CombatDirection direction, bool hasThreat = true, bool flash = false) =>
         new(ms, hasThreat, new Point(900, 400), 2, new Rectangle(700, 400, 360, 450), hasThreat,
             new Point(900, 550), direction, false, flash, false, false, false, true, true, true);
@@ -1243,6 +1316,43 @@ static class Program
         public void EndBulwarkStance() => Events.Add("bulwark-up");
         public bool DirectionalLight(int guardKey) { Events.Add("light:" + guardKey); return true; }
         public void ReleaseAutomationInputs() => Events.Add("release-all");
+    }
+
+    /// <summary>
+    /// Input gateway whose ReleaseAutomationInputs blocks until ReleaseGate
+    /// is set, simulating a stalled controller submission during shutdown.
+    /// </summary>
+    private sealed class BlockingReleaseInputGateway : IInputGateway
+    {
+        private readonly object _eventsSync = new();
+        private readonly List<string> _events = new();
+        public ManualResetEventSlim ReleaseGate { get; } = new(true);
+        public ManualResetEventSlim ReleaseEntered { get; } = new(false);
+        public bool SawEvent(string name) { lock (_eventsSync) return _events.Contains(name); }
+        private void Add(string name) { lock (_eventsSync) _events.Add(name); }
+        public bool IsReady => true;
+        public bool UsesControllerBridge => false;
+        public bool CanSendBulwark => true;
+        public InputBridgeSnapshot Diagnostics => new(false, false, 0, 0, 0, 0, 0, 0, 0);
+        public bool IsDown(int virtualKey) => false;
+        public bool HoldButtonHeld() => false;
+        public bool PhysicalHeavyAttackHeld() => false;
+        public bool PhysicalLightAttackHeld() => false;
+        public bool MovingForwardHeld() => false;
+        public bool KeyDown(int virtualKey) { Add("down:" + virtualKey); return true; }
+        public bool KeyUp(int virtualKey) { Add("up:" + virtualKey); return true; }
+        public bool KeyTap(int virtualKey) { Add("tap:" + virtualKey); return true; }
+        public bool MouseClick(int virtualKey) { Add("click:" + virtualKey); return true; }
+        public void Block(bool on) => Add("block:" + on);
+        public bool BeginBulwarkStance() { Add("bulwark-down"); return true; }
+        public void EndBulwarkStance() => Add("bulwark-up");
+        public bool DirectionalLight(int guardKey) { Add("light:" + guardKey); return true; }
+        public void ReleaseAutomationInputs()
+        {
+            ReleaseEntered.Set();
+            ReleaseGate.Wait();
+            Add("release-all");
+        }
     }
 
     private sealed class FakeAutomationHost : IAutomationHost

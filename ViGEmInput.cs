@@ -12,7 +12,7 @@ public static class ViGEmInput
     private static IXbox360Controller _controller;
     private static IVirtualGamepad _gamepad;
     private static System.Threading.Timer _sourceTimer;
-    private static Ds4HidControllerSource _directSource;
+    private static volatile Ds4HidControllerSource _directSource;
     private static ControllerSourceMode _sourceMode;
     private static Native.XINPUT_GAMEPAD _source;
     private static Native.XINPUT_GAMEPAD _bot;
@@ -65,6 +65,12 @@ public static class ViGEmInput
 
     public static InputBridgeSnapshot GetDiagnostics()
     {
+        // Snapshot the source once, outside Sync. Source callbacks publish
+        // while holding the source lock and then take Sync, so acquiring
+        // them in the opposite order here could deadlock. A single capture
+        // also closes the null-check race on shutdown.
+        Ds4HidControllerSource direct = _directSource;
+        Ds4SourceDiagnostics? directDiagnostics = direct?.Diagnostics;
         lock (Sync)
         {
             bool botRightStick = _bot.sThumbRX != 0 || _bot.sThumbRY != 0;
@@ -92,18 +98,18 @@ public static class ViGEmInput
                 _maxSubmitIntervalMs,
                 _bridgeFailures,
                 SourceType,
-                _directSource?.Diagnostics.Transport ?? "xinput",
-                _directSource?.Diagnostics.Fingerprint ?? "",
-                _directSource?.Diagnostics.Reports ?? _sourcePolls,
-                _directSource?.Diagnostics.StateChanges ?? _sourceChanges,
-                _directSource?.Diagnostics.ParseErrors ?? 0,
-                _directSource?.Diagnostics.ReadErrors ?? 0,
-                _directSource?.Diagnostics.Reconnects ?? 0,
-                _directSource == null
+                directDiagnostics?.Transport ?? "xinput",
+                directDiagnostics?.Fingerprint ?? "",
+                directDiagnostics?.Reports ?? _sourcePolls,
+                directDiagnostics?.StateChanges ?? _sourceChanges,
+                directDiagnostics?.ParseErrors ?? 0,
+                directDiagnostics?.ReadErrors ?? 0,
+                directDiagnostics?.Reconnects ?? 0,
+                direct == null
                     ? (_lastSourceReportTick == 0 ? -1 : Math.Max(0, Environment.TickCount64 - _lastSourceReportTick))
-                    : _directSource.Diagnostics.LastReportAgeMs,
-                _directSource?.Diagnostics.LastReportIntervalMs ?? _lastSubmitIntervalMs,
-                _directSource?.Diagnostics.MaxReportIntervalMs ?? _maxSubmitIntervalMs,
+                    : directDiagnostics?.LastReportAgeMs ?? -1,
+                directDiagnostics?.LastReportIntervalMs ?? _lastSubmitIntervalMs,
+                directDiagnostics?.MaxReportIntervalMs ?? _maxSubmitIntervalMs,
                 _otherXInputControllers);
         }
     }
@@ -133,8 +139,10 @@ public static class ViGEmInput
                 }
                 if (_sourceMode == ControllerSourceMode.DirectDs4)
                 {
-                    _directSource = new Ds4HidControllerSource(OnDirectSourceState);
-                    _directSource.Start();
+                    Ds4HidControllerSource source = null;
+                    source = new Ds4HidControllerSource((state, diagnostics) => OnDirectSourceState(source, state, diagnostics));
+                    _directSource = source;
+                    source.Start();
                 }
                 else
                 {
@@ -197,10 +205,16 @@ public static class ViGEmInput
         Init();
     }
 
-    private static void OnDirectSourceState(ControllerState state, Ds4SourceDiagnostics diagnostics)
+    private static void OnDirectSourceState(Ds4HidControllerSource sender, ControllerState state, Ds4SourceDiagnostics diagnostics)
     {
+        // Fast reject for callbacks from a superseded source (its Stop()
+        // already neutralized the bridge). Rechecked inside Sync below:
+        // this callback may have waited on the lock while shutdown or
+        // recovery replaced the source.
+        if (sender == null || !ReferenceEquals(sender, _directSource)) return;
         lock (Sync)
         {
+            if (!ReferenceEquals(sender, _directSource)) return;
             bool connected = diagnostics.Connected;
             Native.XINPUT_GAMEPAD next = state.ToXInput();
             if (_sourceConnected != connected || !GamepadEquals(_source, next))

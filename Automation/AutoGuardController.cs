@@ -149,11 +149,14 @@ internal sealed class AutoGuardController : IDisposable
                 return;
             }
 
-            if (_currentCandidate() != null && _reactionActive() && _settings().Autoblock)
+            // Capture once: the combat thread can clear the candidate between
+            // calls, and this timer's lock does not protect coordinator state.
+            ReactionCandidate candidate = _currentCandidate();
+            if (candidate != null && _reactionActive() && _settings().Autoblock)
             {
                 int holdMs = Math.Max(60, _settings().GuardHold);
                 RenewLocked(holdMs);
-                _recordTelemetry("guard-watchdog-renew", new { holdMs, candidateId = _currentCandidate().Id }, false);
+                _recordTelemetry("guard-watchdog-renew", new { holdMs, candidateId = candidate.Id }, false);
                 return;
             }
             ReleaseLocked("expiry");
