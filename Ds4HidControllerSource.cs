@@ -25,7 +25,7 @@ internal sealed class Ds4HidControllerSource : IControllerSource
         0x05C4, 0x09CC, 0x0BA0, 0x0CE6, 0x0DF2
     };
 
-    private readonly Action<ControllerState, Ds4SourceDiagnostics> _stateChanged;
+    private readonly Action<ControllerState, ControllerSourceDiagnostics> _stateChanged;
     private readonly object _streamSync = new();
     private readonly object _stateSync = new();
     private CancellationTokenSource _cts;
@@ -52,14 +52,14 @@ internal sealed class Ds4HidControllerSource : IControllerSource
     // recovered connection. Guarded by _streamSync.
     private long _generation;
 
-    public Ds4HidControllerSource(Action<ControllerState, Ds4SourceDiagnostics> stateChanged)
+    public Ds4HidControllerSource(Action<ControllerState, ControllerSourceDiagnostics> stateChanged)
     {
         _stateChanged = stateChanged ?? throw new ArgumentNullException(nameof(stateChanged));
     }
 
     public bool IsRunning => _thread is { IsAlive: true };
 
-    public Ds4SourceDiagnostics Diagnostics
+    public ControllerSourceDiagnostics Diagnostics
     {
         get
         {
@@ -68,7 +68,7 @@ internal sealed class Ds4HidControllerSource : IControllerSource
                 long lastAge = _lastReportTick == 0
                     ? -1
                     : Math.Max(0, Environment.TickCount64 - _lastReportTick);
-                return new Ds4SourceDiagnostics(
+                return new ControllerSourceDiagnostics(
                     _connected,
                     _transport,
                     _fingerprint,
@@ -268,7 +268,7 @@ internal sealed class Ds4HidControllerSource : IControllerSource
             _lastState = state;
             _hasState = true;
             _connected = true;
-            Ds4SourceDiagnostics diagnostics = Diagnostics;
+            ControllerSourceDiagnostics diagnostics = Diagnostics;
             _stateChanged(state, diagnostics with { Connected = true });
         }
     }
@@ -283,7 +283,7 @@ internal sealed class Ds4HidControllerSource : IControllerSource
                 Environment.TickCount64 - _lastReportTick <= 500)
                 return;
             _connected = false;
-            Ds4SourceDiagnostics diagnostics = Diagnostics;
+            ControllerSourceDiagnostics diagnostics = Diagnostics;
             _stateChanged(ControllerState.Empty, diagnostics with { Connected = false });
         }
     }
@@ -297,7 +297,7 @@ internal sealed class Ds4HidControllerSource : IControllerSource
         {
             if (Volatile.Read(ref _generation) != generation) return;
             _connected = false;
-            Ds4SourceDiagnostics diagnostics = Diagnostics;
+            ControllerSourceDiagnostics diagnostics = Diagnostics;
             _stateChanged(ControllerState.Empty, diagnostics with { Connected = false, Transport = _transport });
         }
     }
@@ -503,16 +503,3 @@ internal sealed class Ds4HidControllerSource : IControllerSource
         uint shareMode, IntPtr securityAttributes, uint creationDisposition,
         uint flagsAndAttributes, IntPtr templateFile);
 }
-
-internal readonly record struct Ds4SourceDiagnostics(
-    bool Connected,
-    string Transport,
-    string Fingerprint,
-    long Reports,
-    long StateChanges,
-    long ParseErrors,
-    long ReadErrors,
-    long Reconnects,
-    long LastReportAgeMs,
-    long LastReportIntervalMs,
-    long MaxReportIntervalMs);

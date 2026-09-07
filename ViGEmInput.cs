@@ -12,7 +12,7 @@ public static class ViGEmInput
     private static IXbox360Controller _controller;
     private static IVirtualGamepad _gamepad;
     private static System.Threading.Timer _sourceTimer;
-    private static volatile Ds4HidControllerSource _directSource;
+    private static volatile IControllerSource _directSource;
     private static ControllerSourceMode _sourceMode;
     private static Native.XINPUT_GAMEPAD _source;
     private static Native.XINPUT_GAMEPAD _bot;
@@ -69,8 +69,8 @@ public static class ViGEmInput
         // while holding the source lock and then take Sync, so acquiring
         // them in the opposite order here could deadlock. A single capture
         // also closes the null-check race on shutdown.
-        Ds4HidControllerSource direct = _directSource;
-        Ds4SourceDiagnostics? directDiagnostics = direct?.Diagnostics;
+        IControllerSource direct = _directSource;
+        ControllerSourceDiagnostics? directDiagnostics = direct?.Diagnostics;
         lock (Sync)
         {
             bool botRightStick = _bot.sThumbRX != 0 || _bot.sThumbRY != 0;
@@ -139,7 +139,7 @@ public static class ViGEmInput
                 }
                 if (_sourceMode == ControllerSourceMode.DirectDs4)
                 {
-                    Ds4HidControllerSource source = null;
+                    IControllerSource source = null;
                     source = new Ds4HidControllerSource((state, diagnostics) => OnDirectSourceState(source, state, diagnostics));
                     _directSource = source;
                     source.Start();
@@ -168,7 +168,7 @@ public static class ViGEmInput
                 if (timer.Dispose(callbacksStopped)) callbacksStopped.WaitOne(500);
             }
 
-            Ds4HidControllerSource directSource = _directSource;
+            IControllerSource directSource = _directSource;
             _directSource = null;
             try { directSource?.Dispose(); } catch { }
 
@@ -205,7 +205,7 @@ public static class ViGEmInput
         Init();
     }
 
-    private static void OnDirectSourceState(Ds4HidControllerSource sender, ControllerState state, Ds4SourceDiagnostics diagnostics)
+    private static void OnDirectSourceState(IControllerSource sender, ControllerState state, ControllerSourceDiagnostics diagnostics)
     {
         // Fast reject for callbacks from a superseded source (its Stop()
         // already neutralized the bridge). Rechecked inside Sync below:
@@ -404,43 +404,32 @@ public static class ViGEmInput
         if (!IsAvailable || _controller == null) return false;
         try
         {
-            bool botLeftStick = _bot.sThumbLX != 0 || _bot.sThumbLY != 0;
-            bool botRightStick = _bot.sThumbRX != 0 || _bot.sThumbRY != 0;
-            bool useRightOverride = _rightStickOverrideActive;
-            ushort buttons = (ushort)(_source.wButtons | _bot.wButtons);
-            byte leftTrigger = Math.Max(_source.bLeftTrigger, _bot.bLeftTrigger);
-            byte rightTrigger = Math.Max(_source.bRightTrigger, _bot.bRightTrigger);
-            short leftX = botLeftStick ? _bot.sThumbLX : _source.sThumbLX;
-            short leftY = botLeftStick ? _bot.sThumbLY : _source.sThumbLY;
-            short rightX = useRightOverride ? _rightStickOverrideX : botRightStick ? _bot.sThumbRX : _source.sThumbRX;
-            short rightY = useRightOverride ? _rightStickOverrideY : botRightStick ? _bot.sThumbRY : _source.sThumbRY;
+            MergedControllerReport merged = ControllerReportMerger.Merge(
+                _source, _bot, _rightStickOverrideActive, _rightStickOverrideX, _rightStickOverrideY);
 
             if (!force && _hasLastReport &&
-                buttons == _lastButtons &&
-                leftTrigger == _lastLeftTrigger &&
-                rightTrigger == _lastRightTrigger &&
-                leftX == _lastLeftX && leftY == _lastLeftY &&
-                rightX == _lastRightX && rightY == _lastRightY)
+                merged == new MergedControllerReport(_lastButtons, _lastLeftTrigger, _lastRightTrigger,
+                    _lastLeftX, _lastLeftY, _lastRightX, _lastRightY))
             {
                 _reportsSkipped++;
                 return true;
             }
 
-            _controller.SetButtonsFull(buttons);
-            _controller.SetSliderValue(Xbox360Slider.LeftTrigger, leftTrigger);
-            _controller.SetSliderValue(Xbox360Slider.RightTrigger, rightTrigger);
-            _controller.SetAxisValue(Xbox360Axis.LeftThumbX, leftX);
-            _controller.SetAxisValue(Xbox360Axis.LeftThumbY, leftY);
-            _controller.SetAxisValue(Xbox360Axis.RightThumbX, rightX);
-            _controller.SetAxisValue(Xbox360Axis.RightThumbY, rightY);
+            _controller.SetButtonsFull(merged.Buttons);
+            _controller.SetSliderValue(Xbox360Slider.LeftTrigger, merged.LeftTrigger);
+            _controller.SetSliderValue(Xbox360Slider.RightTrigger, merged.RightTrigger);
+            _controller.SetAxisValue(Xbox360Axis.LeftThumbX, merged.LeftX);
+            _controller.SetAxisValue(Xbox360Axis.LeftThumbY, merged.LeftY);
+            _controller.SetAxisValue(Xbox360Axis.RightThumbX, merged.RightX);
+            _controller.SetAxisValue(Xbox360Axis.RightThumbY, merged.RightY);
             _gamepad.SubmitReport();
-            _lastButtons = buttons;
-            _lastLeftTrigger = leftTrigger;
-            _lastRightTrigger = rightTrigger;
-            _lastLeftX = leftX;
-            _lastLeftY = leftY;
-            _lastRightX = rightX;
-            _lastRightY = rightY;
+            _lastButtons = merged.Buttons;
+            _lastLeftTrigger = merged.LeftTrigger;
+            _lastRightTrigger = merged.RightTrigger;
+            _lastLeftX = merged.LeftX;
+            _lastLeftY = merged.LeftY;
+            _lastRightX = merged.RightX;
+            _lastRightY = merged.RightY;
             _hasLastReport = true;
             NoteReportSubmittedLocked();
             return true;

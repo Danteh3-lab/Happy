@@ -10,8 +10,6 @@ public sealed class MainForm : Form
 {
     private const int IdF1 = 1, IdF3 = 3, IdF4 = 4, IdF5 = 5, IdF6 = 6, IdF7 = 7;
     private static readonly int[] HotkeyIds = { IdF1, IdF3, IdF4, IdF5, IdF6, IdF7 };
-    private const int PeacekeeperDeflectDelayMs = 100;
-    private const int MaxDelayMs = 10000;
     private static readonly (ushort Mask, string Name)[] ControllerButtonBindings =
     {
         (0x0001, "DPad Up"), (0x0002, "DPad Down"), (0x0004, "DPad Left"), (0x0008, "DPad Right"),
@@ -20,21 +18,6 @@ public sealed class MainForm : Form
     };
     private const int WmNcLButtonDown = 0xA1;
     private const int HtCaption = 0x2;
-
-    private static readonly string[] EditKeys = { "res1", "res2", "Pause", "Pause1", "Pause2", "Pause3", "ParryDelay", "LegitParryChance", "CrushingFallbackChance", "DeflectFallbackChance", "GuardHold", "Left", "Right", "TopDeflect", "AutoDodgeBind" };
-
-    private static readonly string[] CheckKeys =
-    {
-        "DodgeL", "DodgeH", "Leftdodge", "Rightdodge", "Unblockables", "OrangeLight", "OrangeParry", "Autoblock", "Lightbash",
-        "Parry", "Crushing", "Deflect", "Parry2", "Crushing2", "Nohero", "YourHero", "Legit", "BulwarkFallback",
-        "Warden", "Peacekeeper", "Centurion", "Blackprior", "Gryphon", "Conqueror", "Lawbringer", "Gladiator", "Warmonger",
-        "Raider", "Berserker", "Highlander", "Jormungandr", "Warlord", "Valkyrie", "Shaman", "Varangian", "Null",
-        "Kensei", "Orochi", "Shinobi", "Hitokiri", "Sohei", "Shugoki", "Nobushi", "Aramusha", "Kyoshin",
-        "Tiandi", "Nuxia", "Zhanhu", "Jiangjun", "Shaolin", "Juren",
-        "Pirate", "Afeera", "Medjay", "Khatun", "Ocelotl", "Virtuosa"
-    };
-
-    private static readonly string[] HeroKeys = new Settings().Chars.Keys.ToArray();
 
     private static readonly (string Name, Action Press)[] Tests =
     {
@@ -48,7 +31,7 @@ public sealed class MainForm : Form
     };
 
     private readonly BotCore _bot = new();
-    private readonly ProfileStore _profiles = ProfileStore.ForApplication();
+    private readonly ProfileEditorController _editor = new(ProfileStore.ForApplication());
     private readonly KeyboardHook _hook;
     private readonly WebView2 _webView;
     private readonly VisionOverlayForm _visionOverlay;
@@ -69,9 +52,6 @@ public sealed class MainForm : Form
     private bool _previousControllerLt;
     private bool _previousControllerRt;
     private bool _controllerStateInitialized;
-    private Settings _editorSettings = new();
-    private string _activeProfile = ProfileStore.DefaultProfileName;
-    private bool _profileDirty;
 
     public MainForm()
     {
@@ -88,11 +68,7 @@ public sealed class MainForm : Form
             s.Res1 = screen.Width.ToString();
             s.Res2 = screen.Height.ToString();
         });
-        _editorSettings = _bot.S.Clone();
-        string startupProfile = _profiles.ReadActiveProfile();
-        if (!ProfileNames().Contains(startupProfile, StringComparer.OrdinalIgnoreCase))
-            startupProfile = ProfileStore.DefaultProfileName;
-        LoadProfileIntoEditor(startupProfile);
+        _editor.Initialize(screen.Width.ToString(), screen.Height.ToString());
         ApplyResolution(screen.Width, screen.Height);
 
         _visionOverlay = new VisionOverlayForm(_bot.GetVisionSnapshot, _bot.GetOverlayFeatures);
@@ -287,9 +263,9 @@ public sealed class MainForm : Form
         {
             version = BuildInfo.Version,
             build = BuildInfo.Configuration,
-            profile = _activeProfile,
-            profileDirty = _profileDirty,
-            profiles = ProfileNames(),
+            profile = _editor.ActiveProfile,
+            profileDirty = _editor.IsDirty,
+            profiles = _editor.ProfileNames(),
             running = _bot.IsRunning,
             error = _bot.LastError,
             marker = _bot.MarkerFound ? "FOUND" : "MISSING",
@@ -327,148 +303,14 @@ public sealed class MainForm : Form
         };
     }
 
-    private Dictionary<string, object> SettingsSnapshot()
-    {
-        var s = _editorSettings;
-        var values = new Dictionary<string, object>
-        {
-            ["res1"] = s.Res1,
-            ["res2"] = s.Res2,
-            ["Pause"] = s.Pause,
-            ["Pause1"] = s.Pause1,
-            ["Pause2"] = s.Pause2,
-            ["Pause3"] = s.Pause3,
-            ["ParryDelay"] = s.ParryDelay,
-            ["LegitParryChance"] = s.LegitParryChance,
-            ["CrushingFallbackChance"] = s.CrushingFallbackChance,
-            ["DeflectFallbackChance"] = s.DeflectFallbackChance,
-            ["GuardHold"] = s.GuardHold,
-            ["Left"] = s.Left,
-            ["Right"] = s.Right,
-            ["TopDeflect"] = s.TopDeflect,
-            ["AutoDodgeBind"] = s.AutoDodgeBind
-        };
-        foreach (string key in CheckKeys) values[key] = GetCheck(s, key);
-        return values;
-    }
-
-    private IReadOnlyList<string> ProfileNames()
-    {
-        try { return _profiles.ListProfiles(); }
-        catch { return new[] { ProfileStore.DefaultProfileName }; }
-    }
-
-    private static bool GetCheck(Settings s, string key)
-    {
-        return key switch
-        {
-            "DodgeL" => s.DodgeL,
-            "DodgeH" => s.DodgeH,
-            "Leftdodge" => s.Leftdodge,
-            "Rightdodge" => s.Rightdodge,
-            "Unblockables" => s.Unblockables,
-            "OrangeLight" => s.OrangeLight,
-            "OrangeParry" => s.OrangeParry,
-            "Autoblock" => s.Autoblock,
-            "Lightbash" => s.Lightbash,
-            "Parry" => s.Parry,
-            "Crushing" => s.Crushing,
-            "Deflect" => s.Deflect,
-            "Parry2" => s.Parry2,
-            "Crushing2" => s.Crushing2,
-            "Nohero" => s.Nohero,
-            "YourHero" => s.YourHero,
-            "Legit" => s.Legit,
-            "BulwarkFallback" => s.BulwarkFallback,
-            _ => s.Ch(key)
-        };
-    }
-
-    private static void SetCheck(Settings s, string key, bool value)
-    {
-        switch (key)
-        {
-            case "DodgeL": s.DodgeL = value; break;
-            case "DodgeH": s.DodgeH = value; break;
-            case "Leftdodge": s.Leftdodge = value; if (value) s.Rightdodge = false; break;
-            case "Rightdodge": s.Rightdodge = value; if (value) s.Leftdodge = false; break;
-            case "Unblockables": s.Unblockables = value; break;
-            case "OrangeLight": s.OrangeLight = value; break;
-            case "OrangeParry": s.OrangeParry = value; break;
-            case "Autoblock": s.Autoblock = value; break;
-            case "Lightbash": s.Lightbash = value; break;
-            case "Parry": s.Parry = value; break;
-            case "Crushing": s.Crushing = value; break;
-            case "Deflect": s.Deflect = value; break;
-            case "Parry2": s.Parry2 = value; break;
-            case "Crushing2": s.Crushing2 = value; break;
-            case "Nohero": s.Nohero = value; break;
-            case "YourHero": s.YourHero = value; break;
-            case "Legit": s.Legit = value; break;
-            case "BulwarkFallback": s.BulwarkFallback = value; break;
-            default: s.Chars[key] = value; break;
-        }
-    }
+    private Dictionary<string, object> SettingsSnapshot() => SettingsCodec.ToSnapshot(_editor.EditorSettings);
 
     private void ApplySettings(JsonElement values)
     {
-        Settings editor = _editorSettings.Clone();
-        editor.Res1 = ReadString(values, "res1", editor.Res1);
-        editor.Res2 = ReadString(values, "res2", editor.Res2);
-        editor.Pause = ClampDelay(ReadInt(values, "Pause", editor.Pause));
-        editor.Pause1 = ClampDelay(ReadInt(values, "Pause1", editor.Pause1));
-        editor.Pause2 = ClampDelay(ReadInt(values, "Pause2", editor.Pause2));
-        editor.Pause3 = ClampDelay(ReadInt(values, "Pause3", editor.Pause3));
-        editor.ParryDelay = ClampDelay(ReadInt(values, "ParryDelay", editor.ParryDelay));
-        editor.LegitParryChance = Math.Clamp(ReadInt(values, "LegitParryChance", editor.LegitParryChance), 0, 100);
-        editor.CrushingFallbackChance = Math.Clamp(ReadInt(values, "CrushingFallbackChance", editor.CrushingFallbackChance), 0, 100);
-        editor.DeflectFallbackChance = Math.Clamp(ReadInt(values, "DeflectFallbackChance", editor.DeflectFallbackChance), 0, 100);
-        editor.GuardHold = Math.Clamp(ReadInt(values, "GuardHold", editor.GuardHold), 60, MaxDelayMs);
-        editor.Left = ClampDelay(ReadInt(values, "Left", editor.Left));
-        editor.Right = ClampDelay(ReadInt(values, "Right", editor.Right));
-        editor.TopDeflect = ClampDelay(ReadInt(values, "TopDeflect", editor.TopDeflect));
-        editor.AutoDodgeBind = ReadString(values, "AutoDodgeBind", editor.AutoDodgeBind).Trim();
-        foreach (string key in CheckKeys)
-        {
-            if (values.TryGetProperty(key, out _))
-                SetCheck(editor, key, ReadBool(values, key, GetCheck(editor, key)));
-        }
-
-        NormalizeHeroSelection(editor);
-        _editorSettings = editor;
-        _profileDirty = true;
+        Settings editor = SettingsCodec.ApplyJson(_editor.EditorSettings, values);
+        _editor.ReplaceEditor(editor);
         _bot.UpdateSettings(s => s.CopyLiveSwitchesFrom(editor));
         _bot.OrangeParry = editor.OrangeParry;
-    }
-
-    private static int ClampDelay(int value) => Math.Clamp(value, 0, MaxDelayMs);
-
-    private static void NormalizeHeroSelection(Settings s)
-    {
-        string selected = HeroKeys.FirstOrDefault(s.Ch);
-        if (selected == null) return;
-        foreach (string hero in HeroKeys) s.Chars[hero] = hero.Equals(selected, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string ReadString(JsonElement values, string key, string fallback)
-    {
-        if (!values.TryGetProperty(key, out JsonElement value)) return fallback;
-        return value.ValueKind == JsonValueKind.String ? value.GetString() ?? fallback : value.ToString();
-    }
-
-    private static int ReadInt(JsonElement values, string key, int fallback)
-    {
-        if (!values.TryGetProperty(key, out JsonElement value)) return fallback;
-        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int number)) return number;
-        return int.TryParse(value.ToString(), out number) ? number : fallback;
-    }
-
-    private static bool ReadBool(JsonElement values, string key, bool fallback)
-    {
-        if (!values.TryGetProperty(key, out JsonElement value)) return fallback;
-        if (value.ValueKind == JsonValueKind.True) return true;
-        if (value.ValueKind == JsonValueKind.False) return false;
-        return value.ToString() is "1" or "true" or "True";
     }
 
     private void OnResolution()
@@ -503,12 +345,8 @@ public sealed class MainForm : Form
         SendStatus();
     }
 
-    private bool TryReadResolution(out int width, out int height)
-    {
-        width = int.TryParse(_editorSettings.Res1, out int parsedWidth) ? parsedWidth : 0;
-        height = int.TryParse(_editorSettings.Res2, out int parsedHeight) ? parsedHeight : 0;
-        return width > 0 && height > 0 && width >= height;
-    }
+    private bool TryReadResolution(out int width, out int height) =>
+        SettingsCodec.TryParseResolution(_editor.EditorSettings, out width, out height);
 
     private void OnScan()
     {
@@ -565,207 +403,74 @@ public sealed class MainForm : Form
 
     private void OnLoad(bool discard, bool draftDirty)
     {
-        if ((_profileDirty || draftDirty) && !discard)
+        string error = _editor.TryLoadActive(discard, draftDirty);
+        if (error != null)
         {
             SendStatus();
-            SendToast("Discard unsaved profile changes before loading.", "error");
+            SendToast(error, "error");
             return;
         }
-        LoadProfileIntoEditor(_activeProfile);
         SendSettings();
         SendStatus();
-        SendToast($"Profile loaded: {_activeProfile}.", "success");
+        SendToast($"Profile loaded: {_editor.ActiveProfile}.", "success");
     }
 
     private void OnProfileSelect(string profileName, bool discard, bool draftDirty)
     {
-        string normalized;
-        try
+        string error = _editor.Select(profileName, discard, draftDirty);
+        if (error != null)
         {
-            normalized = ProfileStore.NormalizeProfileName(profileName);
-            if (!ProfileNames().Contains(normalized, StringComparer.OrdinalIgnoreCase))
-                throw new ArgumentException("That profile does not exist.", nameof(profileName));
-        }
-        catch (Exception ex)
-        {
-            SendToast(ex.Message, "error");
+            SendToast(error, "error");
             SendStatus();
             return;
         }
 
-        if ((_profileDirty || draftDirty) && !discard)
-        {
-            SendToast("Discard unsaved profile changes before switching.", "error");
-            SendStatus();
-            return;
-        }
-
-        LoadProfileIntoEditor(normalized);
         SendSettings();
         SendStatus();
-        SendToast($"Profile loaded: {_activeProfile}.", "success");
+        SendToast($"Profile loaded: {_editor.ActiveProfile}.", "success");
     }
 
     private void OnSave()
     {
-        SaveProfile(_activeProfile);
+        _editor.SaveActive();
         SendStatus();
-        SendToast($"Profile saved: {_activeProfile}.", "success");
+        SendToast($"Profile saved: {_editor.ActiveProfile}.", "success");
     }
 
     private void OnProfileSaveAs(string profileName)
     {
-        try
+        string error = _editor.SaveAs(profileName);
+        if (error != null)
         {
-            string normalized = ProfileStore.NormalizeProfileName(profileName);
-            SaveProfile(normalized);
-            _activeProfile = normalized;
-            _profileDirty = false;
-            SendSettings();
-            SendStatus();
-            SendToast($"Profile saved as: {_activeProfile}.", "success");
+            SendToast(error, "error");
+            return;
         }
-        catch (Exception ex)
-        {
-            SendToast(ex.Message, "error");
-        }
+        SendSettings();
+        SendStatus();
+        SendToast($"Profile saved as: {_editor.ActiveProfile}.", "success");
     }
 
     private void OnProfileDelete(string profileName, bool discard, bool draftDirty)
     {
-        try
+        string error = _editor.Delete(profileName, discard, draftDirty);
+        if (error != null)
         {
-            string normalized = ProfileStore.NormalizeProfileName(profileName);
-            if (normalized.Equals(ProfileStore.DefaultProfileName, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("The Default profile cannot be deleted.");
-            if ((_profileDirty || draftDirty) && !discard)
-            {
-                SendStatus();
-                SendToast("Discard unsaved profile changes before deleting.", "error");
-                return;
-            }
-            _profiles.Delete(normalized);
-            if (_activeProfile.Equals(normalized, StringComparison.OrdinalIgnoreCase))
-                LoadProfileIntoEditor(ProfileStore.DefaultProfileName);
-            SendSettings();
-            SendStatus();
-            SendToast($"Profile deleted: {normalized}.", "success");
+            if (error == ProfileEditorController.DiscardBeforeDelete) SendStatus();
+            SendToast(error, "error");
+            return;
         }
-        catch (Exception ex)
-        {
-            SendToast(ex.Message, "error");
-        }
-    }
-
-    private void LoadProfileIntoEditor(string profileName)
-    {
-        string normalized = ProfileStore.NormalizeProfileName(profileName);
-        Settings loaded = new()
-        {
-            Res1 = _editorSettings.Res1,
-            Res2 = _editorSettings.Res2
-        };
-        foreach (string key in EditKeys)
-        {
-            string value = _profiles.Read(normalized, key);
-            if (value.Length > 0) SetEdit(loaded, key, value);
-        }
-        foreach (string key in CheckKeys)
-        {
-            string value = _profiles.Read(normalized, key);
-            if (value.Length > 0) SetCheck(loaded, key, value == "1");
-        }
-
-        NormalizeHeroSelection(loaded);
-        _activeProfile = normalized;
-        _editorSettings = loaded;
-        _profileDirty = false;
-        PersistActiveProfile();
-    }
-
-    private void SaveProfile(string profileName)
-    {
-        string normalized = ProfileStore.NormalizeProfileName(profileName);
-        Settings s = _editorSettings;
-        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (string key in EditKeys) values[key] = GetEdit(s, key);
-        foreach (string key in CheckKeys) values[key] = GetCheck(s, key) ? "1" : "0";
-        _profiles.WriteAll(normalized, values);
-        _activeProfile = normalized;
-        _profileDirty = false;
-        PersistActiveProfile();
-    }
-
-    private void PersistActiveProfile()
-    {
-        try
-        {
-            _profiles.WriteActiveProfile(_activeProfile);
-        }
-        catch
-        {
-            // Profile selection should remain usable even if metadata cannot be written.
-        }
+        SendSettings();
+        SendStatus();
+        // Validated inside Delete, so this cannot throw on the success path.
+        SendToast($"Profile deleted: {ProfileStore.NormalizeProfileName(profileName)}.", "success");
     }
 
     private void CommitEditorSettings()
     {
-        Settings snapshot = _editorSettings.Clone();
-        ApplyPeacekeeperRuntimeOverride(snapshot);
+        Settings snapshot = _editor.EditorSettings.Clone();
+        SettingsCodec.ApplyPeacekeeperRuntimeOverride(snapshot);
         _bot.UpdateSettings(s => s.CopyFrom(snapshot));
-        _bot.OrangeParry = _editorSettings.OrangeParry;
-    }
-
-    private static void ApplyPeacekeeperRuntimeOverride(Settings settings)
-    {
-        if (!settings.Ch("Peacekeeper")) return;
-        settings.Left = PeacekeeperDeflectDelayMs;
-        settings.Right = PeacekeeperDeflectDelayMs;
-    }
-
-    private static string GetEdit(Settings s, string key)
-    {
-        return key switch
-        {
-            "res1" => s.Res1,
-            "res2" => s.Res2,
-            "Pause" => s.Pause.ToString(),
-            "Pause1" => s.Pause1.ToString(),
-            "Pause2" => s.Pause2.ToString(),
-            "Pause3" => s.Pause3.ToString(),
-            "ParryDelay" => s.ParryDelay.ToString(),
-            "LegitParryChance" => s.LegitParryChance.ToString(),
-            "CrushingFallbackChance" => s.CrushingFallbackChance.ToString(),
-            "DeflectFallbackChance" => s.DeflectFallbackChance.ToString(),
-            "GuardHold" => s.GuardHold.ToString(),
-            "Left" => s.Left.ToString(),
-            "Right" => s.Right.ToString(),
-            "TopDeflect" => s.TopDeflect.ToString(),
-            "AutoDodgeBind" => s.AutoDodgeBind,
-            _ => ""
-        };
-    }
-
-    private static void SetEdit(Settings s, string key, string value)
-    {
-        switch (key)
-        {
-            case "res1": s.Res1 = value; break;
-            case "res2": s.Res2 = value; break;
-            case "Pause": s.Pause = ClampDelay(ToInt(value)); break;
-            case "Pause1": s.Pause1 = ClampDelay(ToInt(value)); break;
-            case "Pause2": s.Pause2 = ClampDelay(ToInt(value)); break;
-            case "Pause3": s.Pause3 = ClampDelay(ToInt(value)); break;
-            case "ParryDelay": s.ParryDelay = ClampDelay(ToInt(value)); break;
-            case "LegitParryChance": s.LegitParryChance = Math.Clamp(ToInt(value), 0, 100); break;
-            case "CrushingFallbackChance": s.CrushingFallbackChance = Math.Clamp(ToInt(value), 0, 100); break;
-            case "DeflectFallbackChance": s.DeflectFallbackChance = Math.Clamp(ToInt(value), 0, 100); break;
-            case "GuardHold": s.GuardHold = Math.Clamp(ToInt(value), 60, MaxDelayMs); break;
-            case "Left": s.Left = ClampDelay(ToInt(value)); break;
-            case "Right": s.Right = ClampDelay(ToInt(value)); break;
-            case "TopDeflect": s.TopDeflect = ClampDelay(ToInt(value)); break;
-            case "AutoDodgeBind": s.AutoDodgeBind = value.Trim(); break;
-        }
+        _bot.OrangeParry = _editor.EditorSettings.OrangeParry;
     }
 
     private static int ToInt(string value) => int.TryParse(value, out int number) ? number : 0;
@@ -798,17 +503,7 @@ public sealed class MainForm : Form
 
     private void ApplyResolution(int width, int height)
     {
-        _bot.B55 = width / 1920.0;
-        _bot.Y55 = height / 1080.0;
-        _bot.X8 = (width / 1920.0) * 860;
-        _bot.Y8 = (height / 1080.0) * 80;
-        _bot.X9 = (width / 1920.0) * 1075;
-        _bot.Y9 = (height / 1080.0) * 425;
-        _bot.X18 = (width / 1920.0) * 670;
-        _bot.Y18 = (height / 1080.0) * 300;
-        _bot.X19 = (width / 1920.0) * 820;
-        _bot.Y19 = (height / 1080.0) * 510;
-        _bot.RefreshVisionSnapshot();
+        _bot.UpdateResolution(width, height);
     }
 
     protected override void OnHandleCreated(EventArgs e)
@@ -872,9 +567,9 @@ public sealed class MainForm : Form
             case IdF1:
                 MutateEditorAndLive(
                     next => next.Pause = next.Pause == 0 ? 80 : 0,
-                    live => live.Pause = _editorSettings.Pause);
+                    live => live.Pause = _editor.EditorSettings.Pause);
                 SendSettings();
-                Sound(_editorSettings.Pause == 0 ? "buttonunclick" : "buttonclick");
+                Sound(_editor.EditorSettings.Pause == 0 ? "buttonunclick" : "buttonclick");
                 break;
             case IdF3:
                 string fMode = "Parry";
@@ -887,9 +582,9 @@ public sealed class MainForm : Form
                     },
                     live =>
                     {
-                        live.Parry = _editorSettings.Parry;
-                        live.Crushing = _editorSettings.Crushing;
-                        live.Deflect = _editorSettings.Deflect;
+                        live.Parry = _editor.EditorSettings.Parry;
+                        live.Crushing = _editor.EditorSettings.Crushing;
+                        live.Deflect = _editor.EditorSettings.Deflect;
                     });
                 SendSettings();
                 SendToast($"F-mode: {fMode}", "info");
@@ -906,8 +601,8 @@ public sealed class MainForm : Form
                     },
                     live =>
                     {
-                        live.Parry2 = _editorSettings.Parry2;
-                        live.Crushing2 = _editorSettings.Crushing2;
+                        live.Parry2 = _editor.EditorSettings.Parry2;
+                        live.Crushing2 = _editor.EditorSettings.Crushing2;
                     });
                 SendSettings();
                 SendToast($"E-mode: {eMode}", "info");
@@ -931,8 +626,9 @@ public sealed class MainForm : Form
     {
         bool enabled = !_bot.OrangeParry;
         _bot.OrangeParry = enabled;
-        _editorSettings.OrangeParry = enabled;
-        _profileDirty = true;
+        Settings next = _editor.EditorSettings.Clone();
+        next.OrangeParry = enabled;
+        _editor.ReplaceEditor(next);
         _bot.UpdateSettings(s => s.OrangeParry = enabled);
         SendToast(_bot.OrangeParry ? "Orange parry ON" : "Orange parry OFF", _bot.OrangeParry ? "success" : "info");
         SendSettings();
@@ -941,10 +637,9 @@ public sealed class MainForm : Form
 
     private void MutateEditorAndLive(Action<Settings> updateEditor, Action<Settings> updateLive)
     {
-        Settings next = _editorSettings.Clone();
+        Settings next = _editor.EditorSettings.Clone();
         updateEditor(next);
-        _editorSettings = next;
-        _profileDirty = true;
+        _editor.ReplaceEditor(next);
         _bot.UpdateSettings(updateLive);
     }
 
@@ -1033,15 +728,15 @@ public sealed class MainForm : Form
             {
                 MutateEditorAndLive(
                     s => s.AutoDodgeBind = pressed,
-                    live => live.AutoDodgeBind = _editorSettings.AutoDodgeBind);
+                    live => live.AutoDodgeBind = _editor.EditorSettings.AutoDodgeBind);
                 _bindingAutoDodge = false;
                 SendSettings();
                 SendToast($"Auto dodge bound to {pressed}.", "success");
                 SendStatus();
             }
         }
-        else if (!string.IsNullOrWhiteSpace(_editorSettings.AutoDodgeBind) &&
-                 string.Equals(pressed, _editorSettings.AutoDodgeBind, StringComparison.OrdinalIgnoreCase))
+        else if (!string.IsNullOrWhiteSpace(_editor.EditorSettings.AutoDodgeBind) &&
+                 string.Equals(pressed, _editor.EditorSettings.AutoDodgeBind, StringComparison.OrdinalIgnoreCase))
         {
             bool enabled = false;
             MutateEditorAndLive(
@@ -1050,7 +745,7 @@ public sealed class MainForm : Form
                     s.Unblockables = !s.Unblockables;
                     enabled = s.Unblockables;
                 },
-                live => live.Unblockables = _editorSettings.Unblockables);
+                live => live.Unblockables = _editor.EditorSettings.Unblockables);
             SendSettings();
             SendToast(enabled ? "Auto dodge ON." : "Auto dodge OFF.", enabled ? "success" : "info");
             SendStatus();
