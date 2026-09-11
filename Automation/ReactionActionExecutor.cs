@@ -18,10 +18,11 @@ internal interface IAutomationHost
     bool IsCurrentCandidate(long candidateId);
     bool IsYourChar(string name);
     bool HasHeroAction { get; }
-    void SetVisionReaction(string state, string reason, string direction = "", int displayMs = 1100);
+    void SetVisionReaction(string state, string reason, string direction = "", int displayMs = 1100,
+        int? appliedDelayMs = null);
     void RecordTelemetry(string name, object data, bool failure = false);
     void IncrementParryCount();
-    void RequestParryEvidence(long candidateId, CombatDirection direction);
+    void RequestParryEvidence(long candidateId, CombatDirection direction, int delayMs);
     void CaptureOrangeParryEvidence(CombatObservation observation, int delay,
         int feintTransitionGraceMs, long clearGapAgeMs, bool usedTransitionGrace,
         long feintDetectedAtMs, long clearStartedAtMs);
@@ -92,7 +93,7 @@ internal sealed class ReactionActionExecutor
                     ? $"; deflect {settings.DeflectFallbackChance}% roll {roll}" : "";
                 _host.SetVisionReaction("DEFLECT FALLBACK",
                     $"Legit {decision.ChancePercent}% roll {decision.Roll}: dodge{mix}",
-                    DirectionName(decision.Direction), 1100);
+                    DirectionName(decision.Direction), 1100, appliedDelayMs: -1);
                 QueueDirectionalAction(command with { Kind = ReactionCommandKind.Deflect });
                 return;
             }
@@ -100,7 +101,7 @@ internal sealed class ReactionActionExecutor
             {
                 _host.SetVisionReaction("CRUSHING FALLBACK",
                     $"Legit {decision.ChancePercent}% roll {decision.Roll}: RB{DescribeFallbackRolls(resolution, settings)}",
-                    DirectionName(decision.Direction), 1100);
+                    DirectionName(decision.Direction), 1100, appliedDelayMs: -1);
                 QueueDirectionalAction(command with { Kind = ReactionCommandKind.Crushing });
                 return;
             }
@@ -108,7 +109,7 @@ internal sealed class ReactionActionExecutor
             {
                 _host.SetVisionReaction("BULWARK FALLBACK",
                     $"Legit {decision.ChancePercent}% roll {decision.Roll}: flip{DescribeFallbackRolls(resolution, settings)}",
-                    DirectionName(decision.Direction), 1100);
+                    DirectionName(decision.Direction), 1100, appliedDelayMs: -1);
                 QueueDirectionalAction(command with { Kind = ReactionCommandKind.Bulwark });
                 return;
             }
@@ -116,7 +117,7 @@ internal sealed class ReactionActionExecutor
             {
                 _host.SetVisionReaction("BLOCK ONLY",
                     $"Legit {decision.ChancePercent}% roll {decision.Roll}: block",
-                    DirectionName(decision.Direction), 1100);
+                    DirectionName(decision.Direction), 1100, appliedDelayMs: -1);
                 return;
             }
         }
@@ -139,17 +140,18 @@ internal sealed class ReactionActionExecutor
     {
         if (command.Kind == ReactionCommandKind.Parry)
         {
-            _host.SetVisionReaction("PARRY READY", command.Hold + " hold + flash gate", DirectionName(command.Direction), 900);
-            await Task.Delay(Math.Max(0, _host.Settings.ParryDelay), token);
+            int delay = Math.Max(0, _host.Settings.ParryDelay);
+            _host.SetVisionReaction("PARRY READY", command.Hold + " hold + flash gate", DirectionName(command.Direction), 900, delay);
+            await Task.Delay(delay, token);
             if (!CanCommitAction(command, token)) return false;
             _scheduler.SetCommitted(true);
             if (!_host.Input.MouseClick(Input.VK_RBUTTON))
-                _host.SetVisionReaction("PARRY FAILED", "RT input was not delivered", DirectionName(command.Direction), 1300);
+                _host.SetVisionReaction("PARRY FAILED", "RT input was not delivered", DirectionName(command.Direction), 1300, delay);
             else
             {
                 _host.IncrementParryCount();
-                _host.RequestParryEvidence(command.CandidateId, command.Direction);
-                _host.SetVisionReaction("PARRY SENT", "RT input sent", DirectionName(command.Direction), 1300);
+                _host.RequestParryEvidence(command.CandidateId, command.Direction, delay);
+                _host.SetVisionReaction("PARRY SENT", "RT input sent", DirectionName(command.Direction), 1300, delay);
             }
             return true;
         }
@@ -158,7 +160,7 @@ internal sealed class ReactionActionExecutor
             if (!CanCommitAction(command, token)) return false;
             _scheduler.SetCommitted(true);
             _host.Input.MouseClick(Input.VK_LBUTTON);
-            _host.SetVisionReaction("CRUSHING SENT", command.Hold + " hold + flash gate", DirectionName(command.Direction), 1300);
+            _host.SetVisionReaction("CRUSHING SENT", command.Hold + " hold + flash gate", DirectionName(command.Direction), 1300, 0);
             return true;
         }
         if (command.Kind == ReactionCommandKind.Deflect)
@@ -172,10 +174,10 @@ internal sealed class ReactionActionExecutor
             {
                 if (_host.Input.MouseClick(Input.VK_LBUTTON))
                     _host.RegisterAutomationLight();
-                _host.SetVisionReaction("DEFLECT + LIGHT SENT", "F hold + directional dodge + RB", DirectionName(command.Direction), 1300);
+                _host.SetVisionReaction("DEFLECT + LIGHT SENT", "F hold + directional dodge + RB", DirectionName(command.Direction), 1300, delay);
             }
             else
-                _host.SetVisionReaction("DEFLECT FAILED", "Directional dodge input was not delivered", DirectionName(command.Direction), 1300);
+                _host.SetVisionReaction("DEFLECT FAILED", "Directional dodge input was not delivered", DirectionName(command.Direction), 1300, delay);
             return true;
         }
         if (command.Kind == ReactionCommandKind.Hero)
@@ -242,6 +244,7 @@ internal sealed class ReactionActionExecutor
 
         _scheduler.SetCommitted(true);
         IInputGateway input = _host.Input;
+        int appliedDelay = _host.IsYourChar("Jiangjun") ? 250 : 0;
         if (_host.IsYourChar("Warlord")) { input.KeyTap(Input.VK_C); input.MouseClick(Input.VK_LBUTTON); }
         else if (_host.IsYourChar("Shaman")) { input.KeyTap(Input.VK_SPACE); input.KeyTap(Input.VK_NUMPAD5); }
         else if (_host.IsYourChar("Varangian")) { input.KeyTap(Input.VK_C); input.MouseClick(Input.VK_RBUTTON); }
@@ -261,7 +264,7 @@ internal sealed class ReactionActionExecutor
             finally { input.KeyUp(Input.VK_C); }
         }
         else return false;
-        _host.SetVisionReaction("HERO RESPONSE SENT", "F hold + flash gate", DirectionName(command.Direction), 1300);
+        _host.SetVisionReaction("HERO RESPONSE SENT", "F hold + flash gate", DirectionName(command.Direction), 1300, appliedDelay);
         return true;
     }
 
@@ -269,27 +272,28 @@ internal sealed class ReactionActionExecutor
     {
         if (!CanCommitAction(command, token)) return false;
         _scheduler.SetState("BULWARK STANCE");
-        _host.SetVisionReaction("BULWARK READY", "RS down -> 50ms -> RB", DirectionName(command.Direction), 900);
+        const int bulwarkDelay = 50;
+        _host.SetVisionReaction("BULWARK READY", "RS down -> 50ms -> RB", DirectionName(command.Direction), 900, bulwarkDelay);
         _host.RecordTelemetry("bulwark-ready", new { candidateId = command.CandidateId, path, bridge = _host.Input.Diagnostics });
         if (!_host.Input.BeginBulwarkStance())
         {
-            _host.SetVisionReaction("BULWARK FAILED", "Controller input was not delivered; guard remains active", DirectionName(command.Direction), 1300);
+            _host.SetVisionReaction("BULWARK FAILED", "Controller input was not delivered; guard remains active", DirectionName(command.Direction), 1300, bulwarkDelay);
             _host.RecordTelemetry("bulwark-failed", new { candidateId = command.CandidateId, path, reason = "stance-input", bridge = _host.Input.Diagnostics });
             return false;
         }
         try
         {
-            await Task.Delay(50, token);
+            await Task.Delay(bulwarkDelay, token);
             if (!CanCommitAction(command, token)) return false;
             _scheduler.SetCommitted(true);
             if (_host.Input.MouseClick(Input.VK_LBUTTON))
             {
-                _host.SetVisionReaction("BULWARK SENT", "RS down + RB counter", DirectionName(command.Direction), 1300);
+                _host.SetVisionReaction("BULWARK SENT", "RS down + RB counter", DirectionName(command.Direction), 1300, bulwarkDelay);
                 _host.RecordTelemetry("bulwark-sent", new { candidateId = command.CandidateId, path, bridge = _host.Input.Diagnostics });
             }
             else
             {
-                _host.SetVisionReaction("BULWARK FAILED", "RB input was not delivered; guard remains active", DirectionName(command.Direction), 1300);
+                _host.SetVisionReaction("BULWARK FAILED", "RB input was not delivered; guard remains active", DirectionName(command.Direction), 1300, bulwarkDelay);
                 _host.RecordTelemetry("bulwark-failed", new { candidateId = command.CandidateId, path, reason = "right-shoulder", bridge = _host.Input.Diagnostics });
             }
             return true;

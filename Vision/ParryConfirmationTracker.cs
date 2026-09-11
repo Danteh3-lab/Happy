@@ -24,7 +24,12 @@ internal sealed record ParryConfirmationScan(
     bool Qualifying,
     int ConsecutiveQualifying,
     Rectangle Region,
-    ParryConfirmationResult Result);
+    ParryConfirmationResult Result)
+{
+    // Captured when this RT attempt is armed; it must not be read from the
+    // bot's mutable settings during a later confirmation scan.
+    public int DelayMs { get; init; } = -1;
+}
 
 /// <summary>
 /// Tracks visual proof after a delivered RT. It intentionally knows nothing
@@ -48,13 +53,15 @@ internal sealed class ParryConfirmationTracker
         get { lock (_sync) return _attempts.Count > 0; }
     }
 
-    public void Start(string attemptId, long candidateId, CombatDirection direction, long sentTick)
+    public void Start(string attemptId, long candidateId, CombatDirection direction, long sentTick,
+        int delayMs = -1)
     {
         if (string.IsNullOrWhiteSpace(attemptId)) return;
         lock (_sync)
         {
             _attempts.RemoveAll(x => x.AttemptId == attemptId);
-            _attempts.Add(new Attempt(attemptId, candidateId, direction, sentTick));
+            _attempts.Add(new Attempt(attemptId, candidateId, direction, sentTick,
+                delayMs < 0 ? -1 : delayMs));
         }
     }
 
@@ -168,18 +175,21 @@ internal sealed class ParryConfirmationTracker
 
     private sealed class Attempt
     {
-        public Attempt(string attemptId, long candidateId, CombatDirection direction, long sentTick)
+        public Attempt(string attemptId, long candidateId, CombatDirection direction, long sentTick,
+            int delayMs)
         {
             AttemptId = attemptId;
             CandidateId = candidateId;
             Direction = direction;
             SentTick = sentTick;
+            DelayMs = delayMs;
         }
 
         public string AttemptId { get; }
         public long CandidateId { get; }
         public CombatDirection Direction { get; }
         public long SentTick { get; }
+        public int DelayMs { get; }
         public List<int> BaselineSamples { get; } = new();
         public int Baseline { get; set; } = -1;
         public int Threshold { get; set; } = -1;
@@ -189,6 +199,9 @@ internal sealed class ParryConfirmationTracker
             bool baselineEstablished, bool baselineEstablishedNow,
             bool qualifying = false, ParryConfirmationResult result = ParryConfirmationResult.None) =>
             new(AttemptId, CandidateId, Direction, elapsedMs, brightPixels, Baseline, Threshold,
-                baselineEstablished, baselineEstablishedNow, qualifying, ConsecutiveQualifying, region, result);
+                baselineEstablished, baselineEstablishedNow, qualifying, ConsecutiveQualifying, region, result)
+            {
+                DelayMs = DelayMs
+            };
     }
 }

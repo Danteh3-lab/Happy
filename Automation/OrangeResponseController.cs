@@ -46,7 +46,7 @@ internal sealed class OrangeResponseController
             Interlocked.Exchange(ref _orangeFeintLastSeen, now);
             _orangeFeintClearStartedAt = 0;
             if (_orangeMustClear) return;
-            _host.SetVisionReaction("ORANGE PARRY WINDOW", "Red feint indicator detected", "", 900);
+            _host.SetVisionReaction("ORANGE PARRY WINDOW", "Red feint indicator detected", "", 900, appliedDelayMs: -1);
             return;
         }
 
@@ -171,7 +171,8 @@ internal sealed class OrangeResponseController
 
     private async Task<bool> ExecuteOrangeActionAsync(bool afterFeint, int delay, CancellationToken token)
     {
-        await Task.Delay(Math.Max(0, delay), token);
+        int orangeDelay = Math.Max(0, delay);
+        await Task.Delay(orangeDelay, token);
         if (!CanCommitOrangeAction(token)) return false;
         bool redOrFeint = afterFeint;
         Settings settings = _host.Settings;
@@ -179,32 +180,33 @@ internal sealed class OrangeResponseController
             _host.OrangeParryEnabled, settings.OrangeLight);
         if (response == OrangeResponseKind.Parry)
         {
-            _host.SetVisionReaction("ORANGE PARRY READY", "Feint check passed", "", 900);
+            int appliedDelay = orangeDelay + Math.Max(0, settings.ParryDelay);
+            _host.SetVisionReaction("ORANGE PARRY READY", "Feint check passed", "", 900, appliedDelay);
             await Task.Delay(Math.Max(0, settings.ParryDelay), token);
             if (!_host.OrangeParryEnabled || !CanCommitOrangeAction(token)) return false;
             _scheduler.SetCommitted(true);
             if (_host.Input.MouseClick(Input.VK_RBUTTON))
             {
                 _host.IncrementParryCount();
-                _host.RequestParryEvidence(0, CombatDirection.None);
-                _host.SetVisionReaction("ORANGE PARRY SENT", "RT input sent", "", 1300);
+                _host.RequestParryEvidence(0, CombatDirection.None, appliedDelay);
+                _host.SetVisionReaction("ORANGE PARRY SENT", "RT input sent", "", 1300, appliedDelay);
             }
-            else _host.SetVisionReaction("ORANGE PARRY FAILED", "RT input was not delivered", "", 1300);
+            else _host.SetVisionReaction("ORANGE PARRY FAILED", "RT input was not delivered", "", 1300, appliedDelay);
             return true;
         }
         if (response == OrangeResponseKind.Light)
         {
             _scheduler.SetCommitted(true);
-            SendOrangeLight();
+            SendOrangeLight(orangeDelay);
             return true;
         }
 
         if (!CanCommitOrangeAction(token)) return false;
         _scheduler.SetCommitted(true);
-        bool handledByBulwark = await SendOrangeDodgeSequenceAsync(token);
+        bool handledByBulwark = await SendOrangeDodgeSequenceAsync(token, orangeDelay);
         if (!handledByBulwark)
             _host.SetVisionReaction("ORANGE DODGE SENT",
-                redOrFeint ? "Orange parry is disabled" : "Orange indicator detected", "", 1300);
+                redOrFeint ? "Orange parry is disabled" : "Orange indicator detected", "", 1300, orangeDelay);
         return true;
     }
 
@@ -214,7 +216,7 @@ internal sealed class OrangeResponseController
         !_host.OutgoingOrangeState.SuppressesOrange && _scheduler.IsCurrent(0) &&
         Environment.TickCount64 - Interlocked.Read(ref _orangeLastSeen) <= ReactionCoordinator.MissingGraceMs;
 
-    private void SendOrangeLight()
+    private void SendOrangeLight(int orangeDelay)
     {
         OrangeLightDecision decision = OrangeLightDecision.Create(_orangeLightDirections);
         _scheduler.SetState("ORANGE LIGHT");
@@ -223,7 +225,7 @@ internal sealed class OrangeResponseController
         string direction = DirectionName(decision.Direction);
         _host.SetVisionReaction(delivered ? "ORANGE LIGHT SENT" : "ORANGE LIGHT FAILED",
             delivered ? "Orange-only indicator -> RB light" : "Directional RB input was not delivered",
-            direction, 1300);
+            direction, 1300, orangeDelay);
         _host.RecordTelemetry("orange-light-decision", new
         {
             direction,
@@ -253,33 +255,35 @@ internal sealed class OrangeResponseController
         return settings.Leftdodge ? "left" : "right";
     }
 
-    private async Task<bool> SendOrangeDodgeSequenceAsync(CancellationToken token)
+    private async Task<bool> SendOrangeDodgeSequenceAsync(CancellationToken token, int orangeDelay)
     {
         Settings settings = _host.Settings;
         IInputGateway input = _host.Input;
         if (settings.Ch("Blackprior") && input.MovingForwardHeld())
         {
             _scheduler.SetState("BULWARK STANCE");
-            _host.SetVisionReaction("BULWARK READY", "Orange response: RS down -> 50ms -> RB", "", 900);
+            const int bulwarkDelay = 50;
+            int appliedDelay = orangeDelay + bulwarkDelay;
+            _host.SetVisionReaction("BULWARK READY", "Orange response: RS down -> 50ms -> RB", "", 900, appliedDelay);
             _host.RecordTelemetry("bulwark-ready", new { candidateId = 0, path = "orange", bridge = input.Diagnostics });
             if (!input.BeginBulwarkStance())
             {
-                _host.SetVisionReaction("BULWARK FAILED", "Controller input was not delivered", "", 1300);
+                _host.SetVisionReaction("BULWARK FAILED", "Controller input was not delivered", "", 1300, appliedDelay);
                 _host.RecordTelemetry("bulwark-failed", new { candidateId = 0, path = "orange", reason = "stance-input", bridge = input.Diagnostics });
                 return true;
             }
             try
             {
-                await Task.Delay(50, token);
+                await Task.Delay(bulwarkDelay, token);
                 if (!_host.IsReactionActive) return true;
                 if (input.MouseClick(Input.VK_LBUTTON))
                 {
-                    _host.SetVisionReaction("BULWARK SENT", "Orange response: RS down + RB", "", 1300);
+                    _host.SetVisionReaction("BULWARK SENT", "Orange response: RS down + RB", "", 1300, appliedDelay);
                     _host.RecordTelemetry("bulwark-sent", new { candidateId = 0, path = "orange", bridge = input.Diagnostics });
                 }
                 else
                 {
-                    _host.SetVisionReaction("BULWARK FAILED", "RB input was not delivered", "", 1300);
+                    _host.SetVisionReaction("BULWARK FAILED", "RB input was not delivered", "", 1300, appliedDelay);
                     _host.RecordTelemetry("bulwark-failed", new { candidateId = 0, path = "orange", reason = "right-shoulder", bridge = input.Diagnostics });
                 }
             }

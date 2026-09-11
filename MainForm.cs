@@ -1,6 +1,7 @@
 using System.Media;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using HappyBot.Combat;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
@@ -69,6 +70,7 @@ public sealed class MainForm : Form
             s.Res2 = screen.Height.ToString();
         });
         _editor.Initialize(screen.Width.ToString(), screen.Height.ToString());
+        CommitEditorSettings();
         ApplyResolution(screen.Width, screen.Height);
 
         _visionOverlay = new VisionOverlayForm(_bot.GetVisionSnapshot, _bot.GetOverlayFeatures);
@@ -159,7 +161,10 @@ public sealed class MainForm : Form
                     }
                     break;
                 case "start":
-                    OnStart();
+                    OnStart(root.TryGetProperty("requestId", out JsonElement startRequestId) ? startRequestId.GetString() ?? "" : "");
+                    break;
+                case "toggle-pause":
+                    OnTogglePause();
                     break;
                 case "resolution":
                     OnResolution();
@@ -177,7 +182,7 @@ public sealed class MainForm : Form
                     OnLoad(false, false);
                     break;
                 case "apply":
-                    OnApply();
+                    OnApply(root.TryGetProperty("requestId", out JsonElement requestId) ? requestId.GetString() ?? "" : "");
                     break;
                 case "profile-select":
                     OnProfileSelect(
@@ -259,20 +264,32 @@ public sealed class MainForm : Form
     private object StatusSnapshot()
     {
         TelemetryStatus telemetry = _bot.Telemetry;
+        VisionSnapshot vision = _bot.GetVisionSnapshot();
         return new
         {
             version = BuildInfo.Version,
             build = BuildInfo.Configuration,
             profile = _editor.ActiveProfile,
             profileDirty = _editor.IsDirty,
+            timingsDirty = HasUnappliedTimings(),
+            behavior = ReactionBehaviorSummary.Create(_bot.S, Input.CanSendBulwark),
             profiles = _editor.ProfileNames(),
             running = _bot.IsRunning,
+            paused = _bot.IsPaused,
             error = _bot.LastError,
             marker = _bot.MarkerFound ? "FOUND" : "MISSING",
             hold = _bot.FHeld ? "DOWN" : "UP",
             indicator = _bot.AttackIndicator ? "YES" : "NO",
             guard = _bot.GuardDir,
             flash = _bot.Flash ? "YES" : "NO",
+            lastReaction = new
+            {
+                state = vision.LastReactionState,
+                reason = vision.LastReactionReason,
+                direction = vision.LastReactionDirection,
+                delayMs = vision.LastReactionDelayMs,
+                confirmation = ReactionConfirmationLabel(vision.LastReactionState)
+            },
             parryCount = _bot.ParryCount,
             rtSent = _bot.ParryCount,
             parryAttempts = _bot.ParryCount,
@@ -303,6 +320,19 @@ public sealed class MainForm : Form
         };
     }
 
+    private static string ReactionConfirmationLabel(string state)
+    {
+        if (state.Equals("NONE", StringComparison.OrdinalIgnoreCase)) return "WAITING";
+        if (state.Contains("UNCONFIRMED", StringComparison.OrdinalIgnoreCase)) return "UNCONFIRMED";
+        if (state.Contains("CONFIRMED", StringComparison.OrdinalIgnoreCase)) return "CONFIRMED";
+        if (state.Contains("FAILED", StringComparison.OrdinalIgnoreCase) ||
+            state.Contains("CANCELLED", StringComparison.OrdinalIgnoreCase) ||
+            state.Contains("BLOCKED", StringComparison.OrdinalIgnoreCase)) return "NOT DELIVERED";
+        if (state.Contains("SENT", StringComparison.OrdinalIgnoreCase)) return "INPUT SENT";
+        if (state.Contains("READY", StringComparison.OrdinalIgnoreCase)) return "PENDING";
+        return "OBSERVED";
+    }
+
     private Dictionary<string, object> SettingsSnapshot() => SettingsCodec.ToSnapshot(_editor.EditorSettings);
 
     private void ApplySettings(JsonElement values)
@@ -311,6 +341,7 @@ public sealed class MainForm : Form
         _editor.ReplaceEditor(editor);
         _bot.UpdateSettings(s => s.CopyLiveSwitchesFrom(editor));
         _bot.OrangeParry = editor.OrangeParry;
+        SendStatus();
     }
 
     private void OnResolution()
@@ -324,24 +355,37 @@ public sealed class MainForm : Form
         SendToast($"Resolution set to {width} x {height}.", "success");
     }
 
-    private void OnStart()
+    private void OnStart(string requestId)
     {
         if (!Input.IsReady)
         {
-            SendToast("ViGEm input is unavailable. Reconnect the virtual controller before starting.", "error");
+            const string message = "ViGEm input is unavailable. Reconnect the virtual controller before starting.";
+            SendToUi(new { type = "apply-result", requestId, success = false, message });
+            SendToast(message, "error");
             return;
         }
 
         if (!TryReadResolution(out int width, out int height))
         {
-            SendToast("Set a valid resolution before starting.", "error");
+            const string message = "Set a valid resolution before starting.";
+            SendToUi(new { type = "apply-result", requestId, success = false, message });
+            SendToast(message, "error");
             return;
         }
         CommitEditorSettings();
         ApplyResolution(width, height);
         SystemSounds.Beep.Play();
         _bot.Start();
+        SendToUi(new { type = "apply-result", requestId, success = true, message = "Timings applied." });
         SendToast("DANBOT is running.", "success");
+        SendStatus();
+    }
+
+    private void OnTogglePause()
+    {
+        if (!_bot.IsRunning) return;
+        _bot.TogglePause();
+        SendToast(_bot.IsPaused ? "DANBOT paused." : "DANBOT resumed.", "info");
         SendStatus();
     }
 
@@ -387,18 +431,32 @@ public sealed class MainForm : Form
         }, token);
     }
 
-    private void OnApply()
+    private void OnApply(string requestId)
     {
-        if (!TryReadResolution(out int width, out int height))
+        try
         {
-            SendToast("Set a valid resolution before applying settings.", "error");
-            return;
+            if (!TryReadResolution(out int width, out int height))
+            {
+                const string invalidMessage = "Set a valid resolution before applying settings.";
+                SendToUi(new { type = "apply-result", requestId, success = false, message = invalidMessage });
+                SendStatus();
+                SendToast(invalidMessage, "error");
+                return;
+            }
+            CommitEditorSettings();
+            ApplyResolution(width, height);
+            SendSettings();
+            SendStatus();
+            SendToUi(new { type = "apply-result", requestId, success = true, message = "Timings applied." });
+            SendToast("Timings applied.", "success");
         }
-        CommitEditorSettings();
-        ApplyResolution(width, height);
-        SendSettings();
-        SendStatus();
-        SendToast("Settings applied.", "success");
+        catch (Exception ex)
+        {
+            string failureMessage = "Timings were not applied: " + ex.Message;
+            SendToUi(new { type = "apply-result", requestId, success = false, message = failureMessage });
+            SendStatus();
+            SendToast(failureMessage, "error");
+        }
     }
 
     private void OnLoad(bool discard, bool draftDirty)
@@ -411,6 +469,8 @@ public sealed class MainForm : Form
             return;
         }
         SendSettings();
+        _bot.UpdateSettings(s => s.CopyLiveSwitchesFrom(_editor.EditorSettings));
+        _bot.OrangeParry = _editor.EditorSettings.OrangeParry;
         SendStatus();
         SendToast($"Profile loaded: {_editor.ActiveProfile}.", "success");
     }
@@ -426,6 +486,8 @@ public sealed class MainForm : Form
         }
 
         SendSettings();
+        _bot.UpdateSettings(s => s.CopyLiveSwitchesFrom(_editor.EditorSettings));
+        _bot.OrangeParry = _editor.EditorSettings.OrangeParry;
         SendStatus();
         SendToast($"Profile loaded: {_editor.ActiveProfile}.", "success");
     }
@@ -460,6 +522,8 @@ public sealed class MainForm : Form
             return;
         }
         SendSettings();
+        _bot.UpdateSettings(s => s.CopyLiveSwitchesFrom(_editor.EditorSettings));
+        _bot.OrangeParry = _editor.EditorSettings.OrangeParry;
         SendStatus();
         // Validated inside Delete, so this cannot throw on the success path.
         SendToast($"Profile deleted: {ProfileStore.NormalizeProfileName(profileName)}.", "success");
@@ -471,6 +535,19 @@ public sealed class MainForm : Form
         SettingsCodec.ApplyPeacekeeperRuntimeOverride(snapshot);
         _bot.UpdateSettings(s => s.CopyFrom(snapshot));
         _bot.OrangeParry = _editor.EditorSettings.OrangeParry;
+    }
+
+    private bool HasUnappliedTimings()
+    {
+        Settings editor = _editor.EditorSettings.Clone();
+        SettingsCodec.ApplyPeacekeeperRuntimeOverride(editor);
+        Settings applied = _bot.S;
+        return editor.Pause != applied.Pause || editor.Pause1 != applied.Pause1 ||
+            editor.Pause2 != applied.Pause2 || editor.Pause3 != applied.Pause3 ||
+            editor.ParryDelay != applied.ParryDelay || editor.LegitParryChance != applied.LegitParryChance ||
+            editor.CrushingFallbackChance != applied.CrushingFallbackChance ||
+            editor.DeflectFallbackChance != applied.DeflectFallbackChance || editor.GuardHold != applied.GuardHold ||
+            editor.Left != applied.Left || editor.Right != applied.Right || editor.TopDeflect != applied.TopDeflect;
     }
 
     private static int ToInt(string value) => int.TryParse(value, out int number) ? number : 0;

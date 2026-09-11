@@ -69,6 +69,10 @@ public sealed class BotCore : IAutomationHost, IDisposable
     private string _reactionState = "SEARCHING";
     private string _reactionReason = "Waiting for an anchor";
     private string _reactionDirection = "";
+    private string _lastReactionState = "NONE";
+    private string _lastReactionReason = "No reaction has been sent yet.";
+    private string _lastReactionDirection = "";
+    private int _lastReactionDelayMs = -1;
     private VisionSnapshot _vision = new();
     private ScreenFrame _frame = new();
     private ParryEvidenceSequence _parryEvidence;
@@ -125,12 +129,12 @@ public sealed class BotCore : IAutomationHost, IDisposable
     bool IAutomationHost.IsCurrentCandidate(long candidateId) => _reactionCoordinator.IsCurrent(candidateId);
     bool IAutomationHost.IsYourChar(string name) => YourChar(name);
     bool IAutomationHost.HasHeroAction => HasHeroAction();
-    void IAutomationHost.SetVisionReaction(string state, string reason, string direction, int displayMs) =>
-        SetVisionReaction(state, reason, direction, displayMs);
+    void IAutomationHost.SetVisionReaction(string state, string reason, string direction, int displayMs, int? appliedDelayMs) =>
+        SetVisionReaction(state, reason, direction, displayMs, appliedDelayMs);
     void IAutomationHost.RecordTelemetry(string name, object data, bool failure) => RecordTelemetry(name, data, failure);
     void IAutomationHost.IncrementParryCount() => ParryCount++;
-    void IAutomationHost.RequestParryEvidence(long candidateId, CombatDirection direction) =>
-        RequestParryEvidence(candidateId, direction);
+    void IAutomationHost.RequestParryEvidence(long candidateId, CombatDirection direction, int delayMs) =>
+        RequestParryEvidence(candidateId, direction, delayMs);
     void IAutomationHost.CaptureOrangeParryEvidence(CombatObservation observation, int delay,
         int feintTransitionGraceMs, long clearGapAgeMs, bool usedTransitionGrace,
         long feintDetectedAtMs, long clearStartedAtMs) =>
@@ -536,7 +540,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
                 roi = observation.CombatRoi
             });
             _telemetry.CaptureRoi("orange-self-attack-suppressed", observation.CombatRoi);
-            SetVisionReaction("ORANGE IGNORED", $"Own source {outgoingOrange.AttributionSource} attack", "", 1300);
+            SetVisionReaction("ORANGE IGNORED", $"Own source {outgoingOrange.AttributionSource} attack", "", 1300, -1);
         }
         if (outgoingOrange.SelfOrangeCleared)
         {
@@ -611,7 +615,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
                     temporalFlashLargestCluster = observation.TemporalFlashLargestCluster
                 });
                 _telemetry.CaptureRoi("indicator-" + tick.Candidate.Direction, observation.CombatRoi);
-                SetVisionReaction("GUARD", "Current classified red indicator", DirectionName(tick.Candidate.Direction), 900);
+                SetVisionReaction("GUARD", "Current classified red indicator", DirectionName(tick.Candidate.Direction), 900, -1);
             }
             if (tick.Transition.Contains("replaced", StringComparison.Ordinal))
                 _actions.CancelPendingAction("candidate-replaced");
@@ -634,7 +638,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
                 temporalFlashLargestCluster = observation.TemporalFlashLargestCluster
             }, true);
             _telemetry.CaptureRoi("candidate-" + tick.CancellationReason, observation.CombatRoi);
-            SetVisionReaction("REACTION CANCELLED", tick.CancellationReason, "", 800);
+            SetVisionReaction("REACTION CANCELLED", tick.CancellationReason, "", 800, -1);
             _actions.CancelPendingAction(tick.CancellationReason);
             if (tick.Candidate == null) _cachedCandidateGeometry = null;
         }
@@ -659,7 +663,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
         if (observation.HasIndicator && observation.Direction == CombatDirection.None)
         {
             RecordTelemetry("indicator-unknown", new { x = observation.Indicator.X, y = observation.Indicator.Y, box = Geometry.Box }, true);
-            SetVisionReaction("INDICATOR UNKNOWN", "Red indicator was outside the directional zones", "", 800);
+            SetVisionReaction("INDICATOR UNKNOWN", "Red indicator was outside the directional zones", "", 800, -1);
         }
         if (tick.Command != null)
         {
@@ -1265,10 +1269,11 @@ public sealed class BotCore : IAutomationHost, IDisposable
             activeCombat, cachedCombat, confirmation, tracked);
     }
 
-    private void RequestParryEvidence(long candidateId, CombatDirection direction)
+    private void RequestParryEvidence(long candidateId, CombatDirection direction, int delayMs)
     {
         string attemptId = $"parry-{Interlocked.Increment(ref _nextParryEvidenceId):D6}";
-        _parryConfirmation.Start(attemptId, candidateId, direction, Environment.TickCount64);
+        int capturedDelayMs = delayMs < 0 ? -1 : delayMs;
+        _parryConfirmation.Start(attemptId, candidateId, direction, Environment.TickCount64, capturedDelayMs);
 
         lock (_parryEvidenceSync)
         {
@@ -1285,6 +1290,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
                     activeAttemptId = _parryEvidence.AttemptId,
                     activeCandidateId = _parryEvidence.CandidateId,
                     activeDirection = _parryEvidence.Direction.ToString(),
+                    delayMs = capturedDelayMs,
                     timestampMs = sentAtMs,
                     sentAtMs
                 });
@@ -1292,7 +1298,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
             }
 
             _parryEvidence = new ParryEvidenceSequence(attemptId, candidateId, direction,
-                sentAtMs);
+                sentAtMs, capturedDelayMs);
             // This is input delivery evidence only. It deliberately makes no
             // claim that the game accepted the parry.
             RecordTelemetry("parry-sent", new
@@ -1300,6 +1306,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
                 attemptId,
                 candidateId,
                 direction = direction.ToString(),
+                delayMs = capturedDelayMs,
                 timestampMs = sentAtMs,
                 sentAtMs
             });
@@ -1308,8 +1315,20 @@ public sealed class BotCore : IAutomationHost, IDisposable
 
     private void ProcessParryConfirmation()
     {
-        IReadOnlyList<ParryConfirmationScan> scans = _parryConfirmation.Scan(_frame, Environment.TickCount64,
+        ProcessParryConfirmation(_frame, Environment.TickCount64,
             System.Windows.Forms.Screen.PrimaryScreen.Bounds);
+    }
+
+    // Keeps the confirmation lifecycle deterministic for regression coverage
+    // without changing the production capture loop.
+    internal void ProcessParryConfirmationForTests(ScreenFrame frame, long nowTick, Rectangle screenBounds)
+    {
+        ProcessParryConfirmation(frame, nowTick, screenBounds);
+    }
+
+    private void ProcessParryConfirmation(ScreenFrame frame, long nowTick, Rectangle screenBounds)
+    {
+        IReadOnlyList<ParryConfirmationScan> scans = _parryConfirmation.Scan(frame, nowTick, screenBounds);
         foreach (ParryConfirmationScan scan in scans)
         {
             if (_telemetry.IsRecording)
@@ -1353,12 +1372,13 @@ public sealed class BotCore : IAutomationHost, IDisposable
                     scan.CandidateId,
                     direction = scan.Direction.ToString(),
                     result = "CONFIRMED",
+                    delayMs = scan.DelayMs,
                     elapsedMs = scan.ElapsedMs,
                     brightPixels = scan.BrightPixels,
                     baseline = scan.Baseline,
                     threshold = scan.Threshold
                 });
-                SetVisionReaction("PARRY CONFIRMED", "White/gold impact detected", DirectionName(scan.Direction), 1300);
+                SetVisionReaction("PARRY CONFIRMED", "White/gold impact detected", DirectionName(scan.Direction), 1300, scan.DelayMs);
             }
             else if (scan.Result == ParryConfirmationResult.Unconfirmed)
             {
@@ -1369,13 +1389,14 @@ public sealed class BotCore : IAutomationHost, IDisposable
                     scan.CandidateId,
                     direction = scan.Direction.ToString(),
                     result = "UNCONFIRMED",
+                    delayMs = scan.DelayMs,
                     elapsedMs = scan.ElapsedMs,
                     brightPixels = scan.BrightPixels,
                     baseline = scan.Baseline,
                     threshold = scan.Threshold,
                     reason = "No visual proof found in the confirmation window"
                 });
-                SetVisionReaction("PARRY UNCONFIRMED", "No visual proof found; RT delivery did not fail", DirectionName(scan.Direction), 1300);
+                SetVisionReaction("PARRY UNCONFIRMED", "No visual proof found; RT delivery did not fail", DirectionName(scan.Direction), 1300, scan.DelayMs);
             }
         }
     }
@@ -1418,11 +1439,17 @@ public sealed class BotCore : IAutomationHost, IDisposable
         PublishVision();
     }
 
-    private void SetVisionReaction(string state, string reason, string direction = "", int displayMs = 1100)
+    private void SetVisionReaction(string state, string reason, string direction = "", int displayMs = 1100,
+        int? appliedDelayMs = null)
     {
         _reactionState = state;
         _reactionReason = reason;
         _reactionDirection = direction;
+        _lastReactionState = state;
+        _lastReactionReason = reason;
+        _lastReactionDirection = direction;
+        if (appliedDelayMs.HasValue)
+            _lastReactionDelayMs = appliedDelayMs.Value < 0 ? -1 : appliedDelayMs.Value;
         _reactionDisplayUntil = Environment.TickCount64 + displayMs;
         RecordTelemetry("reaction-state", new { state, reason, direction, guard = GuardDir, waitMs = ReactionWaitMilliseconds, flash = Flash });
         if (state.Contains("PARRY SENT", StringComparison.OrdinalIgnoreCase) ||
@@ -1495,6 +1522,10 @@ public sealed class BotCore : IAutomationHost, IDisposable
             DecisionDirection = _reactionDirection,
             ReactionState = _reactionState,
             ReactionReason = _reactionReason,
+            LastReactionState = _lastReactionState,
+            LastReactionReason = _lastReactionReason,
+            LastReactionDirection = _lastReactionDirection,
+            LastReactionDelayMs = _lastReactionDelayMs,
             Flash = Flash,
             LoopHz = LoopHz,
             Box = Geometry.Box,
@@ -1592,18 +1623,20 @@ public sealed class BotCore : IAutomationHost, IDisposable
     private sealed class ParryEvidenceSequence
     {
         public ParryEvidenceSequence(string attemptId, long candidateId, CombatDirection direction,
-            long sentAtMs)
+            long sentAtMs, int delayMs)
         {
             AttemptId = attemptId;
             CandidateId = candidateId;
             Direction = direction;
             SentAtMs = sentAtMs;
+            DelayMs = delayMs;
         }
 
         public string AttemptId { get; }
         public long CandidateId { get; }
         public CombatDirection Direction { get; }
         public long SentAtMs { get; }
+        public int DelayMs { get; }
         public int NextOffsetIndex { get; set; }
     }
 

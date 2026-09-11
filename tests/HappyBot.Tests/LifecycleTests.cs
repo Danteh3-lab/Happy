@@ -81,7 +81,9 @@ static partial class Program
         var parryExecutor = new ReactionActionExecutor(parryHost, parryScheduler, new FixedRollSource(0));
         parryExecutor.QueueReaction(new ReactionCommand(101, ReactionCommandKind.Parry, "F", CombatDirection.Left));
         Require(parryHost.ParryCount == 1 && parryInput.Events.Contains("click:" + Input.VK_RBUTTON) &&
-            parryHost.ParryEvidenceRequests.SequenceEqual(new[] { "101:Left" }),
+            parryHost.ParryEvidenceRequests.SequenceEqual(new[] { "101:Left" }) &&
+            parryHost.ParryEvidenceDelays.SequenceEqual(new[] { 0 }) &&
+            parryHost.VisionDelays["PARRY SENT"] == 0,
             "a delivered zero-delay parry should increment RT sent and request one evidence attempt");
         parryScheduler.Dispose();
 
@@ -105,7 +107,64 @@ static partial class Program
         crushingExecutor.QueueReaction(new ReactionCommand(102, ReactionCommandKind.Crushing, "F", CombatDirection.Right));
         Require(crushingInput.Events.Contains("click:" + Input.VK_LBUTTON),
             "a zero-delay crushing action should commit RB input");
+        Require(crushingHost.VisionDelays["CRUSHING SENT"] == 0,
+            "a crushing action should publish its immediate timing");
         crushingScheduler.Dispose();
+    }
+
+    private static void CapturedReactionDelaySurvivesTimingEdit()
+    {
+        var input = new FakeInputGateway();
+        input.HeldKeys.Add(Input.VK_F);
+        var settings = new Settings
+        {
+            Autoblock = true,
+            Parry = true,
+            Legit = false,
+            ParryDelay = 80
+        };
+        var host = new FakeAutomationHost(input, settings, 106);
+        var scheduler = new ActionScheduler(host.ShutdownToken);
+        var executor = new ReactionActionExecutor(host, scheduler, new FixedRollSource(0));
+        executor.QueueReaction(new ReactionCommand(106, ReactionCommandKind.Parry, "F", CombatDirection.Left));
+
+        Require(SpinWait.SpinUntil(() => host.VisionStates.Contains("PARRY READY"), 1000),
+            "the parry action should publish its ready state before waiting");
+        settings.ParryDelay = 1;
+        Require(SpinWait.SpinUntil(() => host.VisionStates.Contains("PARRY SENT"), 1000) &&
+            host.VisionDelays["PARRY SENT"] == 80,
+            "a later timing edit must not change the delay retained for the in-flight parry");
+        scheduler.Dispose();
+    }
+
+    private static void ParryConfirmationUsesAttemptDelayAfterUnrelatedReaction()
+    {
+        var input = new FakeInputGateway();
+        var bot = new BotCore(input, new FixedRollSource(0), new FixedOrangeDirectionSource(CombatDirection.Top));
+        try
+        {
+            IAutomationHost host = bot;
+            host.RequestParryEvidence(501, CombatDirection.Left, 80);
+            host.SetVisionReaction("PARRY SENT", "RT input sent", "LEFT", 1300, 80);
+            host.SetVisionReaction("GUARD", "Unrelated reaction", "LEFT", 900, -1);
+
+            long sentTick = Environment.TickCount64;
+            Rectangle bounds = new(0, 0, 1920, 1200);
+            ScreenFrame clear = SyntheticImpactFrame(1920, 1200, 0, 0, 0, 0);
+            ScreenFrame impact = SyntheticImpactFrame(1920, 1200, 900, 255, 255, 255);
+            bot.ProcessParryConfirmationForTests(clear, sentTick + 10, bounds);
+            bot.ProcessParryConfirmationForTests(clear, sentTick + 50, bounds);
+            bot.ProcessParryConfirmationForTests(impact, sentTick + 150, bounds);
+            bot.ProcessParryConfirmationForTests(impact, sentTick + 180, bounds);
+
+            VisionSnapshot snapshot = bot.GetVisionSnapshot();
+            Require(snapshot.LastReactionState == "PARRY CONFIRMED" && snapshot.LastReactionDelayMs == 80,
+                "confirmation must retrieve the original parry attempt delay after an unrelated reaction");
+        }
+        finally
+        {
+            bot.Dispose();
+        }
     }
 
     private static void ParryConfirmationTrackerConfirmsLightAndHeavyImpacts()
@@ -198,6 +257,8 @@ static partial class Program
             "a successful deflect must complete the dodge sequence before sending the RB light");
         Require(successHost.VisionStates.Contains("DEFLECT + LIGHT SENT"),
             "a successful deflect-plus-light should publish its combined state");
+        Require(successHost.VisionDelays["DEFLECT + LIGHT SENT"] == 0,
+            "a deflect should publish the delay used before the directional dodge");
         Require(successHost.AutomationLightRegistrations == 1,
             "a successfully delivered deflect light must register outgoing-orange suppression");
         successScheduler.Dispose();

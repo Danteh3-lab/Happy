@@ -3,14 +3,31 @@
 
   const bridge = window.chrome && window.chrome.webview;
   const state = { settings: {}, status: {} };
+  const applyRevision = window.HappyApplyRevision.create();
+  const heroGroups = [
+    { label: "Knights", keys: ["Warden", "Peacekeeper", "Centurion", "Blackprior", "Gryphon", "Conqueror", "Lawbringer", "Gladiator", "Warmonger"] },
+    { label: "Vikings", keys: ["Raider", "Berserker", "Highlander", "Jormungandr", "Warlord", "Valkyrie", "Shaman", "Varangian", "Null"] },
+    { label: "Samurai", keys: ["Kensei", "Orochi", "Shinobi", "Hitokiri", "Sohei", "Shugoki", "Nobushi", "Aramusha", "Kyoshin"] },
+    { label: "Wu Lin", keys: ["Tiandi", "Nuxia", "Zhanhu", "Jiangjun", "Shaolin", "Juren"] },
+    { label: "Outlanders", keys: ["Pirate", "Afeera", "Medjay", "Khatun", "Ocelotl", "Virtuosa"] },
+  ];
+  const heroKeys = heroGroups.flatMap((group) => group.keys);
+  const heroLabels = { Blackprior: "Black Prior", Jiangjun: "Jiang Jun" };
   let hydrating = false;
   let profileHighlighted = -1;
   let profileRenderedNames = [];
   let profileRenderedActive = "";
   let profileDraftDirty = false;
   let profileAwaitingClean = false;
+  let profileLoadPending = false;
   let profileTypeahead = "";
   let profileTypeaheadTimer = 0;
+  let heroHighlighted = 0;
+  let heroTypeahead = "";
+  let heroTypeaheadTimer = 0;
+  let timingDraftDirty = false;
+  let applyPending = false;
+  let applyRequestId = "";
   let modalCallback = null;
   let modalReturnFocus = null;
 
@@ -37,11 +54,192 @@
     $$('[data-setting]').forEach((control) => {
       const value = state.settings[control.dataset.setting];
       if (value === undefined) return;
-      if (control.type === "checkbox") control.checked = Boolean(value);
+      if (control.type === "checkbox") {
+        control.checked = control.dataset.setting === "YourHero"
+          ? Boolean(value) && state.settings.Nohero !== true
+          : Boolean(value);
+      }
       else control.value = value;
     });
     hydrating = false;
+    syncHeroControls();
     syncLegitChanceControl();
+  }
+
+  function beginAcknowledgedApply(action) {
+    applyPending = true;
+    applyRequestId = Date.now().toString(36) + Math.random().toString(36).slice(2);
+    applyRevision.begin(applyRequestId);
+    renderApplyState(true);
+    sendSettings();
+    post(action, { requestId: applyRequestId });
+  }
+
+  function heroOptions() {
+    return $$("#hero-select-menu [role=option]");
+  }
+
+  function renderHeroPicker() {
+    const menu = $("#hero-select-menu");
+    if (!menu || menu.dataset.rendered === "true") return;
+    menu.replaceChildren();
+
+    const none = document.createElement("button");
+    none.type = "button";
+    none.className = "hero-select-option";
+    none.id = "hero-option-none";
+    none.dataset.hero = "";
+    none.setAttribute("role", "option");
+    none.textContent = "None";
+    none.addEventListener("pointerenter", () => highlightHero(0, false));
+    none.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      chooseHero("");
+    });
+    menu.appendChild(none);
+
+    let optionIndex = 1;
+    heroGroups.forEach((group) => {
+      const groupRoot = document.createElement("div");
+      groupRoot.className = "hero-select-group";
+      groupRoot.setAttribute("role", "group");
+      groupRoot.setAttribute("aria-label", group.label);
+
+      const groupLabel = document.createElement("div");
+      groupLabel.className = "hero-select-group-label";
+      groupLabel.setAttribute("aria-hidden", "true");
+      groupLabel.textContent = group.label;
+      groupRoot.appendChild(groupLabel);
+
+      group.keys.forEach((key) => {
+        const option = document.createElement("button");
+        option.type = "button";
+        option.className = "hero-select-option";
+        option.id = "hero-option-" + key.toLowerCase();
+        option.dataset.hero = key;
+        option.setAttribute("role", "option");
+        option.textContent = heroLabels[key] || key;
+        const index = optionIndex;
+        option.addEventListener("pointerenter", () => highlightHero(index, false));
+        option.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          chooseHero(key);
+        });
+        groupRoot.appendChild(option);
+        optionIndex += 1;
+      });
+      menu.appendChild(groupRoot);
+    });
+    menu.dataset.rendered = "true";
+    highlightHero(heroHighlighted, false);
+  }
+
+  function highlightHero(index, scroll) {
+    const options = heroOptions();
+    if (!options.length) {
+      heroHighlighted = -1;
+      return;
+    }
+    heroHighlighted = Math.max(0, Math.min(index, options.length - 1));
+    options.forEach((option, optionIndex) => {
+      const selected = option.dataset.hero === selectedHero();
+      option.classList.toggle("highlighted", optionIndex === heroHighlighted);
+      option.setAttribute("aria-selected", selected ? "true" : "false");
+    });
+    const menu = $("#hero-select-menu");
+    if (menu) {
+      const active = options[heroHighlighted];
+      menu.setAttribute("aria-activedescendant", active.id || "");
+      if (scroll && active) active.scrollIntoView({ block: "nearest" });
+    }
+  }
+
+  function positionHeroMenu() {
+    const root = $("#hero-select");
+    const trigger = $("#hero-select-trigger");
+    if (!root || !trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    root.classList.toggle("open-up", spaceBelow < 320 && rect.top > spaceBelow);
+  }
+
+  function setHeroOpen(open, focusMenu) {
+    const root = $("#hero-select");
+    const menu = $("#hero-select-menu");
+    const trigger = $("#hero-select-trigger");
+    if (!root || !menu || !trigger) return;
+    renderHeroPicker();
+    menu.hidden = !open;
+    root.classList.toggle("is-open", open);
+    const containingCard = root.closest(".card");
+    if (containingCard) containingCard.classList.toggle("hero-menu-open", open);
+    trigger.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) {
+      positionHeroMenu();
+      highlightHero(heroHighlighted, false);
+      if (focusMenu) menu.focus();
+    } else {
+      root.classList.remove("open-up");
+      heroTypeahead = "";
+    }
+  }
+
+  function moveHeroHighlight(delta) {
+    highlightHero(heroHighlighted + delta, true);
+  }
+
+  function typeaheadHero(key) {
+    heroTypeahead += key.toLowerCase();
+    window.clearTimeout(heroTypeaheadTimer);
+    heroTypeaheadTimer = window.setTimeout(() => { heroTypeahead = ""; }, 700);
+    const options = heroOptions();
+    const match = options.findIndex((option) => option.textContent.toLowerCase().startsWith(heroTypeahead));
+    if (match >= 0) highlightHero(match, true);
+  }
+
+  function chooseHero(hero) {
+    heroKeys.forEach((key) => { state.settings[key] = key === hero; });
+    state.settings.Nohero = !hero;
+    if (!hero) state.settings.YourHero = false;
+    syncHeroControls();
+    syncLegitChanceControl();
+    markProfileDirty();
+    sendSettings();
+    setHeroOpen(false);
+    $("#hero-select-trigger")?.focus();
+  }
+
+  function selectedHero() {
+    return heroKeys.find((hero) => state.settings[hero] === true) || "";
+  }
+
+  function syncHeroControls() {
+    const value = $("#hero-select-value");
+    const toggle = $("#hero-response-enabled");
+    const hero = selectedHero();
+    if (value) value.textContent = heroLabels[hero] || hero || "None";
+    if (toggle) {
+      toggle.checked = hero !== "" && state.settings.YourHero === true && state.settings.Nohero !== true;
+      toggle.disabled = hero === "";
+      toggle.closest(".toggle-row")?.classList.toggle("disabled", hero === "");
+    }
+    const options = heroOptions();
+    const selectedIndex = options.findIndex((option) => option.dataset.hero === hero);
+    if (selectedIndex >= 0) {
+      heroHighlighted = selectedIndex;
+      highlightHero(heroHighlighted, false);
+    }
+    const note = $("#hero-response-note");
+    if (note) {
+      note.textContent = hero === "Peacekeeper"
+        ? "Optional: side deflect timing is forced to 100 ms when timings are applied."
+        : hero === ""
+          ? "Choose a hero first."
+          : "Generic Parry, Crushing, and Deflect can still take priority.";
+    }
+    syncTimingContext();
   }
 
   function syncLegitChanceControl() {
@@ -77,6 +275,7 @@
       profileDirty: profileDraftDirty || incomingStatus.profileDirty === true
     });
     const running = Boolean(state.status.running);
+    const paused = state.status.paused === true;
     const error = state.status.error || "";
     const marker = String(state.status.marker || "MISSING").toUpperCase();
     const hold = String(state.status.hold || "UP").toUpperCase();
@@ -97,19 +296,32 @@
     const autoDodgeBindButton = $("#auto-dodge-bind-button");
     const profileName = String(state.status.profile || "Default");
     const profileDirty = state.status.profileDirty === true;
+    const timingsDirty = timingDraftDirty || state.status.timingsDirty === true;
     const profiles = Array.isArray(state.status.profiles) && state.status.profiles.length > 0
       ? state.status.profiles
       : ["Default"];
     renderProfileSelect(profiles, profileName);
     renderProfileState(profileName, profileDirty);
+    renderApplyState(timingsDirty);
+    renderBehavior(state.status.behavior, profileName);
+    syncTimingContext();
+    renderReadiness(state.status, profileName);
+    renderLastReaction(state.status.lastReaction);
 
     const top = $("#top-runtime");
     top.innerHTML = '<span class="status-dot ' + (running ? "green" : "") + '"></span> ' + (running ? "RUNNING" : "STANDBY");
-    $("#heading-badge").textContent = error ? "ERROR" : (running ? "LIVE" : "READY TO CONFIGURE");
-    $("#runtime-title").textContent = error ? "Runtime error" : (running ? "Bot is active" : "Waiting for launch");
-    $("#runtime-copy").textContent = error || (running ? "The reaction loop is live. Return to the game when your source controller is ready." : "Configure a feature set, then start the bot before returning to the game.");
+    $("#heading-badge").textContent = error ? "ERROR" : (running ? (paused ? "PAUSED" : "LIVE") : "READY TO CONFIGURE");
+    $("#runtime-title").textContent = error ? "Runtime error" : (running ? (paused ? "Bot is paused" : "Bot is active") : "Waiting for launch");
+    $("#runtime-copy").textContent = error || (running
+      ? (paused ? "Reaction delivery is paused. Resume when your source controller is ready." : "The reaction loop is live. Return to the game when your source controller is ready.")
+      : "Configure a feature set, then start the bot before returning to the game.");
     $("#start-button").disabled = running;
-    $("#start-button").textContent = running ? "Bot running" : "Start bot";
+    $("#start-button").textContent = running ? (paused ? "Bot paused" : "Bot running") : "Start bot";
+    const pauseButton = $("#pause-button");
+    if (pauseButton) {
+      pauseButton.disabled = !running;
+      pauseButton.textContent = paused ? "Resume bot" : "Pause bot";
+    }
     $("#runtime-orb").classList.toggle("running", running);
 
     setMetric("metric-marker", marker, marker === "FOUND");
@@ -165,6 +377,7 @@
 
   function setMetric(id, text, good) {
     const element = $("#" + id);
+    if (!element) return;
     element.textContent = text;
     element.classList.toggle("good", Boolean(good));
     element.classList.toggle("alert", text === "MISSING" || text === "OFF" || text === "UP");
@@ -177,15 +390,196 @@
   function renderProfileState(profileName, dirty) {
     const profileState = $("#profile-state");
     if (!profileState) return;
-    profileState.textContent = profileName + (dirty ? " · unsaved" : " · saved");
+    profileState.replaceChildren();
+    const dot = document.createElement("span");
+    dot.className = "state-dot";
+    profileState.append(dot, document.createTextNode(dirty ? "Profile not saved" : "Profile saved"));
+    profileState.title = profileName;
     profileState.classList.toggle("dirty", dirty);
+    $("#save-profile-button").disabled = !dirty;
+  }
+
+  function renderReadiness(status, profileName) {
+    const virtualReady = String(status.virtualState || "OFF").toUpperCase() === "ON";
+    const width = Number(state.settings.res1);
+    const height = Number(state.settings.res2);
+    const resolutionReady = Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0 && width >= height;
+    setReadiness("readiness-input", virtualReady, "Virtual controller", virtualReady ? "Ready to start" : "Unavailable — reconnect ViGEm");
+    setReadiness("readiness-resolution", resolutionReady, "Screen calibration", resolutionReady ? width + " × " + height : "Set a valid resolution in Timing");
+    setReadiness("readiness-profile", true, "Active profile", profileName + (status.profileDirty === true ? " · unsaved edits" : " · saved"));
+  }
+
+  function setReadiness(id, good, title, detail) {
+    const root = $("#" + id);
+    if (!root) return;
+    const dot = root.querySelector(".state-dot");
+    if (dot) dot.classList.toggle("green", Boolean(good));
+    const labels = root.querySelectorAll("b, small");
+    if (labels[0]) labels[0].textContent = title;
+    if (labels[1]) labels[1].textContent = detail;
+    root.classList.toggle("ready", Boolean(good));
+    root.classList.toggle("not-ready", !good);
+  }
+
+  function renderLastReaction(lastReaction) {
+    const reaction = lastReaction || {};
+    const stateLabel = String(reaction.state || "NONE");
+    const stateElement = $("#last-reaction-state");
+    const confirmationElement = $("#last-reaction-confirmation");
+    const directionElement = $("#last-reaction-direction");
+    const delayElement = $("#last-reaction-delay");
+    const reasonElement = $("#last-reaction-reason");
+    const hasReaction = stateLabel !== "NONE";
+    if (stateElement) stateElement.textContent = hasReaction ? stateLabel : "No reaction yet";
+    if (confirmationElement) {
+      confirmationElement.textContent = String(reaction.confirmation || (hasReaction ? "OBSERVED" : "WAITING"));
+      confirmationElement.className = "badge badge-muted " + (String(reaction.confirmation || "").toLowerCase().replaceAll(" ", "-") || "waiting");
+    }
+    if (directionElement) directionElement.textContent = String(reaction.direction || "-") || "-";
+    if (delayElement) delayElement.textContent = Number(reaction.delayMs) >= 0 ? Number(reaction.delayMs) + " ms" : "Not applicable";
+    if (reasonElement) reasonElement.textContent = String(reaction.reason || "Start the bot to see why the next reaction was sent or skipped.");
+  }
+
+  function syncTimingContext() {
+    const hero = selectedHero();
+    const behavior = state.status.behavior || {};
+    const timingHint = (key, fallback) => behaviorValue(behavior, key, "") || fallback;
+    const override = $("#peacekeeper-override");
+    if (override) override.hidden = hero !== "Peacekeeper";
+
+    const deflectAffects = $("#deflect-affects");
+    if (deflectAffects) deflectAffects.textContent = timingHint(
+      "deflectTiming",
+      "Timing eligibility is reported after the current settings are acknowledged."
+    );
+
+    const parryAffects = $("#parry-affects");
+    if (parryAffects) parryAffects.textContent = timingHint(
+      "parryTiming",
+      "Timing eligibility is reported after the current settings are acknowledged."
+    );
+
+    const dodgeAffects = $("#dodge-affects");
+    if (dodgeAffects) dodgeAffects.textContent = timingHint(
+      "dodgeTiming",
+      "Timing eligibility is reported after the current settings are acknowledged."
+    );
+    const context = $("#timing-context");
+    if (context) context.textContent = hero === "Peacekeeper"
+      ? "Peacekeeper is selected: side deflect delays are forced to 100 ms when applied; the Top value remains editable."
+      : "Timing values are edited locally and remain pending until Apply timings succeeds.";
+  }
+
+  function validationMessage(control) {
+    const value = control.value.trim();
+    const min = Number(control.min);
+    const max = Number(control.max);
+    if (!value) return "Enter a value.";
+    if (!/^[-+]?\d+$/.test(value)) return "Use a whole number.";
+    const number = Number(value);
+    if (!Number.isFinite(number)) return "Use a valid number.";
+    if (Number.isFinite(min) && number < min) return "Must be at least " + min + ".";
+    if (Number.isFinite(max) && number > max) return "Must be at most " + max + ".";
+    return "";
+  }
+
+  function validateTimingControl(control) {
+    if (!control || (!control.dataset.timing && !control.dataset.calibration)) return true;
+    const key = control.dataset.setting;
+    let message = validationMessage(control);
+    const error = document.querySelector('[data-error-for="' + key + '"]');
+    if (error) error.textContent = message;
+    const field = control.closest(".validation-field");
+    if (field) field.classList.toggle("invalid", Boolean(message));
+    control.setAttribute("aria-invalid", message ? "true" : "false");
+    control.setCustomValidity(message);
+    return !message;
+  }
+
+  function validateTimingInputs(showSummary) {
+    let valid = true;
+    $$('[data-setting][data-timing], [data-setting][data-calibration]').forEach((control) => {
+      valid = validateTimingControl(control) && valid;
+    });
+    const width = $("[data-setting=\"res1\"]");
+    const height = $("[data-setting=\"res2\"]");
+    if (width && height && !validationMessage(width) && !validationMessage(height) && Number(width.value) < Number(height.value)) {
+      const message = "Width must be at least height.";
+      const error = document.querySelector('[data-error-for="res1"]');
+      if (error) error.textContent = message;
+      width.closest(".validation-field")?.classList.add("invalid");
+      width.setAttribute("aria-invalid", "true");
+      width.setCustomValidity(message);
+      valid = false;
+    }
+    const summary = $("#timing-validation-summary");
+    if (summary) {
+      summary.hidden = valid || !showSummary;
+      summary.textContent = valid ? "" : "Fix the highlighted timing or calibration values before applying.";
+    }
+    return valid;
+  }
+
+  function renderApplyState(dirty) {
+    const timingState = $("#timing-state");
+    const applyButton = $("#apply-button");
+    if (!timingState || !applyButton) return;
+    timingState.lastChild.textContent = applyPending ? "Applying timings…" : (dirty ? "Timings not applied" : "Timings applied");
+    timingState.classList.toggle("dirty", dirty && !applyPending);
+    timingState.classList.toggle("pending", applyPending);
+    applyButton.disabled = applyPending || !dirty;
+    applyButton.textContent = applyPending ? "Applying…" : "Apply timings";
+  }
+
+  function behaviorValue(behavior, key, fallback) {
+    if (!behavior) return fallback;
+    return behavior[key] ?? behavior[key.charAt(0).toUpperCase() + key.slice(1)] ?? fallback;
+  }
+
+  function renderBehavior(behavior, profileName) {
+    if (!behavior) return;
+    const hero = behaviorValue(behavior, "hero", "None");
+    $("#behavior-hero").textContent = hero === "Blackprior" ? "Black Prior" : hero === "Jiangjun" ? "Jiang Jun" : hero;
+    $("#behavior-profile").textContent = profileName;
+    $("#behavior-f-action").textContent = behaviorValue(behavior, "fAction", "None");
+    $("#behavior-f-detail").textContent = behaviorValue(behavior, "fDetail", "No reaction is configured.");
+    $("#behavior-e-action").textContent = behaviorValue(behavior, "eAction", "None");
+    $("#behavior-e-detail").textContent = behaviorValue(behavior, "eDetail", "No reaction is configured.");
+
+    const notices = behaviorValue(behavior, "notices", []);
+    const noticeRoot = $("#behavior-notices");
+    noticeRoot.replaceChildren();
+    (Array.isArray(notices) ? notices : []).forEach((notice) => {
+      const item = document.createElement("p");
+      item.textContent = notice;
+      noticeRoot.appendChild(item);
+    });
+
+    $("#hero-detail-title").textContent = hero === "None" ? "No hero selected" : $("#behavior-hero").textContent;
+    $("#hero-detail-behavior").textContent = behaviorValue(behavior, "heroBehavior", "No hero-specific behavior is selected.");
+    $("#hero-detail-status").textContent = behaviorValue(behavior, "heroStatus", "Inactive.");
+    $("#hero-detail-requirements").textContent = behaviorValue(behavior, "heroRequirements", "Select a hero.");
+    $("#hero-detail-timings").textContent = behaviorValue(behavior, "heroTimings", "No hero timing applies.");
+    const enabled = behaviorValue(behavior, "heroResponseEnabled", false) === true;
+    const heroMode = behaviorValue(behavior, "heroMode", enabled ? "ENABLED" : "INACTIVE");
+    const stateLabel = $("#hero-detail-state");
+    stateLabel.textContent = heroMode;
+    stateLabel.classList.toggle("active", ["ENABLED", "OVERRIDE ACTIVE", "MODIFIER ACTIVE"].includes(heroMode));
+    stateLabel.classList.toggle("info", heroMode === "TIMING ONLY");
   }
 
   function markProfileDirty() {
+    applyRevision.markEdit();
     profileDraftDirty = true;
     profileAwaitingClean = false;
     state.status = Object.assign({}, state.status, { profileDirty: true });
     renderProfileState(String(state.status.profile || "Default"), true);
+  }
+
+  function markTimingsDirty() {
+    applyRevision.markTimingEdit();
+    timingDraftDirty = true;
+    renderApplyState(true);
   }
 
   function postProfileMutation(type, extra) {
@@ -304,6 +698,7 @@
   }
 
   function requestProfileSelection(name) {
+    if (applyPending) return showToast("Wait for Apply to finish before switching profiles.", "info");
     const current = String(state.status.profile || "Default");
     setProfileOpen(false);
     if (name.toLowerCase() === current.toLowerCase()) return;
@@ -312,10 +707,14 @@
         "Discard profile changes?",
         "Unsaved changes in " + current + " will be discarded before loading " + name + ".",
         "Discard",
-        () => postProfileMutation("profile-select", { name, discard: true, draftDirty: true })
+        () => {
+          profileLoadPending = true;
+          postProfileMutation("profile-select", { name, discard: true, draftDirty: true });
+        }
       );
       return;
     }
+    profileLoadPending = true;
     postProfileMutation("profile-select", { name, discard: false, draftDirty: false });
   }
 
@@ -392,12 +791,30 @@
     $$('[data-view]').forEach((view) => view.classList.toggle("active", view.dataset.view === name));
   }
 
+  function toggleBehaviorDetails() {
+    const dock = $(".behavior-dock");
+    const button = $("#behavior-expand");
+    if (!dock || !button) return;
+    const expanded = !dock.classList.contains("is-expanded");
+    dock.classList.toggle("is-expanded", expanded);
+    button.setAttribute("aria-expanded", expanded ? "true" : "false");
+    button.textContent = expanded ? "Hide details" : "Show details";
+  }
+
   function handleAction(action) {
     if (action === "close-modal") return closeDialog();
-    if (action === "start") return sendSettingsThen("start");
+    if (action === "toggle-behavior-details") return toggleBehaviorDetails();
+    if (action === "start") {
+      if (!validateTimingInputs(true)) return showToast("Fix the highlighted timing values before starting the bot.", "error");
+      return beginAcknowledgedApply("start");
+    }
+    if (action === "toggle-pause") return post("toggle-pause");
     if (action === "scan") return sendSettingsThen("scan");
     if (action === "test") return post("test");
-    if (action === "resolution") return sendSettingsThen("resolution");
+    if (action === "resolution") {
+      if (!validateTimingInputs(true)) return showToast("Fix the highlighted values before applying calibration.", "error");
+      return sendSettingsThen("resolution");
+    }
     if (action === "save") return sendSettingsThen("save");
     if (action === "load") return requestProfileLoad();
     if (action === "profile-load") return requestProfileLoad();
@@ -434,11 +851,17 @@
         "Delete profile?",
         "Delete " + name + " and its saved settings?" + (draftDirty ? " Unsaved changes will also be discarded." : "") + " This cannot be undone.",
         "Delete",
-        () => postProfileMutation("profile-delete", { name, discard: draftDirty, draftDirty })
+        () => {
+          profileLoadPending = true;
+          postProfileMutation("profile-delete", { name, discard: draftDirty, draftDirty });
+        }
       );
       return;
     }
-    if (action === "apply") return sendSettingsThen("apply");
+    if (action === "apply") {
+      if (!validateTimingInputs(true)) return showToast("Fix the highlighted values before applying timings.", "error");
+      return beginAcknowledgedApply("apply");
+    }
     if (action === "howto") return post("howto");
     if (action === "readme") return post("readme");
     if (action === "reload") return post("reload");
@@ -476,11 +899,63 @@
         state.settings[otherName] = false;
       }
       state.settings[control.dataset.setting] = control.type === "checkbox" ? control.checked : control.value;
+      if (control.dataset.setting === "YourHero") state.settings.Nohero = !control.checked;
       if (["Autoblock", "Legit", "Parry", "Crushing", "Deflect", "BulwarkFallback", "YourHero", "Nohero", "Blackprior", "Nuxia", "Unblockables"].includes(control.dataset.setting)) syncLegitChanceControl();
+      if (control.dataset.timing || control.dataset.calibration) validateTimingControl(control);
+      syncTimingContext();
       markProfileDirty();
       if (control.type === "checkbox") sendSettings();
+      else markTimingsDirty();
     });
   });
+  const heroSelect = $("#hero-select");
+  const heroTrigger = $("#hero-select-trigger");
+  const heroMenu = $("#hero-select-menu");
+  if (heroSelect && heroTrigger && heroMenu) {
+    renderHeroPicker();
+    heroTrigger.addEventListener("click", () => setHeroOpen(heroMenu.hidden));
+    heroTrigger.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        setHeroOpen(true, true);
+        moveHeroHighlight(event.key === "ArrowDown" ? 1 : -1);
+      } else if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        setHeroOpen(heroMenu.hidden, heroMenu.hidden);
+      } else if (event.key === "Escape" && !heroMenu.hidden) {
+        event.preventDefault();
+        setHeroOpen(false);
+      }
+    });
+    heroMenu.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        moveHeroHighlight(event.key === "ArrowDown" ? 1 : -1);
+      } else if (event.key === "Home" || event.key === "End") {
+        event.preventDefault();
+        highlightHero(event.key === "Home" ? 0 : heroOptions().length - 1, true);
+      } else if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        const option = heroOptions()[heroHighlighted];
+        if (option) chooseHero(option.dataset.hero);
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        setHeroOpen(false);
+        heroTrigger.focus();
+      } else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        typeaheadHero(event.key);
+      }
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (!heroSelect.contains(event.target)) setHeroOpen(false);
+    });
+    window.addEventListener("resize", () => {
+      if (!heroMenu.hidden) positionHeroMenu();
+    });
+    $(".main-wrap")?.addEventListener("scroll", () => {
+      if (!heroMenu.hidden) positionHeroMenu();
+    }, { passive: true });
+  }
   const profileSelect = $("#profile-select");
   const profileTrigger = $("#profile-select-trigger");
   const profileMenu = $("#profile-select-menu");
@@ -525,14 +1000,21 @@
   }
 
   function requestProfileLoad() {
+    if (applyPending) return showToast("Wait for Apply to finish before loading a profile.", "info");
     const profileName = String(state.status.profile || "Default");
     const draftDirty = state.status.profileDirty === true;
-    if (!draftDirty) return postProfileMutation("profile-load", { discard: false, draftDirty: false });
+    if (!draftDirty) {
+      profileLoadPending = true;
+      return postProfileMutation("profile-load", { discard: false, draftDirty: false });
+    }
     showConfirmDialog(
       "Discard profile changes?",
       "Unsaved changes in " + profileName + " will be discarded and the saved profile will be loaded.",
       "Discard",
-      () => postProfileMutation("profile-load", { discard: true, draftDirty: true })
+      () => {
+        profileLoadPending = true;
+        postProfileMutation("profile-load", { discard: true, draftDirty: true });
+      }
     );
   }
   $(".titlebar").addEventListener("pointerdown", (event) => {
@@ -564,7 +1046,30 @@
       } else if (message.type === "status") {
         updateStatus(message.status || message);
       } else if (message.type === "settings") {
+        if (applyPending) {
+          applyRevision.acknowledge(message.settings);
+          return;
+        }
+        if (profileLoadPending) {
+          timingDraftDirty = false;
+          profileLoadPending = false;
+        }
         applySettings(message.settings);
+      } else if (message.type === "apply-result") {
+        if (applyPending && (!applyRequestId || message.requestId === applyRequestId)) {
+          const revision = applyRevision.complete(message.requestId, message.success === true);
+          if (revision.ignored) return;
+          applyPending = false;
+          applyRequestId = "";
+          if (revision.shouldHydrate) {
+            applySettings(revision.acknowledgedSettings);
+          }
+          if (revision.shouldClearTimingDirty) timingDraftDirty = false;
+          if (revision.success && revision.hasNewerTimingEdits) {
+            showToast("Earlier timings applied; newer edits are still pending.", "warning");
+          }
+          renderApplyState(timingDraftDirty || state.status.timingsDirty === true);
+        }
       } else if (message.type === "toast") {
         showToast(message.message, message.kind);
       } else if (message.type === "dialog") {

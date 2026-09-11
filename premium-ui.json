@@ -1,0 +1,7 @@
+{
+  "sourceRoots": ["ui"],
+  "locale": "en",
+  "ownership": {
+    "Select/Listbox": "native"
+  }
+}

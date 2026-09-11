@@ -23,6 +23,10 @@ public sealed class VisionSnapshot
     public string DecisionDirection { get; init; } = "";
     public string ReactionState { get; init; } = "SEARCHING";
     public string ReactionReason { get; init; } = "Waiting for an anchor";
+    public string LastReactionState { get; init; } = "NONE";
+    public string LastReactionReason { get; init; } = "No reaction has been sent yet.";
+    public string LastReactionDirection { get; init; } = "";
+    public int LastReactionDelayMs { get; init; } = -1;
     public bool Flash { get; init; }
     public int LoopHz { get; init; }
     public int Box { get; init; }

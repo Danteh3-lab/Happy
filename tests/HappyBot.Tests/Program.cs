@@ -40,6 +40,7 @@ static partial class Program
             CroppedSearchDoesNotRepeatEdgePixels();
             CapturePlannerCoversBootstrapAndTrackedRegions();
             ReactionPolicySelectionCoversEAndFWardenPriority();
+            BehaviorSummaryMatchesReactionPriorityAndRequirements();
             NuxiaTopDeflectIsDisabledForYourHero();
             VisionAnalyzerUsesExplicitBoundsAndPreservesMarkerLoss();
             VisionAnalyzerUsesOriginalRoiAndStrictFlashPixel();
@@ -56,6 +57,8 @@ static partial class Program
             AutoGuardFakeInputAppliesReplacesAndReleases();
             SchedulerImmediateStateIsAuthoritative();
             ZeroDelayReactionActionsCommit();
+            CapturedReactionDelaySurvivesTimingEdit();
+            ParryConfirmationUsesAttemptDelayAfterUnrelatedReaction();
             ParryConfirmationTrackerConfirmsLightAndHeavyImpacts();
             ParryConfirmationTrackerRespectsTimingAndScaledThresholds();
             DeflectSendsLightOnlyAfterSuccessfulDodge();
@@ -222,11 +225,21 @@ static partial class Program
         public List<string> TelemetryEvents { get; } = new();
         public int AutomationLightRegistrations { get; private set; }
         public List<string> VisionStates { get; } = new();
-        public void SetVisionReaction(string state, string reason, string direction = "", int displayMs = 1100) => VisionStates.Add(state);
+        public void SetVisionReaction(string state, string reason, string direction = "", int displayMs = 1100,
+            int? appliedDelayMs = null)
+        {
+            VisionStates.Add(state);
+            if (appliedDelayMs.HasValue) VisionDelays[state] = appliedDelayMs.Value;
+        }
+        public Dictionary<string, int> VisionDelays { get; } = new();
         public void RecordTelemetry(string name, object data, bool failure = false) => TelemetryEvents.Add(name);
         public void IncrementParryCount() => ParryCount++;
-        public void RequestParryEvidence(long candidateId, CombatDirection direction) =>
+        public void RequestParryEvidence(long candidateId, CombatDirection direction, int delayMs)
+        {
             ParryEvidenceRequests.Add(candidateId + ":" + direction);
+            ParryEvidenceDelays.Add(delayMs);
+        }
+        public List<int> ParryEvidenceDelays { get; } = new();
         public void CaptureOrangeParryEvidence(CombatObservation observation, int delay,
             int feintTransitionGraceMs, long clearGapAgeMs, bool usedTransitionGrace,
             long feintDetectedAtMs, long clearStartedAtMs) =>

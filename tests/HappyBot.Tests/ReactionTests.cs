@@ -7,6 +7,129 @@ using HappyBot.Vision;
 
 static partial class Program
 {
+    private static void BehaviorSummaryMatchesReactionPriorityAndRequirements()
+    {
+        var settings = new Settings
+        {
+            Autoblock = true,
+            YourHero = true,
+            Parry = true,
+            Deflect = true,
+            Legit = true,
+            LegitParryChance = 55,
+            DeflectFallbackChance = 70,
+            Left = 70,
+            TopDeflect = 85,
+            Right = 70,
+            Parry2 = true,
+            ParryDelay = 12
+        };
+        settings.Chars["Orochi"] = true;
+
+        ReactionBehaviorSummary summary = ReactionBehaviorSummary.Create(settings, true);
+        Require(summary.Hero == "Orochi", "summary should expose the selected hero");
+        Require(summary.FAction == "Mixed parry" && summary.FDetail.Contains("70% deflect first"),
+            "summary should describe the actual Legit parry and deflect fallback order");
+        Require(summary.HeroStatus == "Orochi response inactive: Parry takes priority.",
+            "summary should explain why Orochi does not run");
+        Require(summary.EAction == "Mixed parry" && summary.EDetail.Contains("otherwise block only"),
+            "E summary should not claim that F-only fallbacks apply");
+
+        settings.Parry = false;
+        settings.Deflect = false;
+        summary = ReactionBehaviorSummary.Create(settings, true);
+        Require(summary.FAction == "Orochi response" && summary.FDetail.Contains("No configurable delay"),
+            "Orochi should become the effective action after higher-priority reactions are disabled");
+
+        settings.Autoblock = false;
+        summary = ReactionBehaviorSummary.Create(settings, true);
+        Require(summary.FAction == "Inactive" && summary.HeroStatus.Contains("Auto Block is disabled") &&
+                summary.Notices.Any(n => n.Contains("Auto Block")),
+            "summary should expose the missing Auto Block requirement for the main and hero reactions");
+
+        var warden = new Settings
+        {
+            Autoblock = true,
+            YourHero = true,
+            Parry = true,
+            ParryDelay = 20
+        };
+        warden.Chars["Warden"] = true;
+        summary = ReactionBehaviorSummary.Create(warden, true);
+        Require(summary.FAction == "Parry / top Crushing" &&
+                summary.FDetail.Contains("Top attacks send a crushing counter immediately") &&
+                summary.FDetail.Contains("20 ms"),
+            "Warden summary should expose the immediate top crushing override and side parry delay");
+        Require(summary.HeroMode == "OVERRIDE ACTIVE" && summary.HeroStatus.Contains("immediate crushing counter"),
+            "Warden should be presented as an override, not a standalone hero action");
+
+        warden.YourHero = false;
+        summary = ReactionBehaviorSummary.Create(warden, true);
+        Require(summary.FAction == "Parry" && summary.HeroStatus.Contains("no standalone hero response"),
+            "Warden should not be described as active when its override is disabled");
+
+        var nuxia = new Settings { Autoblock = true, YourHero = true };
+        nuxia.Chars["Nuxia"] = true;
+        summary = ReactionBehaviorSummary.Create(nuxia, true);
+        Require(summary.FAction == "None" && summary.HeroStatus.Contains("no standalone hero response"),
+            "Nuxia should not be described as an active F/LT action without Deflect");
+
+        nuxia.Parry = true;
+        nuxia.Deflect = true;
+        nuxia.Legit = true;
+        summary = ReactionBehaviorSummary.Create(nuxia, true);
+        Require(summary.FAction == "Mixed parry" && summary.HeroMode == "MODIFIER ACTIVE" &&
+                summary.HeroStatus.Contains("Legit deflect fallback") &&
+                summary.HeroStatus.Contains("top deflect is blocked"),
+            "Nuxia should explain that its top-deflect rule still applies to the Legit deflect fallback");
+
+        nuxia.Legit = false;
+        summary = ReactionBehaviorSummary.Create(nuxia, true);
+        Require(summary.HeroMode == "INACTIVE" && summary.HeroStatus.Contains("Parry takes priority"),
+            "Nuxia should not mark the modifier active when Parry has no Legit deflect fallback");
+
+        nuxia.Parry = false;
+        nuxia.Crushing = true;
+        summary = ReactionBehaviorSummary.Create(nuxia, true);
+        Require(summary.HeroMode == "INACTIVE" && summary.HeroStatus.Contains("Crushing counter takes priority"),
+            "Nuxia should not mark the modifier active when Crushing prevents direct Deflect");
+
+        nuxia.Crushing = false;
+        summary = ReactionBehaviorSummary.Create(nuxia, true);
+        Require(summary.HeroMode == "MODIFIER ACTIVE" && summary.HeroStatus.Contains("top deflect is blocked"),
+            "Nuxia should mark the modifier active for direct Deflect");
+
+        nuxia.YourHero = false;
+        summary = ReactionBehaviorSummary.Create(nuxia, true);
+        Require(summary.DeflectTiming.Contains("Direct F/LT deflect") && !summary.DeflectTiming.Contains("Nuxia top is excluded"),
+            "Nuxia's top restriction must disappear when standalone hero response is disabled");
+
+        nuxia.YourHero = true;
+        nuxia.Parry = true;
+        nuxia.Legit = false;
+        summary = ReactionBehaviorSummary.Create(nuxia, true);
+        Require(summary.DeflectTiming.Contains("normal Parry takes priority"),
+            "normal Parry must make direct Deflect timing inactive");
+
+        nuxia.Parry = false;
+        nuxia.Crushing = true;
+        summary = ReactionBehaviorSummary.Create(nuxia, true);
+        Require(summary.DeflectTiming.Contains("Crushing counter takes priority"),
+            "Crushing must make direct Deflect timing inactive");
+
+        var eOnlyParry = new Settings { Autoblock = true, Parry2 = true, ParryDelay = 33 };
+        summary = ReactionBehaviorSummary.Create(eOnlyParry, true);
+        Require(summary.ParryTiming.Contains("E") && summary.ParryTiming.Contains("33 ms"),
+            "E-only Parry must keep the Parry delay active");
+
+        var peacekeeper = new Settings { Autoblock = true, YourHero = false };
+        peacekeeper.Chars["Peacekeeper"] = true;
+        summary = ReactionBehaviorSummary.Create(peacekeeper, true);
+        Require(summary.HeroMode == "TIMING ONLY" && summary.HeroStatus.Contains("forces side deflect delays to 100 ms") &&
+                summary.HeroRequirements.Contains("not required"),
+            "Peacekeeper should explain its timing-only behavior even when the toggle is off");
+    }
+
     private static void FlashWithinGuardSendsOnce()
     {
         var coordinator = new ReactionCoordinator();
