@@ -289,6 +289,28 @@ static partial class Program
         undeliveredScheduler.Dispose();
     }
 
+    private static void OrochiDeflectSendsHeavyAfterSuccessfulDodge()
+    {
+        var input = new FakeInputGateway();
+        input.HeldKeys.Add(Input.VK_F);
+        var settings = new Settings { Autoblock = true, Deflect = true, YourHero = true, Left = 0 };
+        settings.Chars["Orochi"] = true;
+        var host = new FakeAutomationHost(input, settings, 107);
+        var scheduler = new ActionScheduler(host.ShutdownToken);
+        var executor = new ReactionActionExecutor(host, scheduler, new FixedRollSource(0));
+        executor.QueueReaction(new ReactionCommand(107, ReactionCommandKind.Deflect, "F", CombatDirection.Left));
+
+        Require(SpinWait.SpinUntil(() => input.Events.Contains("click:" + Input.VK_RBUTTON), 1000),
+            "an Orochi deflect must send the RT heavy follow-up");
+        int dodgeIndex = input.Events.IndexOf("tap:" + Input.VK_SPACE);
+        int heavyIndex = input.Events.IndexOf("click:" + Input.VK_RBUTTON);
+        Require(dodgeIndex >= 0 && heavyIndex > dodgeIndex && !input.Events.Contains("click:" + Input.VK_LBUTTON),
+            "an Orochi deflect must complete the dodge before RT and must not send RB");
+        Require(host.VisionStates.Contains("DEFLECT + HEAVY SENT") && host.AutomationLightRegistrations == 0,
+            "an Orochi deflect should publish the heavy response without registering a light attack");
+        scheduler.Dispose();
+    }
+
     private static void ShutdownWithoutStartReleasesInputsInBackground()
     {
         // Closing without ever starting automation, with input submission

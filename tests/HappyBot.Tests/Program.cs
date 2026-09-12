@@ -62,6 +62,7 @@ static partial class Program
             ParryConfirmationTrackerConfirmsLightAndHeavyImpacts();
             ParryConfirmationTrackerRespectsTimingAndScaledThresholds();
             DeflectSendsLightOnlyAfterSuccessfulDodge();
+            OrochiDeflectSendsHeavyAfterSuccessfulDodge();
             Ds4UsbReportMapsToXboxState();
             Ds4BluetoothReportMapsToXboxState();
             Ds4MalformedReportIsRejected();

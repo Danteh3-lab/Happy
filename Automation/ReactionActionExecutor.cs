@@ -170,14 +170,18 @@ internal sealed class ReactionActionExecutor
             await Task.Delay(Math.Max(0, delay), token);
             if (!CanCommitAction(command, token)) return false;
             _scheduler.SetCommitted(true);
-            if (SendDeflect(command.Direction))
+            int followUpInput = _host.IsYourChar("Orochi") ? Input.VK_RBUTTON : Input.VK_LBUTTON;
+            string followUpName = followUpInput == Input.VK_RBUTTON ? "RT HEAVY" : "RB LIGHT";
+            if (SendDeflect(command.Direction) && _host.Input.MouseClick(followUpInput))
             {
-                if (_host.Input.MouseClick(Input.VK_LBUTTON))
+                if (followUpInput == Input.VK_LBUTTON)
                     _host.RegisterAutomationLight();
-                _host.SetVisionReaction("DEFLECT + LIGHT SENT", "F hold + directional dodge + RB", DirectionName(command.Direction), 1300, delay);
+                _host.SetVisionReaction("DEFLECT + " + (followUpInput == Input.VK_RBUTTON ? "HEAVY" : "LIGHT") + " SENT",
+                    "F hold + directional dodge + " + followUpName, DirectionName(command.Direction), 1300, delay);
             }
             else
-                _host.SetVisionReaction("DEFLECT FAILED", "Directional dodge input was not delivered", DirectionName(command.Direction), 1300, delay);
+                _host.SetVisionReaction("DEFLECT FAILED", "Directional dodge or " + followUpName + " input was not delivered",
+                    DirectionName(command.Direction), 1300, delay);
             return true;
         }
         if (command.Kind == ReactionCommandKind.Hero)

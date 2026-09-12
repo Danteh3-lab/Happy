@@ -28,14 +28,19 @@ static partial class Program
 
         ReactionBehaviorSummary summary = ReactionBehaviorSummary.Create(settings, true);
         Require(summary.Hero == "Orochi", "summary should expose the selected hero");
-        Require(summary.FAction == "Mixed parry" && summary.FDetail.Contains("70% deflect first"),
-            "summary should describe the actual Legit parry and deflect fallback order");
+        Require(summary.FAction == "Mixed parry" && summary.FDetail.Contains("70% deflect first") &&
+                summary.FDetail.Contains("Orochi uses RT heavy follow-up"),
+            "summary should describe the actual Legit parry, deflect fallback order, and Orochi heavy follow-up");
         Require(summary.HeroStatus == "Orochi response inactive: Parry takes priority.",
             "summary should explain why Orochi does not run");
         Require(summary.EAction == "Mixed parry" && summary.EDetail.Contains("otherwise block only"),
             "E summary should not claim that F-only fallbacks apply");
 
         settings.Parry = false;
+        summary = ReactionBehaviorSummary.Create(settings, true);
+        Require(summary.FAction == "Deflect" && summary.FDetail.Contains("Orochi uses the RT heavy follow-up"),
+            "direct Orochi deflects should be described as the RT heavy follow-up");
+
         settings.Deflect = false;
         summary = ReactionBehaviorSummary.Create(settings, true);
         Require(summary.FAction == "Orochi response" && summary.FDetail.Contains("No configurable delay"),

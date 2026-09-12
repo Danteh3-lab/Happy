@@ -48,9 +48,9 @@ internal sealed record ReactionBehaviorSummary(
                 ? (wardenTopOverride ? "Mixed parry / top Crushing" : "Mixed parry")
                 : (wardenTopOverride ? "Parry / top Crushing" : "Parry");
             fDetail = settings.Legit
-                ? wardenTopOverride
-                    ? $"Top attacks send a crushing counter immediately; sides: {DescribeLegitF(settings, heroEnabled, canSendBulwark)}"
-                    : DescribeLegitF(settings, heroEnabled, canSendBulwark)
+                    ? wardenTopOverride
+                        ? $"Top attacks send a crushing counter immediately; sides: {DescribeLegitF(settings, heroEnabled, canSendBulwark, hero == "Orochi")}"
+                    : DescribeLegitF(settings, heroEnabled, canSendBulwark, hero == "Orochi")
                 : wardenTopOverride
                     ? $"Top attacks send a crushing counter immediately; side attacks use Parry after the flash gate and {settings.ParryDelay} ms delay."
                     : $"Parry after the flash gate and {settings.ParryDelay} ms delay.";
@@ -63,7 +63,7 @@ internal sealed record ReactionBehaviorSummary(
         else if (settings.Deflect)
         {
             fAction = "Deflect";
-            fDetail = DescribeDeflect(settings, heroEnabled && hero == "Nuxia");
+            fDetail = DescribeDeflect(settings, heroEnabled && hero == "Nuxia", heroEnabled && hero == "Orochi");
         }
         else if (ReactionPolicy.HasHeroAction(settings))
         {
@@ -140,12 +140,13 @@ internal sealed record ReactionBehaviorSummary(
         return "None";
     }
 
-    private static string DescribeLegitF(Settings settings, bool heroEnabled, bool canSendBulwark)
+    private static string DescribeLegitF(Settings settings, bool heroEnabled, bool canSendBulwark, bool orochi)
     {
         var fallbacks = new List<string>();
         if (settings.Deflect)
             fallbacks.Add($"{settings.DeflectFallbackChance}% deflect first ({settings.Left}/{settings.TopDeflect}/{settings.Right} ms L/T/R)" +
-                (heroEnabled && settings.Ch("Nuxia") ? "; Nuxia top is excluded" : ""));
+                (heroEnabled && settings.Ch("Nuxia") ? "; Nuxia top is excluded" : "") +
+                (orochi ? "; Orochi uses RT heavy follow-up" : ""));
 
         bool crushing = settings.Crushing;
         bool bulwark = settings.BulwarkFallback && heroEnabled && settings.Ch("Blackprior") && canSendBulwark;
@@ -161,10 +162,12 @@ internal sealed record ReactionBehaviorSummary(
         return $"{settings.LegitParryChance}% parry after {settings.ParryDelay} ms; failed rolls: {string.Join(", ", fallbacks)}.";
     }
 
-    private static string DescribeDeflect(Settings settings, bool nuxia)
+    private static string DescribeDeflect(Settings settings, bool nuxia, bool orochi)
     {
         string result = $"Directional dodge after the flash gate: {settings.Left} ms left, {settings.TopDeflect} ms top, {settings.Right} ms right.";
-        return nuxia ? result + " Nuxia top deflect is disabled." : result;
+        if (nuxia) result += " Nuxia top deflect is disabled.";
+        if (orochi) result += " Orochi uses the RT heavy follow-up.";
+        return result;
     }
 
     private static string DescribeDeflectTiming(Settings settings, string hero, bool heroEnabled)
