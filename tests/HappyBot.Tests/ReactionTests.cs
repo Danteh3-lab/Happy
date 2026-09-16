@@ -346,6 +346,22 @@ static partial class Program
             "Auto light off must preserve the normal orange dodge");
     }
 
+    private static void OrangeFeintBlocksNormalReactionPriority()
+    {
+        var settings = new Settings { Unblockables = true, Deflect = true };
+        CombatObservation feintOnly = Observation(401, CombatDirection.Left) with
+        {
+            OrangeIndicator = false,
+            OrangeFeint = true,
+            LightFlash = true
+        };
+
+        Require(ReactionPolicy.OrangeHasPriority(feintOnly, settings, false),
+            "an orange-feint transition must block a normal deflect even before the orange indicator frame");
+        Require(!ReactionPolicy.OrangeHasPriority(feintOnly with { OrangeFeint = false }, settings, false),
+            "a normal red flash without orange evidence must remain available to the normal reaction policy");
+    }
+
     private static void OrangeParryEvidenceArmsOnFeint()
     {
         var input = new FakeInputGateway();
@@ -462,6 +478,28 @@ static partial class Program
         OutgoingOrangeGuardResult clear = guard.Observe(1601, true, false, false, false);
         Require(clear.SelfOrangeCleared && !clear.SuppressesOrange,
             "a confirmed clear after the automation window must release suppression");
+
+        OutgoingOrangeGuardResult nextEnemy = guard.Observe(1700, true, true, false, false);
+        Require(!nextEnemy.SuppressesOrange && !nextEnemy.SelfOrangeStarted,
+            "a new orange after confirmed clear and window expiry must be eligible again");
+    }
+
+    private static void OutgoingOrangeGuardAutomationHeavySuppressesUntilClear()
+    {
+        var guard = new OutgoingOrangeGuard();
+        guard.RegisterAutomationHeavy(100);
+
+        OutgoingOrangeGuardResult laterOrange = guard.Observe(500, true, true, false, false);
+        Require(laterOrange.SuppressesOrange && laterOrange.SelfOrangeStarted && laterOrange.AttributionSource == "RT",
+            "a bot-generated RT heavy should suppress and attribute a later orange as RT");
+
+        OutgoingOrangeGuardResult markerLoss = guard.Observe(600, false, true, false, false);
+        Require(markerLoss.SuppressesOrange && markerLoss.SelfOrangeLatched,
+            "marker loss must not clear the automation-heavy orange latch");
+
+        OutgoingOrangeGuardResult clear = guard.Observe(1601, true, false, false, false);
+        Require(clear.SelfOrangeCleared && !clear.SuppressesOrange,
+            "a confirmed clear after the automation-heavy window must release suppression");
 
         OutgoingOrangeGuardResult nextEnemy = guard.Observe(1700, true, true, false, false);
         Require(!nextEnemy.SuppressesOrange && !nextEnemy.SelfOrangeStarted,

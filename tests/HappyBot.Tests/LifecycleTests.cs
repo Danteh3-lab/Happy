@@ -304,10 +304,13 @@ static partial class Program
             "an Orochi deflect must send the RT heavy follow-up");
         int dodgeIndex = input.Events.IndexOf("tap:" + Input.VK_SPACE);
         int heavyIndex = input.Events.IndexOf("click:" + Input.VK_RBUTTON);
-        Require(dodgeIndex >= 0 && heavyIndex > dodgeIndex && !input.Events.Contains("click:" + Input.VK_LBUTTON),
-            "an Orochi deflect must complete the dodge before RT and must not send RB");
-        Require(host.VisionStates.Contains("DEFLECT + HEAVY SENT") && host.AutomationLightRegistrations == 0,
-            "an Orochi deflect should publish the heavy response without registering a light attack");
+        int heavyCount = input.Events.Count(eventName => eventName == "click:" + Input.VK_RBUTTON);
+        Require(dodgeIndex >= 0 && heavyIndex > dodgeIndex && heavyCount == 1 &&
+                !input.Events.Contains("click:" + Input.VK_LBUTTON),
+            "an Orochi deflect must complete the dodge before one RT neutral heavy and must not send RB");
+        Require(host.VisionStates.Contains("DEFLECT + HEAVY SENT") && host.AutomationLightRegistrations == 0 &&
+                host.AutomationHeavyRegistrations == 1,
+            "an Orochi deflect should publish one heavy response and register its orange animation suppression");
         scheduler.Dispose();
     }
 

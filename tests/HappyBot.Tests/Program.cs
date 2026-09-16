@@ -29,11 +29,13 @@ static partial class Program
             BulwarkFallbackEligibilityIsStrict();
             OrangeOnlyLightSelectionIsDeterministic();
             OrangeRedResponseKeepsCurrentPriority();
+            OrangeFeintBlocksNormalReactionPriority();
             OrangeParryEvidenceArmsOnFeint();
             OrangeFeintGraceExpiresBeforePlainOrange();
             OrangeMarkerLossDoesNotClearResponseLatch();
             OutgoingOrangeGuardSuppressesOwnAttackUntilClear();
             OutgoingOrangeGuardAutomationLightSuppressesUntilClear();
+            OutgoingOrangeGuardAutomationHeavySuppressesUntilClear();
             FailedLegitDecisionLeavesCandidateAvailableForGuard();
             AutoBlockOffDoesNotArmCandidate();
             FullFrameScreenCoordinatesPreserveRoiDetection();
@@ -47,6 +49,8 @@ static partial class Program
             VisionAnalyzerProfilesStrictFlashAtArmedIndicator();
             VisionAnalyzerGraceScanAcceptsFlashWithoutMarker();
             AnchorGraceKeepsExistingCandidateFlashOnly();
+            AnchorGraceDoesNotRefreshCandidateValidity();
+            AnchorMarkerDetectorRanksNearbyCandidates();
             TemporalFlashCalibrationExcludesArmedIndicator();
             AnchorTrackerConfirmsNewMarkerAfterTwoSamples();
             AnchorTrackerHoldsThroughSingleFrameHole();
@@ -54,6 +58,7 @@ static partial class Program
             AnchorTrackerBoxFlipDetected();
             AnchorJumpPayloadKeepsLegacyFieldNames();
             CombatGeometryResolutionAndRoi();
+            VisionTrackingSnapshotPublishesCoherentGeometry();
             AutoGuardFakeInputAppliesReplacesAndReleases();
             SchedulerImmediateStateIsAuthoritative();
             ZeroDelayReactionActionsCommit();
@@ -225,6 +230,7 @@ static partial class Program
         public List<string> OrangeParryEvidenceRequests { get; } = new();
         public List<string> TelemetryEvents { get; } = new();
         public int AutomationLightRegistrations { get; private set; }
+        public int AutomationHeavyRegistrations { get; private set; }
         public List<string> VisionStates { get; } = new();
         public void SetVisionReaction(string state, string reason, string direction = "", int displayMs = 1100,
             int? appliedDelayMs = null)
@@ -246,6 +252,7 @@ static partial class Program
             long feintDetectedAtMs, long clearStartedAtMs) =>
             OrangeParryEvidenceRequests.Add(observation.TimestampMs + ":" + delay + ":" + clearGapAgeMs);
         public void RegisterAutomationLight() => AutomationLightRegistrations++;
+        public void RegisterAutomationHeavy() => AutomationHeavyRegistrations++;
         public void RestoreAutoGuardAfterDirectionalLight() { }
     }
 }

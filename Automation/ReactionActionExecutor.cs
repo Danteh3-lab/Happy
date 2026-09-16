@@ -27,6 +27,7 @@ internal interface IAutomationHost
         int feintTransitionGraceMs, long clearGapAgeMs, bool usedTransitionGrace,
         long feintDetectedAtMs, long clearStartedAtMs);
     void RegisterAutomationLight();
+    void RegisterAutomationHeavy();
     void RestoreAutoGuardAfterDirectionalLight();
 }
 
@@ -176,6 +177,8 @@ internal sealed class ReactionActionExecutor
             {
                 if (followUpInput == Input.VK_LBUTTON)
                     _host.RegisterAutomationLight();
+                else
+                    _host.RegisterAutomationHeavy();
                 _host.SetVisionReaction("DEFLECT + " + (followUpInput == Input.VK_RBUTTON ? "HEAVY" : "LIGHT") + " SENT",
                     "F hold + directional dodge + " + followUpName, DirectionName(command.Direction), 1300, delay);
             }

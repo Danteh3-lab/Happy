@@ -39,4 +39,10 @@ public sealed class VisionSnapshot
     public string ActionWorkerState { get; init; } = "IDLE";
     public string LegitParryStatus { get; init; } = "LEGIT OFF";
     public bool TelemetryRecording { get; init; }
+    public long TrackingVersion { get; init; }
+    public int AnchorCandidateCount { get; init; }
+    public int AnchorCandidatePixelCount { get; init; }
+    public int AnchorCandidateDistance { get; init; } = -1;
+    public string AnchorCandidateReason { get; init; } = "no-color-match";
+    public long AnchorScanDurationUs { get; init; }
 }

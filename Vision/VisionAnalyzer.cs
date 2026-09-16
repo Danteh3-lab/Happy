@@ -1,4 +1,5 @@
 using System.Drawing;
+using HappyBot;
 using HappyBot.Combat;
 
 namespace HappyBot.Vision;
@@ -31,7 +32,8 @@ internal sealed record VisionScanRequest(
     CombatDirection GraceDirection = CombatDirection.None,
     bool MarkerGraceScan = false,
     long TrackingGraceAgeMs = 0,
-    FlashTemporalBaseline TemporalBaseline = null);
+    FlashTemporalBaseline TemporalBaseline = null,
+    VisionTrackingSnapshot Tracking = null);
 
 /// <summary>Result of a scan, including the diagnostic red-match probe.</summary>
 internal sealed record VisionAnalysisResult(CombatObservation Observation, ColorProbe RedProbe);
@@ -100,7 +102,7 @@ internal sealed class VisionAnalyzer
                     mode, configuredRoi, request.MarkerLossAgeMs,
                     flashCluster.MatchCount, temporalFlash.MatchCount, temporalFlash.LargestCluster,
                     trackingGraceAgeMs, strictFlashPoint, indicatorFlashCluster.MatchCount,
-                    indicatorFlashCluster.Bounds),
+                    indicatorFlashCluster.Bounds) with { Tracking = request.Tracking },
                 new ColorProbe(0, -1, -1, "n/a", -1));
         }
 
@@ -122,7 +124,7 @@ internal sealed class VisionAnalyzer
                 request.SourceHeavyHeld, request.SourceLightHeld,
                 VisionScanMode.Tracked, configuredRoi, 0, flashCluster.MatchCount,
                 temporalFlash.MatchCount, temporalFlash.LargestCluster, 0, strictFlashPoint,
-                indicatorFlashCluster.MatchCount, indicatorFlashCluster.Bounds), probe);
+                indicatorFlashCluster.MatchCount, indicatorFlashCluster.Bounds) with { Tracking = request.Tracking }, probe);
     }
 
     /// <summary>
@@ -227,7 +229,7 @@ internal sealed class VisionAnalyzer
                 false, false, false, false, request.EHeld, request.FHeld, request.LtHeld,
                 request.InputReady, request.SourceHeavyHeld, request.SourceLightHeld,
                 VisionScanMode.Tracked, request.CombatRoi, request.MarkerLossAgeMs, 0,
-                0, 0, request.TrackingGraceAgeMs != 0 ? request.TrackingGraceAgeMs : request.MarkerLossAgeMs),
+                0, 0, request.TrackingGraceAgeMs != 0 ? request.TrackingGraceAgeMs : request.MarkerLossAgeMs) with { Tracking = request.Tracking },
             new ColorProbe(0, -1, -1, "n/a", -1));
     }
 

@@ -303,7 +303,7 @@ static partial class Program
     private static void AnchorGraceKeepsExistingCandidateFlashOnly()
     {
         var coordinator = new ReactionCoordinator();
-        coordinator.Tick(Observation(1, CombatDirection.Right), ReactionCommandKind.None, "");
+        coordinator.Tick(Observation(200, CombatDirection.Right), ReactionCommandKind.None, "");
 
         CombatObservation grace = Observation(300, CombatDirection.None, hasThreat: false) with
         {
@@ -318,6 +318,73 @@ static partial class Program
         CoordinatorTick accepted = coordinator.Tick(grace with { TimestampMs = 310, LightFlash = true }, ReactionCommandKind.Parry, "F");
         Require(accepted.Command is { Kind: ReactionCommandKind.Parry, Direction: CombatDirection.Right },
             "anchor grace must preserve only the existing candidate for a flash");
+    }
+
+    private static void AnchorGraceDoesNotRefreshCandidateValidity()
+    {
+        var coordinator = new ReactionCoordinator();
+        coordinator.Tick(Observation(1, CombatDirection.Right), ReactionCommandKind.None, "");
+
+        // A missing/unconfirmed frame may keep the cached candidate visible,
+        // but it must not move LastValidMs forward. The candidate therefore
+        // expires at the original 250 ms boundary.
+        coordinator.Tick(Observation(200, CombatDirection.None, hasThreat: false) with
+        {
+            MarkerFound = false,
+            ScanMode = VisionScanMode.AnchorGrace,
+            TrackingGraceAgeMs = 50
+        }, ReactionCommandKind.None, "");
+        CoordinatorTick expired = coordinator.Tick(Observation(252, CombatDirection.None, hasThreat: false) with
+        {
+            MarkerFound = false,
+            ScanMode = VisionScanMode.AnchorGrace,
+            TrackingGraceAgeMs = 102
+        }, ReactionCommandKind.None, "");
+        Require(expired.Candidate is null && expired.CancellationReason == "indicator-stale",
+            "anchor grace must not refresh candidate validity");
+    }
+
+    private static void AnchorMarkerDetectorRanksNearbyCandidates()
+    {
+        var detector = new AnchorMarkerDetector();
+        ScreenFrame initial = SyntheticClusterFrame(320, 220,
+            new[] { (180, 100), (181, 100), (182, 100), (180, 101), (181, 101), (182, 101),
+                (180, 102), (181, 102), (182, 102), (25, 25) }, 5, 131, 65);
+        AnchorMarkerScanResult first = detector.Scan(initial, new Rectangle(0, 0, 320, 220),
+            previousFound: false, previousAnchor: Point.Empty, previousKind: "NONE");
+        Require(first.Found && first.X == 180 && first.Y == 100 &&
+                first.CandidateCount == 2 && first.ChosenPixelCount == 9 &&
+                first.SelectionReason == "initial-largest-component",
+            "initial marker scan must choose the largest exact-color component");
+
+        ScreenFrame nearby = SyntheticClusterFrame(320, 220,
+            new[] { (188, 106), (189, 106), (190, 106), (188, 107), (189, 107), (190, 107),
+                (188, 108), (189, 108), (190, 108),
+                (35, 35) }, 5, 131, 65);
+        AnchorMarkerScanResult local = detector.Scan(nearby, new Rectangle(0, 0, 320, 220),
+            previousFound: true, previousAnchor: new Point(181, 101), previousKind: "GREEN");
+        Require(local.Found && local.X == 188 && local.Y == 106 &&
+                local.SelectionReason == "near-accepted-marker",
+            "a nearby accepted marker must beat a one-pixel distant decorative component");
+
+        ScreenFrame moved = SyntheticClusterFrame(320, 220,
+            new[] { (181, 101), (270, 160), (271, 160), (270, 161), (271, 161) }, 255, 255, 10);
+        AnchorMarkerScanResult reacquired = detector.Scan(moved, new Rectangle(0, 0, 320, 220),
+            previousFound: true, previousAnchor: new Point(181, 101), previousKind: "GREEN");
+        Require(reacquired.Found && reacquired.Kind == "YELLOW" &&
+                reacquired.SelectionReason == "global-reacquisition",
+            "a large marker movement must beat a nearby decorative match during global reacquisition");
+
+        ScreenFrame ambiguous = SyntheticClusterFrame(320, 220,
+            new[] { (181, 101), (182, 101), (181, 102),
+                (270, 160), (271, 160), (270, 161), (271, 161), (270, 162) },
+            255, 255, 10);
+        AnchorMarkerScanResult protectedNearby = detector.Scan(ambiguous,
+            new Rectangle(0, 0, 320, 220), previousFound: true,
+            previousAnchor: new Point(181, 101), previousKind: "GREEN");
+        Require(protectedNearby.Found && protectedNearby.X == 181 && protectedNearby.Y == 101 &&
+                protectedNearby.SelectionReason == "near-accepted-marker",
+            "a distant 5-pixel component must not replace an established 3-pixel marker");
     }
 
     private static void TemporalFlashCalibrationExcludesArmedIndicator()
@@ -431,6 +498,29 @@ static partial class Program
         geometry.ApplyMarker(1000, 500, "GREEN", 1);
         Require(geometry.CombatRoi() == new Rectangle(786, 510, 405, 218),
             "accepted marker must derive the padded combat ROI");
+    }
+
+    private static void VisionTrackingSnapshotPublishesCoherentGeometry()
+    {
+        var geometry = new CombatGeometry();
+        geometry.UpdateResolution(1920, 1080);
+        geometry.ApplyMarker(1000, 500, "GREEN", 1);
+        VisionTrackingSnapshot first = VisionTrackingSnapshot.From(geometry, true, "GREEN",
+            timestampMs: 10, version: 1, AnchorMarkerScanResult.Empty());
+
+        geometry.UpdateResolution(2560, 1440);
+        geometry.ApplyMarker(1300, 650, "YELLOW", 2);
+        VisionTrackingSnapshot second = VisionTrackingSnapshot.From(geometry, true, "YELLOW",
+            timestampMs: 20, version: 2, AnchorMarkerScanResult.Empty());
+        (RectangleF top, RectangleF right, RectangleF left) = geometry.Zones(geometry.CombatRoi());
+
+        Require(first.Version == 1 && first.MarkerKind == "GREEN" && first.Anchor == new Point(1000, 500) &&
+                first.CombatRoi == new Rectangle(786, 510, 405, 218),
+            "the first tracking snapshot must retain one complete resolution/anchor state");
+        Require(second.Version == 2 && second.MarkerKind == "YELLOW" && second.Anchor == new Point(1300, 650) &&
+                second.CombatRoi == geometry.CombatRoi() && second.TopZone == top &&
+                second.RightZone == right && second.LeftZone == left,
+            "a resolution change must publish one coherent replacement snapshot");
     }
 
     private static ScreenFrame SyntheticIndicatorFrame(int screenX, int screenY)

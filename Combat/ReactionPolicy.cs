@@ -57,7 +57,7 @@ internal static class ReactionPolicy
         direction == CombatDirection.Top && IsYourChar(settings, "Nuxia");
 
     public static bool OrangeHasPriority(CombatObservation observation, Settings settings, bool actionBusy) =>
-        (settings.Unblockables && observation.OrangeIndicator) || actionBusy;
+        (settings.Unblockables && (observation.OrangeIndicator || observation.OrangeFeint)) || actionBusy;
 }
 
 internal readonly record struct ReactionSelection(ReactionCommandKind Kind, string Hold);

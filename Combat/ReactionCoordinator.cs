@@ -151,6 +151,16 @@ internal sealed class OutgoingOrangeGuard
         }
     }
 
+    /// <summary>Registers a bot-generated heavy so its delayed orange animation is not dodged.</summary>
+    public void RegisterAutomationHeavy(long now)
+    {
+        lock (_sync)
+        {
+            _windowSourceHeavySeen = true;
+            _suppressionUntilMs = Math.Max(_suppressionUntilMs, now + SuppressionWindowMs);
+        }
+    }
+
     public OutgoingOrangeGuardResult Observe(long now, bool markerFound, bool orangeIndicator, bool sourceHeavyHeld, bool sourceLightHeld = false)
     {
         lock (_sync)
@@ -302,7 +312,10 @@ internal sealed record CombatObservation(
     long TrackingGraceAgeMs = 0,
     Point StrictFlashPoint = default,
     int IndicatorFlashClusterMatches = 0,
-    Rectangle IndicatorFlashClusterBounds = default);
+    Rectangle IndicatorFlashClusterBounds = default,
+    VisionTrackingSnapshot Tracking = null,
+    int RedMatchCount = 0,
+    string ClosestRedRgb = "");
 
 internal sealed record ReactionCandidate(
     long Id,
@@ -360,7 +373,6 @@ internal sealed class ReactionCoordinator
         lock (_sync)
         {
             long now = observation.TimestampMs != 0 ? observation.TimestampMs : _clock.GetUtcNow().ToUnixTimeMilliseconds();
-            bool candidateGrace = observation.ScanMode is VisionScanMode.MarkerGrace or VisionScanMode.AnchorGrace;
             bool validThreat = observation.MarkerFound && observation.HasIndicator && observation.Direction != CombatDirection.None;
             string transition = "";
             string cancellation = "";
@@ -386,12 +398,6 @@ internal sealed class ReactionCoordinator
                     _candidate = _candidate with { LastValidMs = now };
                 }
             }
-
-            // A cached candidate scan is deliberately flash-only.  It must not
-            // arm, replace, or change direction, but it does preserve the
-            // existing candidate while tracking is briefly unreliable.
-            if (candidateGrace && _candidate is { Consumed: false })
-                _candidate = _candidate with { LastValidMs = now };
 
             if (_candidate != null)
             {

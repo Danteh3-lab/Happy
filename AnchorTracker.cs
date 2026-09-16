@@ -67,9 +67,9 @@ internal sealed class AnchorTracker
     }
 
     /// <summary>
-    /// The marker search returns the first matching pixel, which can briefly
-    /// jump between decorative pixels.  Keep the last accepted geometry until
-    /// a new sample has been seen twice in the same small neighborhood.
+    /// The marker detector can briefly choose a different exact-color
+    /// component. Keep the last accepted geometry until a new sample has been
+    /// seen twice in the same small neighborhood.
     /// </summary>
     private void ApplyDebouncedSample(bool wasFound, bool rawFound, int rawX, int rawY,
         string rawKind, int rawBox, CombatGeometry geometry, long now)
