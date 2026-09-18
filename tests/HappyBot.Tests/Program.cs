@@ -77,9 +77,15 @@ static partial class Program
             ProfileStoreRoundTripsAndProtectsPaths();
             SettingsCodecApplyJsonClampsAndValidates();
             SettingsCodecDodgeSidesStayExclusive();
+            SettingsCodecDodgeDirectionMappingCoversBackLeftRight();
+            OrangeExplicitSideDodgeBeatsHeldForward();
+            OrangeBackDodgeCancelsHeldForward();
+            OrangeBackDodgeNeutralWithoutForward();
+            OrangeBulwarkStaysHighestPriority();
             SettingsCodecHeroSelectionKeepsFirst();
             SettingsCodecTryParseResolution();
             SettingsCodecEditRoundTrip();
+            ControllerToggleBindingsAreExclusiveAndResolvable();
             ProfileEditorDirtyLifecycle();
             ShutdownWithoutStartReleasesInputsInBackground();
             ShutdownDuringBlockedCleanupStillTearsDownAfterUnblock();
@@ -134,6 +140,7 @@ static partial class Program
         public bool FailDeflect { get; set; }
         public bool FailLight { get; set; }
         public bool FailHeavy { get; set; }
+        public bool ForwardHeld { get; set; }
         public bool IsReady => true;
         public bool UsesControllerBridge => false;
         public bool CanSendBulwark => true;
@@ -142,7 +149,7 @@ static partial class Program
         public bool HoldButtonHeld() => false;
         public bool PhysicalHeavyAttackHeld() => false;
         public bool PhysicalLightAttackHeld() => false;
-        public bool MovingForwardHeld() => false;
+        public bool MovingForwardHeld() => ForwardHeld;
         public bool KeyDown(int virtualKey) { Events.Add("down:" + virtualKey); return true; }
         public bool KeyUp(int virtualKey) { Events.Add("up:" + virtualKey); return true; }
         public bool KeyTap(int virtualKey)

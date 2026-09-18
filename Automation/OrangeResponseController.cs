@@ -237,12 +237,14 @@ internal sealed class OrangeResponseController
     private string SendConfiguredDodge()
     {
         Settings settings = _host.Settings;
-        if (!settings.Leftdodge && !settings.Rightdodge)
+        bool wantRight = settings.Rightdodge;
+        bool wantLeft = settings.Leftdodge && !settings.Rightdodge;
+        if (!wantLeft && !wantRight)
         {
             _host.Input.KeyTap(Input.VK_SPACE);
             return "neutral";
         }
-        int direction = settings.Leftdodge ? Input.VK_LEFT : Input.VK_RIGHT;
+        int direction = wantLeft ? Input.VK_LEFT : Input.VK_RIGHT;
         IInputGateway input = _host.Input;
         input.Block(true);
         try
@@ -252,7 +254,40 @@ internal sealed class OrangeResponseController
             finally { input.KeyUp(direction); }
         }
         finally { input.Block(false); }
-        return settings.Leftdodge ? "left" : "right";
+        return wantLeft ? "left" : "right";
+    }
+
+    private async Task SendDodgeFollowUpsAsync(Settings settings, IInputGateway input, CancellationToken token)
+    {
+        if (settings.DodgeL)
+        {
+            await Task.Delay(Math.Max(0, settings.Pause2), token);
+            input.MouseClick(Input.VK_LBUTTON);
+        }
+        if (settings.DodgeH)
+        {
+            await Task.Delay(Math.Max(0, settings.Pause2), token);
+            input.MouseClick(Input.VK_RBUTTON);
+        }
+        if (settings.Lightbash)
+        {
+            await Task.Delay(Math.Max(0, settings.Pause2), token);
+            input.KeyTap(Input.VK_NUMPAD5);
+        }
+
+        if (settings.Nohero) return;
+        if (settings.Ch("Nobushi")) input.KeyTap(Input.VK_C);
+        if (settings.Ch("Shaman")) { input.KeyTap(Input.VK_SPACE); input.KeyTap(Input.VK_NUMPAD5); }
+        if (settings.Ch("Orochi")) { input.KeyTap(Input.VK_SPACE); input.KeyTap(Input.VK_NUMPAD9); }
+        if (!settings.Ch("Jiangjun")) return;
+        input.KeyDown(Input.VK_C);
+        try
+        {
+            await Task.Delay(250, token);
+            input.MouseClick(Input.VK_LBUTTON);
+            input.MouseClick(Input.VK_RBUTTON);
+        }
+        finally { input.KeyUp(Input.VK_C); }
     }
 
     private async Task<bool> SendOrangeDodgeSequenceAsync(CancellationToken token, int orangeDelay)
@@ -291,6 +326,14 @@ internal sealed class OrangeResponseController
             return true;
         }
 
+        bool explicitSideDodge = settings.Leftdodge || settings.Rightdodge;
+        if (explicitSideDodge)
+        {
+            SendConfiguredDodge();
+            await SendDodgeFollowUpsAsync(settings, input, token);
+            return false;
+        }
+
         if (input.IsDown(Input.VK_W))
         {
             input.Block(true);
@@ -305,35 +348,7 @@ internal sealed class OrangeResponseController
         }
 
         SendConfiguredDodge();
-        if (settings.DodgeL)
-        {
-            await Task.Delay(Math.Max(0, settings.Pause2), token);
-            input.MouseClick(Input.VK_LBUTTON);
-        }
-        if (settings.DodgeH)
-        {
-            await Task.Delay(Math.Max(0, settings.Pause2), token);
-            input.MouseClick(Input.VK_RBUTTON);
-        }
-        if (settings.Lightbash)
-        {
-            await Task.Delay(Math.Max(0, settings.Pause2), token);
-            input.KeyTap(Input.VK_NUMPAD5);
-        }
-
-        if (settings.Nohero) return false;
-        if (settings.Ch("Nobushi")) input.KeyTap(Input.VK_C);
-        if (settings.Ch("Shaman")) { input.KeyTap(Input.VK_SPACE); input.KeyTap(Input.VK_NUMPAD5); }
-        if (settings.Ch("Orochi")) { input.KeyTap(Input.VK_SPACE); input.KeyTap(Input.VK_NUMPAD9); }
-        if (!settings.Ch("Jiangjun")) return false;
-        input.KeyDown(Input.VK_C);
-        try
-        {
-            await Task.Delay(250, token);
-            input.MouseClick(Input.VK_LBUTTON);
-            input.MouseClick(Input.VK_RBUTTON);
-        }
-        finally { input.KeyUp(Input.VK_C); }
+        await SendDodgeFollowUpsAsync(settings, input, token);
         return false;
     }
 

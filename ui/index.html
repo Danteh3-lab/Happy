@@ -129,8 +129,17 @@
                 <label class="toggle-row"><input type="checkbox" data-setting="Lightbash"><span class="toggle-ui"></span><span><b>Bash after dodge</b><small>Guard break follow-up</small></span></label>
                 <label class="toggle-row"><input type="checkbox" data-setting="DodgeH"><span class="toggle-ui"></span><span><b>Heavy after dodge</b><small>Send RT after the evade</small></span></label>
                  <label class="toggle-row"><input type="checkbox" data-setting="DodgeL"><span class="toggle-ui"></span><span><b>Light after dodge</b><small>Send RB after the evade</small></span></label>
-               </div>
-               <button class="btn btn-secondary full btn-toggle" id="orange-parry-button" data-action="toggle-orange-parry">Orange parry: OFF · F5</button>
+                </div>
+                <div class="dodge-direction-field">
+                  <span class="dodge-direction-label" id="dodge-direction-label">Dodge direction</span>
+                  <div class="segmented" role="radiogroup" aria-labelledby="dodge-direction-label" id="dodge-direction">
+                    <button type="button" role="radio" aria-checked="true" tabindex="0" data-dodge="back">Back</button>
+                    <button type="button" role="radio" aria-checked="false" tabindex="-1" data-dodge="left">Left</button>
+                    <button type="button" role="radio" aria-checked="false" tabindex="-1" data-dodge="right">Right</button>
+                  </div>
+                  <small class="dodge-direction-hint">Back dodges neutral; Left/Right dodge to the side even while holding forward.</small>
+                </div>
+                <button class="btn btn-secondary full btn-toggle" id="orange-parry-button" data-action="toggle-orange-parry">Orange parry: OFF · F5</button>
              </article>
             <article class="card">
               <div class="card-head"><div><div class="eyebrow">F HOLD</div><h3>Primary reactions</h3></div><span class="icon-chip">F</span></div>
@@ -254,7 +263,9 @@
                 <button class="btn btn-secondary" data-action="test">Test input</button>
                 <button class="btn btn-secondary btn-toggle" id="vision-overlay-button" data-action="vision-overlay">Vision overlay: OFF - F7</button>
                 <button class="btn btn-secondary btn-toggle active" id="anchor-scan-button" data-action="anchor-scan">Anchor scan: ON</button>
-                <button class="btn btn-secondary bind-button" id="auto-dodge-bind-button" data-action="bind-auto-dodge">Dodge bind: UNBOUND</button>
+                <button class="btn btn-secondary bind-button" id="auto-dodge-bind-button" data-action="bind-auto-dodge" aria-pressed="false">Auto dodge bind: UNBOUND</button>
+                <button class="btn btn-secondary bind-button" id="orange-parry-bind-button" data-action="bind-orange-parry" aria-pressed="false">Orange parry bind: UNBOUND</button>
+                <button class="btn btn-secondary bind-button" id="auto-parry-bind-button" data-action="bind-auto-parry" aria-pressed="false">F auto parry bind: UNBOUND</button>
                 <select class="btn btn-secondary" id="telemetry-label" aria-label="Telemetry session label"><option value="Training">Training</option><option value="2v2-Custom">2v2 / Custom</option><option value="Other">Other</option></select>
                 <button class="btn btn-secondary btn-toggle" id="telemetry-button" data-action="telemetry">Telemetry: OFF</button>
                 <button class="btn btn-secondary" data-action="export-telemetry">Export latest</button>
@@ -325,6 +336,7 @@
   </div>
   <div class="toast-stack" id="toast-stack" role="status" aria-live="polite" aria-atomic="true"></div>
   <script src="apply-revision.js"></script>
+  <script src="dodge-direction.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

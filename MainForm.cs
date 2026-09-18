@@ -44,11 +44,11 @@ public sealed class MainForm : Form
     private bool _webReady;
     private bool _visionOverlayVisible;
     private bool _showAnchorScan = true;
-    private bool _bindingAutoDodge;
+    private ControllerToggleAction _bindingControllerAction;
     private bool _directSourceWarningShown;
-    private ushort _autoDodgeBindBaselineButtons;
-    private bool _autoDodgeBindBaselineLt;
-    private bool _autoDodgeBindBaselineRt;
+    private ushort _controllerBindBaselineButtons;
+    private bool _controllerBindBaselineLt;
+    private bool _controllerBindBaselineRt;
     private ushort _previousControllerButtons;
     private bool _previousControllerLt;
     private bool _previousControllerRt;
@@ -235,7 +235,13 @@ public sealed class MainForm : Form
                     ToggleAnchorScan();
                     break;
                 case "bind-auto-dodge":
-                    ToggleAutoDodgeBindingCapture();
+                    ToggleControllerBindingCapture(ControllerToggleAction.AutoDodge);
+                    break;
+                case "bind-orange-parry":
+                    ToggleControllerBindingCapture(ControllerToggleAction.OrangeParry);
+                    break;
+                case "bind-auto-parry":
+                    ToggleControllerBindingCapture(ControllerToggleAction.AutoParry);
                     break;
                 case "telemetry":
                     ToggleTelemetry(root.TryGetProperty("label", out JsonElement label) ? label.GetString() ?? "Other" : "Other");
@@ -305,8 +311,12 @@ public sealed class MainForm : Form
             loop = _bot.LoopHz,
             legit = _bot.S.Legit,
             orangeParry = _bot.OrangeParry,
-            autoDodgeBind = string.IsNullOrWhiteSpace(_bot.S.AutoDodgeBind) ? "UNBOUND" : _bot.S.AutoDodgeBind,
-            bindingAutoDodge = _bindingAutoDodge,
+            autoDodgeBind = BindingStatus(ControllerToggleAction.AutoDodge),
+            orangeParryBind = BindingStatus(ControllerToggleAction.OrangeParry),
+            autoParryBind = BindingStatus(ControllerToggleAction.AutoParry),
+            bindingAutoDodge = _bindingControllerAction == ControllerToggleAction.AutoDodge,
+            bindingOrangeParry = _bindingControllerAction == ControllerToggleAction.OrangeParry,
+            bindingAutoParry = _bindingControllerAction == ControllerToggleAction.AutoParry,
             visionOverlay = _visionOverlayVisible,
             anchorScan = _showAnchorScan,
             telemetry = new
@@ -331,6 +341,12 @@ public sealed class MainForm : Form
         if (state.Contains("SENT", StringComparison.OrdinalIgnoreCase)) return "INPUT SENT";
         if (state.Contains("READY", StringComparison.OrdinalIgnoreCase)) return "PENDING";
         return "OBSERVED";
+    }
+
+    private string BindingStatus(ControllerToggleAction action)
+    {
+        string binding = ControllerToggleBindings.Get(_editor.EditorSettings, action);
+        return string.IsNullOrWhiteSpace(binding) ? "UNBOUND" : binding;
     }
 
     private Dictionary<string, object> SettingsSnapshot() => SettingsCodec.ToSnapshot(_editor.EditorSettings);
@@ -749,27 +765,28 @@ public sealed class MainForm : Form
         SendStatus();
     }
 
-    private void ToggleAutoDodgeBindingCapture()
+    private void ToggleControllerBindingCapture(ControllerToggleAction action)
     {
-        if (_bindingAutoDodge)
+        string displayName = ControllerToggleBindings.DisplayName(action);
+        if (_bindingControllerAction == action)
         {
-            _bindingAutoDodge = false;
-            SendToast("Auto dodge binding cancelled.", "info");
+            _bindingControllerAction = ControllerToggleAction.None;
+            SendToast($"{displayName} binding cancelled.", "info");
             SendStatus();
             return;
         }
 
         if (!ViGEmInput.SourceConnected || !ViGEmInput.TryGetSourceState(out Native.XINPUT_GAMEPAD source))
         {
-            SendToast("Connect the physical source controller before binding auto dodge.", "error");
+            SendToast($"Connect the physical source controller before binding {displayName.ToLowerInvariant()}.", "error");
             return;
         }
 
-        _autoDodgeBindBaselineButtons = source.wButtons;
-        _autoDodgeBindBaselineLt = source.bLeftTrigger > 32;
-        _autoDodgeBindBaselineRt = source.bRightTrigger > 32;
-        _bindingAutoDodge = true;
-        SendToast("Press a controller button to bind auto dodge.", "info");
+        _controllerBindBaselineButtons = source.wButtons;
+        _controllerBindBaselineLt = source.bLeftTrigger > 32;
+        _controllerBindBaselineRt = source.bRightTrigger > 32;
+        _bindingControllerAction = action;
+        SendToast($"Press a controller button to bind {displayName.ToLowerInvariant()}.", "info");
         SendStatus();
     }
 
@@ -795,42 +812,78 @@ public sealed class MainForm : Form
 
         string pressed = FindNewControllerBinding(
             source,
-            _bindingAutoDodge ? _autoDodgeBindBaselineButtons : _previousControllerButtons,
-            _bindingAutoDodge ? _autoDodgeBindBaselineLt : _previousControllerLt,
-            _bindingAutoDodge ? _autoDodgeBindBaselineRt : _previousControllerRt);
+            _bindingControllerAction != ControllerToggleAction.None ? _controllerBindBaselineButtons : _previousControllerButtons,
+            _bindingControllerAction != ControllerToggleAction.None ? _controllerBindBaselineLt : _previousControllerLt,
+            _bindingControllerAction != ControllerToggleAction.None ? _controllerBindBaselineRt : _previousControllerRt);
 
-        if (_bindingAutoDodge)
+        if (_bindingControllerAction != ControllerToggleAction.None)
         {
             if (!string.IsNullOrEmpty(pressed))
             {
+                ControllerToggleAction boundAction = _bindingControllerAction;
                 MutateEditorAndLive(
-                    s => s.AutoDodgeBind = pressed,
-                    live => live.AutoDodgeBind = _editor.EditorSettings.AutoDodgeBind);
-                _bindingAutoDodge = false;
+                    s => ControllerToggleBindings.Assign(s, boundAction, pressed),
+                    live => ControllerToggleBindings.Copy(live, _editor.EditorSettings));
+                _bindingControllerAction = ControllerToggleAction.None;
                 SendSettings();
-                SendToast($"Auto dodge bound to {pressed}.", "success");
+                SendToast($"{ControllerToggleBindings.DisplayName(boundAction)} bound to {pressed}.", "success");
                 SendStatus();
             }
         }
-        else if (!string.IsNullOrWhiteSpace(_editor.EditorSettings.AutoDodgeBind) &&
-                 string.Equals(pressed, _editor.EditorSettings.AutoDodgeBind, StringComparison.OrdinalIgnoreCase))
+        else
         {
-            bool enabled = false;
-            MutateEditorAndLive(
-                s =>
-                {
-                    s.Unblockables = !s.Unblockables;
-                    enabled = s.Unblockables;
-                },
-                live => live.Unblockables = _editor.EditorSettings.Unblockables);
-            SendSettings();
-            SendToast(enabled ? "Auto dodge ON." : "Auto dodge OFF.", enabled ? "success" : "info");
-            SendStatus();
+            DispatchControllerToggle(ControllerToggleBindings.Resolve(_editor.EditorSettings, pressed));
         }
 
         _previousControllerButtons = source.wButtons;
         _previousControllerLt = source.bLeftTrigger > 32;
         _previousControllerRt = source.bRightTrigger > 32;
+    }
+
+    private void DispatchControllerToggle(ControllerToggleAction action)
+    {
+        switch (action)
+        {
+            case ControllerToggleAction.AutoDodge:
+                ToggleAutoDodge();
+                break;
+            case ControllerToggleAction.OrangeParry:
+                ToggleOrangeParry();
+                break;
+            case ControllerToggleAction.AutoParry:
+                ToggleAutoParry();
+                break;
+        }
+    }
+
+    private void ToggleAutoDodge()
+    {
+        bool enabled = false;
+        MutateEditorAndLive(
+            s =>
+            {
+                s.Unblockables = !s.Unblockables;
+                enabled = s.Unblockables;
+            },
+            live => live.Unblockables = _editor.EditorSettings.Unblockables);
+        SendSettings();
+        SendToast(enabled ? "Auto dodge ON." : "Auto dodge OFF.", enabled ? "success" : "info");
+        SendStatus();
+    }
+
+    private void ToggleAutoParry()
+    {
+        bool enabled = false;
+        MutateEditorAndLive(
+            s =>
+            {
+                s.Parry = !s.Parry;
+                enabled = s.Parry;
+            },
+            live => live.Parry = _editor.EditorSettings.Parry);
+        SendSettings();
+        SendToast(enabled ? "F auto parry ON." : "F auto parry OFF.", enabled ? "success" : "info");
+        SendStatus();
     }
 
     private static string FindNewControllerBinding(Native.XINPUT_GAMEPAD current, ushort previousButtons, bool previousLt, bool previousRt)
@@ -903,7 +956,7 @@ public sealed class MainForm : Form
         "3) Match the menu resolution to the game render.\n" +
         "4) Use fullscreen or borderless fullscreen, not windowed mode.\n" +
         "5) Hide physical/source controllers with HidHide and leave the ViGEm output visible.\n" +
-        "6) Hold E or F before an attack for parry/counter actions. Orange handling runs automatically when enabled; own controller RT/RB attacks are ignored until their orange clears; use the Dodge bind button to assign a controller toggle; F5 toggles orange parry.\n" +
+        "6) Hold E or F before an attack for parry/counter actions. Orange handling runs automatically when enabled; own controller RT/RB attacks are ignored until their orange clears. Diagnostics can bind controller buttons for Auto dodge, Orange parry, and F auto parry; F5 still toggles orange parry.\n" +
         "7) F7 toggles the diagnostic vision overlay. It is click-through and does not change bot behavior.";
 
     private const string ReadMeText =

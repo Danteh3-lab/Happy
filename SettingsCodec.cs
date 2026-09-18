@@ -11,7 +11,7 @@ internal static class SettingsCodec
     public const int MaxDelayMs = 10000;
     public const int PeacekeeperDeflectDelayMs = 100;
 
-    public static readonly string[] EditKeys = { "res1", "res2", "Pause", "Pause1", "Pause2", "Pause3", "ParryDelay", "LegitParryChance", "CrushingFallbackChance", "DeflectFallbackChance", "GuardHold", "Left", "Right", "TopDeflect", "AutoDodgeBind" };
+    public static readonly string[] EditKeys = { "res1", "res2", "Pause", "Pause1", "Pause2", "Pause3", "ParryDelay", "LegitParryChance", "CrushingFallbackChance", "DeflectFallbackChance", "GuardHold", "Left", "Right", "TopDeflect", "AutoDodgeBind", "OrangeParryBind", "AutoParryBind" };
 
     public static readonly string[] CheckKeys =
     {
@@ -44,7 +44,9 @@ internal static class SettingsCodec
             ["Left"] = s.Left,
             ["Right"] = s.Right,
             ["TopDeflect"] = s.TopDeflect,
-            ["AutoDodgeBind"] = s.AutoDodgeBind
+            ["AutoDodgeBind"] = s.AutoDodgeBind,
+            ["OrangeParryBind"] = s.OrangeParryBind,
+            ["AutoParryBind"] = s.AutoParryBind
         };
         foreach (string key in CheckKeys) values[key] = GetCheck(s, key);
         return values;
@@ -69,6 +71,8 @@ internal static class SettingsCodec
         editor.Right = ClampDelay(ReadInt(values, "Right", editor.Right));
         editor.TopDeflect = ClampDelay(ReadInt(values, "TopDeflect", editor.TopDeflect));
         editor.AutoDodgeBind = ReadString(values, "AutoDodgeBind", editor.AutoDodgeBind).Trim();
+        editor.OrangeParryBind = ReadString(values, "OrangeParryBind", editor.OrangeParryBind).Trim();
+        editor.AutoParryBind = ReadString(values, "AutoParryBind", editor.AutoParryBind).Trim();
         foreach (string key in CheckKeys)
         {
             if (values.TryGetProperty(key, out _))
@@ -173,6 +177,8 @@ internal static class SettingsCodec
             "Right" => s.Right.ToString(),
             "TopDeflect" => s.TopDeflect.ToString(),
             "AutoDodgeBind" => s.AutoDodgeBind,
+            "OrangeParryBind" => s.OrangeParryBind,
+            "AutoParryBind" => s.AutoParryBind,
             _ => ""
         };
     }
@@ -196,6 +202,8 @@ internal static class SettingsCodec
             case "Right": s.Right = ClampDelay(ToInt(value)); break;
             case "TopDeflect": s.TopDeflect = ClampDelay(ToInt(value)); break;
             case "AutoDodgeBind": s.AutoDodgeBind = value.Trim(); break;
+            case "OrangeParryBind": s.OrangeParryBind = value.Trim(); break;
+            case "AutoParryBind": s.AutoParryBind = value.Trim(); break;
         }
     }
 

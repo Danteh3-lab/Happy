@@ -129,17 +129,63 @@ static partial class Program
 
     private static void SettingsCodecEditRoundTrip()
     {
-        var settings = new Settings { Pause = 80, GuardHold = 750, AutoDodgeBind = " A " };
+        var settings = new Settings
+        {
+            Pause = 80,
+            GuardHold = 750,
+            AutoDodgeBind = " A ",
+            OrangeParryBind = " LB ",
+            AutoParryBind = " RB "
+        };
         Require(SettingsCodec.GetEdit(settings, "Pause") == "80" &&
-            SettingsCodec.GetEdit(settings, "AutoDodgeBind") == " A ",
+            SettingsCodec.GetEdit(settings, "AutoDodgeBind") == " A " &&
+            SettingsCodec.GetEdit(settings, "OrangeParryBind") == " LB " &&
+            SettingsCodec.GetEdit(settings, "AutoParryBind") == " RB ",
             "edit getters must expose raw values");
 
         var loaded = new Settings();
         SettingsCodec.SetEdit(loaded, "Pause", "80");
         SettingsCodec.SetEdit(loaded, "GuardHold", "5");
         SettingsCodec.SetEdit(loaded, "AutoDodgeBind", " A ");
-        Require(loaded.Pause == 80 && loaded.GuardHold == 60 && loaded.AutoDodgeBind == "A",
+        SettingsCodec.SetEdit(loaded, "OrangeParryBind", " LB ");
+        SettingsCodec.SetEdit(loaded, "AutoParryBind", " RB ");
+        Require(loaded.Pause == 80 && loaded.GuardHold == 60 && loaded.AutoDodgeBind == "A" &&
+            loaded.OrangeParryBind == "LB" && loaded.AutoParryBind == "RB",
             "edit setters must clamp and trim like the live form");
+    }
+
+    private static void ControllerToggleBindingsAreExclusiveAndResolvable()
+    {
+        var settings = new Settings();
+        ControllerToggleBindings.Assign(settings, ControllerToggleAction.AutoDodge, " A ");
+        ControllerToggleBindings.Assign(settings, ControllerToggleAction.OrangeParry, "LB");
+        ControllerToggleBindings.Assign(settings, ControllerToggleAction.AutoParry, "RB");
+
+        Require(settings.AutoDodgeBind == "A" && settings.OrangeParryBind == "LB" && settings.AutoParryBind == "RB",
+            "controller toggle bindings must normalize each captured button");
+        Require(ControllerToggleBindings.Resolve(settings, "a") == ControllerToggleAction.AutoDodge &&
+            ControllerToggleBindings.Resolve(settings, "lb") == ControllerToggleAction.OrangeParry &&
+            ControllerToggleBindings.Resolve(settings, "RB") == ControllerToggleAction.AutoParry,
+            "controller presses must resolve to their configured toggle");
+
+        ControllerToggleBindings.Assign(settings, ControllerToggleAction.AutoParry, "A");
+        Require(settings.AutoDodgeBind == "" && settings.AutoParryBind == "A" &&
+            ControllerToggleBindings.Resolve(settings, "A") == ControllerToggleAction.AutoParry,
+            "rebinding a controller button must move it instead of triggering multiple toggles");
+
+        var copy = new Settings();
+        ControllerToggleBindings.Copy(copy, settings);
+        Require(copy.AutoDodgeBind == settings.AutoDodgeBind &&
+            copy.OrangeParryBind == settings.OrangeParryBind &&
+            copy.AutoParryBind == settings.AutoParryBind,
+            "live settings must receive all controller toggle assignments");
+
+        var runtime = new Settings();
+        runtime.CopyLiveSwitchesFrom(settings);
+        Require(runtime.AutoDodgeBind == settings.AutoDodgeBind &&
+            runtime.OrangeParryBind == settings.OrangeParryBind &&
+            runtime.AutoParryBind == settings.AutoParryBind,
+            "profile loads must update controller toggle assignments immediately");
     }
 
     private static void ProfileEditorDirtyLifecycle()
@@ -164,9 +210,17 @@ static partial class Program
             Require(editor.TryLoadActive(discard: true, draftDirty: false) == null && !editor.IsDirty,
                 "discarding must reload the saved profile clean");
 
+            dirty = editor.EditorSettings.Clone();
+            dirty.OrangeParryBind = "LB";
+            dirty.AutoParryBind = "RB";
+            editor.ReplaceEditor(dirty);
             Require(editor.SaveAs("Bad/Name") != null, "invalid profile names must be rejected");
             Require(editor.SaveAs("Side Guard") == null && editor.ActiveProfile == "Side Guard",
                 "save-as must activate the new profile");
+            Require(editor.Select(ProfileStore.DefaultProfileName, discard: true, draftDirty: false) == null &&
+                editor.Select("Side Guard", discard: true, draftDirty: false) == null &&
+                editor.EditorSettings.OrangeParryBind == "LB" && editor.EditorSettings.AutoParryBind == "RB",
+                "Orange parry and Auto parry bindings must persist with the profile");
             Require(editor.Select("Missing", discard: true, draftDirty: false) != null,
                 "selecting an unknown profile must fail");
             Require(editor.Select("Side Guard", discard: true, draftDirty: false) == null,

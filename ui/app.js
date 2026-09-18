@@ -48,8 +48,56 @@
     post(type, extra);
   }
 
+  const dodgeDirection = (typeof window !== "undefined" && window.HappyDodgeDirection) || null;
+
+  function dodgeDirectionFromSettings() {
+    if (dodgeDirection) return dodgeDirection.fromSettings(state.settings);
+    if (state.settings.Rightdodge === true) return "right";
+    if (state.settings.Leftdodge === true) return "left";
+    return "back";
+  }
+
+  function dodgeDirectionButtons() {
+    return $$('#dodge-direction [data-dodge]');
+  }
+
+  function syncDodgeDirection() {
+    const direction = dodgeDirectionFromSettings();
+    if (dodgeDirection) {
+      dodgeDirection.sync(dodgeDirectionButtons(), direction);
+      return;
+    }
+    dodgeDirectionButtons().forEach((button) => {
+      const selected = button.dataset.dodge === direction;
+      button.classList.toggle("active", selected);
+      button.setAttribute("aria-checked", selected ? "true" : "false");
+      button.tabIndex = selected ? 0 : -1;
+    });
+  }
+
+  function setDodgeDirection(direction) {
+    const mapped = dodgeDirection
+      ? dodgeDirection.toSettings(direction)
+      : direction === "left"
+        ? { Leftdodge: true, Rightdodge: false }
+        : direction === "right"
+          ? { Leftdodge: false, Rightdodge: true }
+          : { Leftdodge: false, Rightdodge: false };
+    state.settings.Leftdodge = mapped.Leftdodge;
+    state.settings.Rightdodge = mapped.Rightdodge;
+    syncDodgeDirection();
+    syncTimingContext();
+    markProfileDirty();
+    sendSettings();
+  }
+
   function applySettings(settings) {
     state.settings = Object.assign({}, state.settings, settings || {});
+    if (dodgeDirection) state.settings = dodgeDirection.normalize(state.settings);
+    else if (state.settings.Leftdodge === true && state.settings.Rightdodge === true) {
+      state.settings.Leftdodge = false;
+      state.settings.Rightdodge = true;
+    }
     hydrating = true;
     $$('[data-setting]').forEach((control) => {
       const value = state.settings[control.dataset.setting];
@@ -62,6 +110,7 @@
       else control.value = value;
     });
     hydrating = false;
+    syncDodgeDirection();
     syncHeroControls();
     syncLegitChanceControl();
   }
@@ -293,7 +342,6 @@
     const anchorScan = state.status.anchorScan !== false;
     const telemetry = state.status.telemetry || {};
     const telemetryRecording = telemetry.recording === true;
-    const autoDodgeBindButton = $("#auto-dodge-bind-button");
     const profileName = String(state.status.profile || "Default");
     const profileDirty = state.status.profileDirty === true;
     const timingsDirty = timingDraftDirty || state.status.timingsDirty === true;
@@ -367,12 +415,18 @@
         ? "Telemetry " + (telemetry.label || "Other") + " · " + seconds + "s · " + Number(telemetry.failures || 0) + " failures · " + Number(telemetry.dropped || 0) + " dropped"
         : "Telemetry OFF";
     }
-    if (autoDodgeBindButton) {
-      autoDodgeBindButton.textContent = state.status.bindingAutoDodge
-        ? "Press controller button..."
-        : "Dodge bind: " + String(state.status.autoDodgeBind || "UNBOUND");
-      autoDodgeBindButton.classList.toggle("active", state.status.bindingAutoDodge === true);
-    }
+    renderBindingButton("auto-dodge-bind-button", "Auto dodge", state.status.autoDodgeBind, state.status.bindingAutoDodge);
+    renderBindingButton("orange-parry-bind-button", "Orange parry", state.status.orangeParryBind, state.status.bindingOrangeParry);
+    renderBindingButton("auto-parry-bind-button", "F auto parry", state.status.autoParryBind, state.status.bindingAutoParry);
+  }
+
+  function renderBindingButton(id, label, binding, capturing) {
+    const button = $("#" + id);
+    if (!button) return;
+    const active = capturing === true;
+    button.textContent = active ? "Press controller button..." : label + " bind: " + String(binding || "UNBOUND");
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
   }
 
   function setMetric(id, text, good) {
@@ -872,6 +926,8 @@
     if (action === "vision-overlay") return post("vision-overlay");
     if (action === "anchor-scan") return post("anchor-scan");
     if (action === "bind-auto-dodge") return post("bind-auto-dodge");
+    if (action === "bind-orange-parry") return post("bind-orange-parry");
+    if (action === "bind-auto-parry") return post("bind-auto-parry");
     if (action === "telemetry") return post("telemetry", { label: $("#telemetry-label").value });
     if (action === "export-telemetry") return post("export-telemetry");
   }
@@ -906,6 +962,44 @@
       markProfileDirty();
       if (control.type === "checkbox") sendSettings();
       else markTimingsDirty();
+    });
+  });
+  $$('#dodge-direction [data-dodge]').forEach((button) => {
+    button.addEventListener("click", () => {
+      if (hydrating) return;
+      if (button.dataset.dodge === dodgeDirectionFromSettings()) {
+        button.focus();
+        return;
+      }
+      setDodgeDirection(button.dataset.dodge);
+      button.focus();
+    });
+    button.addEventListener("keydown", (event) => {
+      const order = (dodgeDirection && dodgeDirection.ORDER) || ["back", "left", "right"];
+      let target = null;
+      if (event.key === "ArrowRight" || event.key === "ArrowLeft" ||
+        event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const delta = (dodgeDirection && typeof dodgeDirection.keyToDelta === "function")
+          ? dodgeDirection.keyToDelta(event.key)
+          : event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
+        const current = dodgeDirectionFromSettings();
+        target = dodgeDirection && typeof dodgeDirection.step === "function"
+          ? dodgeDirection.step(current, delta)
+          : order[(order.indexOf(current) + delta + order.length) % order.length];
+      } else if (event.key === "Home") {
+        event.preventDefault();
+        target = order[0];
+      } else if (event.key === "End") {
+        event.preventDefault();
+        target = order[order.length - 1];
+      } else {
+        return;
+      }
+      if (target !== dodgeDirectionFromSettings()) setDodgeDirection(target);
+      const buttons = dodgeDirectionButtons();
+      const focusTarget = buttons.find((candidate) => candidate.dataset.dodge === target);
+      if (focusTarget) focusTarget.focus();
     });
   });
   const heroSelect = $("#hero-select");

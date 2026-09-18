@@ -16,6 +16,8 @@ public sealed class Settings
     public int Right;
     public int TopDeflect;
     public string AutoDodgeBind = "";
+    public string OrangeParryBind = "";
+    public string AutoParryBind = "";
 
     public bool DodgeH;
     public bool DodgeL;
@@ -67,6 +69,9 @@ public sealed class Settings
     public void CopyLiveSwitchesFrom(Settings source)
     {
         ArgumentNullException.ThrowIfNull(source);
+        AutoDodgeBind = source.AutoDodgeBind;
+        OrangeParryBind = source.OrangeParryBind;
+        AutoParryBind = source.AutoParryBind;
         DodgeH = source.DodgeH;
         DodgeL = source.DodgeL;
         Leftdodge = source.Leftdodge;
@@ -103,7 +108,6 @@ public sealed class Settings
         Left = source.Left;
         Right = source.Right;
         TopDeflect = source.TopDeflect;
-        AutoDodgeBind = source.AutoDodgeBind;
         CrushingFallbackChance = source.CrushingFallbackChance;
         DeflectFallbackChance = source.DeflectFallbackChance;
         CopyLiveSwitchesFrom(source);

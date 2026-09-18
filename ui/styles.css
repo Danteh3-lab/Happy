@@ -349,6 +349,13 @@ h3 { margin-top: 6px; font-size: 0.98rem; letter-spacing: -0.012em; }
 .toggle-row input:checked + .toggle-ui::after { transform: translateX(13px); background: var(--accent-hover); box-shadow: 0 0 8px rgba(226, 85, 74, 0.55); }
 .toggle-row b { display: block; color: rgba(255, 255, 255, 0.82); font-size: 0.74rem; font-weight: 600; }
 .toggle-row small { display: block; margin-top: 3px; color: var(--text-dim); font-size: 0.65rem; }
+.dodge-direction-field { margin-top: 12px; padding: 10px; background: rgba(0, 0, 0, 0.14); border: 1px solid var(--border); border-radius: 10px; }
+.dodge-direction-label { color: var(--text-dim); font-size: 0.6rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+.segmented { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin-top: 8px; padding: 4px; background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border); border-radius: 9px; }
+.segmented button { min-height: 30px; padding: 6px 4px; color: var(--text-muted); background: transparent; border: 1px solid transparent; border-radius: 6px; font-size: 0.68rem; font-weight: 650; }
+.segmented button:hover { color: var(--text); background: var(--bg-hover); }
+.segmented button.active { color: var(--accent-hover); background: var(--accent-soft); border-color: rgba(226, 85, 74, 0.35); }
+.dodge-direction-hint { display: block; margin-top: 8px; color: var(--text-dim); font-size: 0.61rem; line-height: 1.4; }
 .split-toggles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; margin-top: 14px; }
 .weight-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-top: 15px; color: var(--text-dim); font-size: 0.58rem; font-weight: 700; letter-spacing: 0.13em; }
 .weight-heading small { color: var(--text-dim); font-size: 0.61rem; font-weight: 400; letter-spacing: 0; text-transform: none; }
