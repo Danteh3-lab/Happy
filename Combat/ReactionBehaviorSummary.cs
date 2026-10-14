@@ -49,7 +49,7 @@ internal sealed record ReactionBehaviorSummary(
                 : (wardenTopOverride ? "Parry / top Crushing" : "Parry");
             fDetail = settings.Legit
                     ? wardenTopOverride
-                        ? $"Top attacks send a crushing counter immediately; sides: {DescribeLegitF(settings, heroEnabled, canSendBulwark, hero == "Orochi")}"
+                        ? $"Top attacks replace the parry with an immediate crushing counter (same roll); {DescribeLegitF(settings, heroEnabled, canSendBulwark, hero == "Orochi")}"
                     : DescribeLegitF(settings, heroEnabled, canSendBulwark, hero == "Orochi")
                 : wardenTopOverride
                     ? $"Top attacks send a crushing counter immediately; side attacks use Parry after the flash gate and {settings.ParryDelay} ms delay."
@@ -102,6 +102,7 @@ internal sealed record ReactionBehaviorSummary(
             eDetail = "No reaction is assigned to E hold.";
         }
 
+        notices.AddRange(DescribeOverriddenSwitches(settings));
         string heroStatus = DescribeHeroStatus(settings, hero, heroEnabled);
         if (hero != "None" && !heroStatus.EndsWith("active F/LT action.", StringComparison.Ordinal))
             notices.Add(heroStatus);
@@ -128,6 +129,24 @@ internal sealed record ReactionBehaviorSummary(
             ParryTiming = DescribeParryTiming(settings),
             DodgeTiming = DescribeDodgeTiming(settings)
         };
+    }
+
+    // Switches that are on but can never run with the current combination.
+    // Hero overrides are reported separately by DescribeHeroStatus.
+    private static IEnumerable<string> DescribeOverriddenSwitches(Settings settings)
+    {
+        if (settings.Parry && !settings.Legit)
+        {
+            if (settings.Crushing) yield return "Crushing counter never runs: Parry takes priority. Enable Legit to use it as a fallback.";
+            if (settings.Deflect) yield return "Deflect never runs: Parry takes priority. Enable Legit to use it as a fallback.";
+        }
+        else if (!settings.Parry && settings.Crushing && settings.Deflect)
+            yield return "Deflect never runs: Crushing counter takes priority.";
+
+        if (settings.Legit && !settings.Parry && !settings.Parry2)
+            yield return "Legit has no effect: it only rolls for Parry.";
+        if (settings.Parry2 && settings.Crushing2)
+            yield return "E Crushing counter never runs: E Parry takes priority.";
     }
 
     private static string ConfiguredFAction(Settings settings)

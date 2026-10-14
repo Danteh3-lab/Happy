@@ -259,27 +259,33 @@ internal sealed class OrangeResponseController
 
     private async Task SendDodgeFollowUpsAsync(Settings settings, IInputGateway input, CancellationToken token)
     {
+        bool sentGenericFollowUp = false;
         if (settings.DodgeL)
         {
             await Task.Delay(Math.Max(0, settings.Pause2), token);
             input.MouseClick(Input.VK_LBUTTON);
+            sentGenericFollowUp = true;
         }
         if (settings.DodgeH)
         {
             await Task.Delay(Math.Max(0, settings.Pause2), token);
             input.MouseClick(Input.VK_RBUTTON);
+            sentGenericFollowUp = true;
         }
         if (settings.Lightbash)
         {
             await Task.Delay(Math.Max(0, settings.Pause2), token);
             input.KeyTap(Input.VK_NUMPAD5);
+            sentGenericFollowUp = true;
         }
 
-        if (settings.Nohero) return;
-        if (settings.Ch("Nobushi")) input.KeyTap(Input.VK_C);
-        if (settings.Ch("Shaman")) { input.KeyTap(Input.VK_SPACE); input.KeyTap(Input.VK_NUMPAD5); }
-        if (settings.Ch("Orochi")) { input.KeyTap(Input.VK_SPACE); input.KeyTap(Input.VK_NUMPAD9); }
-        if (!settings.Ch("Jiangjun")) return;
+        // Hero follow-ups require the hero response switch, like every other
+        // hero action, and never stack on top of a generic dodge follow-up.
+        if (sentGenericFollowUp) return;
+        if (_host.IsYourChar("Nobushi")) input.KeyTap(Input.VK_C);
+        if (_host.IsYourChar("Shaman")) { input.KeyTap(Input.VK_SPACE); input.KeyTap(Input.VK_NUMPAD5); }
+        if (_host.IsYourChar("Orochi")) { input.KeyTap(Input.VK_SPACE); input.KeyTap(Input.VK_NUMPAD9); }
+        if (!_host.IsYourChar("Jiangjun")) return;
         input.KeyDown(Input.VK_C);
         try
         {

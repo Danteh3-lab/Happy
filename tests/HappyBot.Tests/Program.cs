@@ -82,6 +82,9 @@ static partial class Program
             OrangeBackDodgeCancelsHeldForward();
             OrangeBackDodgeNeutralWithoutForward();
             OrangeBulwarkStaysHighestPriority();
+            OrangeHeroFollowUpRequiresYourHeroAndSkipsAfterGenericFollowUp();
+            WardenTopCrushingUsesLegitRoll();
+            BehaviorSummaryReportsOverriddenSwitches();
             SettingsCodecHeroSelectionKeepsFirst();
             SettingsCodecTryParseResolution();
             SettingsCodecEditRoundTrip();

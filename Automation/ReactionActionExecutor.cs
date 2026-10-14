@@ -54,7 +54,9 @@ internal sealed class ReactionActionExecutor
     public void QueueReaction(ReactionCommand command)
     {
         if (command == null) return;
-        if (command.Kind == ReactionCommandKind.Parry)
+        // Warden's top crushing replaces the parry, so it shares the Legit roll and fallbacks.
+        bool wardenTopParry = command.Kind == ReactionCommandKind.Crushing && command.RequiresParryEnabled;
+        if (command.Kind == ReactionCommandKind.Parry || wardenTopParry)
         {
             Settings settings = _host.Settings;
             bool bulwarkEligible = settings.Autoblock && settings.Parry && settings.Legit &&
