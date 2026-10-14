@@ -1,6 +1,6 @@
 # DANBOT
 
-DANBOT by Danteh is a C#/.NET 10 rewrite of the original `HappyBot.ahk`. It provides screen-based attack detection, guard automation, parry, deflect, dodge, and hero-specific responses.
+DANBOT by Danteh is a C#/.NET 10 rewrite of the original `archive/legacy-ahk/HappyBot.ahk`. It provides screen-based attack detection, guard automation, parry, deflect, dodge, and hero-specific responses.
 
 The verified input path is a merged virtual Xbox controller:
 
@@ -145,6 +145,6 @@ The verified setup uses ViGEm and does not require the legacy Interception drive
 
 ## Notes
 
-- The original behavior reference is preserved in `HappyBot.ahk`.
+- The original behavior reference is preserved in `archive/legacy-ahk/HappyBot.ahk`.
 - Build output and generated `Config.ini` files are ignored by Git.
 - Game automation can violate game rules or anti-cheat policies. Test responsibly, preferably in training or offline modes.
