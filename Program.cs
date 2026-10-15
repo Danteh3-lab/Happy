@@ -27,7 +27,7 @@ internal static class Program
         }
         finally
         {
-            ViGEmInput.Shutdown();
+            ViGEmInput.Close();
         }
     }
 }

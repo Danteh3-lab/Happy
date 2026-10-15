@@ -22,14 +22,17 @@ This avoids the input-device switching lag caused by exposing both the source co
 
 ```powershell
 dotnet restore
-dotnet build HappyBot.csproj --configuration Debug
+dotnet build HappyBot.csproj --configuration Release
 ```
 
 The executable is written to:
 
 ```text
-bin\Debug\net10.0-windows\HappyBot.exe
+bin\Release\net10.0-windows\HappyBot.exe
 ```
+
+The launchers below start the Release build. If only a Debug build exists,
+they fall back to `bin\Debug\net10.0-windows\HappyBot.exe`.
 
 ## Run With ViGEm
 

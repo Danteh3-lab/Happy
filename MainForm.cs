@@ -46,6 +46,7 @@ public sealed class MainForm : Form
     private bool _showAnchorScan = true;
     private ControllerToggleAction _bindingControllerAction;
     private bool _directSourceWarningShown;
+    private volatile bool _telemetryStopping;
     private ushort _controllerBindBaselineButtons;
     private bool _controllerBindBaselineLt;
     private bool _controllerBindBaselineRt;
@@ -903,10 +904,44 @@ public sealed class MainForm : Form
 
     private void ToggleTelemetry(string label)
     {
+        if (_telemetryStopping)
+        {
+            SendToast("Telemetry is still saving. Try again in a moment.", "info");
+            return;
+        }
+
         if (_bot.Telemetry.Recording)
         {
-            _bot.StopTelemetry();
-            SendToast("Telemetry saved locally.", "success");
+            // Stop waits up to 15 s for queued frames to finish writing, so it
+            // must not run on the UI thread. SendToast marshals back by itself.
+            _telemetryStopping = true;
+            SendToast("Saving telemetry...", "info");
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    _bot.StopTelemetry();
+                    SendToast("Telemetry saved locally.", "success");
+                }
+                catch (Exception ex)
+                {
+                    SendToast("Telemetry could not be saved: " + ex.Message, "error");
+                }
+                finally
+                {
+                    _telemetryStopping = false;
+                    // StatusSnapshot reads UI-owned editor state, so build it
+                    // on the UI thread rather than here.
+                    try
+                    {
+                        if (!IsDisposed && IsHandleCreated) BeginInvoke(new Action(SendStatus));
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // The form closed while telemetry was saving.
+                    }
+                }
+            });
         }
         else
         {
