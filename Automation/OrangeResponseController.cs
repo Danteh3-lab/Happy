@@ -334,7 +334,9 @@ internal sealed class OrangeResponseController
             return false;
         }
 
-        if (input.IsDown(Input.VK_W))
+        // MovingForwardHeld reads the left stick in controller mode; a plain
+        // VK_W check never fired there, so the back-dodge was skipped.
+        if (input.MovingForwardHeld())
         {
             input.Block(true);
             try
