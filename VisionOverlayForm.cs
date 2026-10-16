@@ -1,4 +1,6 @@
 using System.Drawing.Drawing2D;
+using System.Drawing.Text;
+using HappyBot.Overlay;
 
 namespace HappyBot;
 
@@ -14,19 +16,15 @@ public sealed class VisionOverlayForm : Form, App.IVisionOverlay
     private const int WsExNoActivate = 0x08000000;
     private const int WmMouseActivate = 0x0021;
     private const int MaNoActivate = 3;
-
-    private static readonly Color TransparentColor = Color.Magenta;
-    private static readonly Color Cyan = Color.FromArgb(74, 218, 230);
-    private static readonly Color CyanDim = Color.FromArgb(90, 148, 157);
-    private static readonly Color Green = Color.FromArgb(83, 230, 137);
-    private static readonly Color Yellow = Color.FromArgb(255, 221, 78);
-    private static readonly Color Red = Color.FromArgb(255, 91, 84);
-    private static readonly Color Orange = Color.FromArgb(255, 155, 62);
-    private static readonly Color Panel = Color.FromArgb(218, 10, 18, 23);
+    private const int ChipBar = 3;
+    private const int ChipPadX = 7;
+    private const int ChipPadY = 4;
+    private const int ChipGap = 6;
 
     private readonly Func<VisionSnapshot> _getSnapshot;
     private readonly Func<OverlayFeatureSnapshot> _getFeatures;
     private readonly System.Windows.Forms.Timer _paintTimer;
+    private readonly OverlayPaintCache _paint = new();
     private Rectangle _screenBounds;
     private bool _showAnchorScan = true;
 
@@ -43,8 +41,8 @@ public sealed class VisionOverlayForm : Form, App.IVisionOverlay
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false;
         TopMost = true;
-        BackColor = TransparentColor;
-        TransparencyKey = TransparentColor;
+        BackColor = OverlayTheme.TransparencyKey;
+        TransparencyKey = OverlayTheme.TransparencyKey;
         DoubleBuffered = true;
 
         _paintTimer = new System.Windows.Forms.Timer { Interval = 33 };
@@ -107,36 +105,52 @@ public sealed class VisionOverlayForm : Form, App.IVisionOverlay
 
     protected override void OnPaintBackground(PaintEventArgs e)
     {
-        e.Graphics.Clear(TransparentColor);
+        e.Graphics.Clear(OverlayTheme.TransparencyKey);
     }
 
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
+        Graphics g = e.Graphics;
         VisionSnapshot s = _getSnapshot();
         OverlayFeatureSnapshot features = _getFeatures();
-        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+        // Grayscale anti-aliasing: ClearType's colored subpixels fringe against the key color.
+        g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+        g.SmoothingMode = SmoothingMode.None;
 
-        DrawHeader(e.Graphics, s);
-        DrawFeatureList(e.Graphics, features);
-        if (_showAnchorScan) DrawAnchorScan(e.Graphics, s);
+        DrawHeader(g, s);
+        DrawFeatureList(g, features);
+        if (_showAnchorScan)
+            DrawRegion(g, ToClient(s.AnchorScan), s.MarkerFound ? OverlayTheme.Signal : OverlayTheme.SignalDim, "ANCHOR SCAN", active: false);
 
         if (!s.MarkerFound) return;
 
-        DrawRegion(e.Graphics, ToClient(s.CombatRoi), Cyan, "COMBAT ROI", 1.5f);
-        DrawRegion(e.Graphics, ToClient(s.TopZone), ZoneColor(s, "TOP"), "TOP", 1.5f);
-        DrawRegion(e.Graphics, ToClient(s.LeftZone), ZoneColor(s, "LEFT"), "LEFT", 1.5f);
-        DrawRegion(e.Graphics, ToClient(s.RightZone), ZoneColor(s, "RIGHT"), "RIGHT", 1.5f);
-
-        Color anchorColor = s.MarkerKind == "YELLOW" ? Yellow : Green;
-        DrawTarget(e.Graphics, ToClient(s.Anchor), anchorColor, "ANCHOR " + s.MarkerKind);
-        if (s.AttackIndicator && s.Indicator.X >= 0)
-            DrawTarget(e.Graphics, ToClient(s.Indicator), Red, "INDICATOR");
-
         string direction = string.IsNullOrEmpty(s.DecisionDirection) ? DirectionLabel(s.GuardDirection) : s.DecisionDirection;
-        Color decisionColor = StateColor(s.ReactionState);
-        DrawDecision(e.Graphics, s, decisionColor, direction);
+        Color decisionColor = OverlayTheme.StateColor(s.ReactionState);
+
+        DrawRegion(g, ToClient(s.CombatRoi), OverlayTheme.Signal, "COMBAT ROI", active: false);
+        foreach ((string zone, RectangleF rect) in new[] { ("TOP", s.TopZone), ("LEFT", s.LeftZone), ("RIGHT", s.RightZone) })
+        {
+            bool active = zone == direction;
+            DrawRegion(g, ToClient(rect), active ? decisionColor : OverlayTheme.SignalDim, zone, active);
+        }
+
+        Color anchorColor = s.MarkerKind == "YELLOW" ? OverlayTheme.Yellow : OverlayTheme.Ok;
+        DrawTarget(g, ToClient(s.Anchor), anchorColor, "ANCHOR " + s.MarkerKind);
+        if (s.AttackIndicator && s.Indicator.X >= 0)
+            DrawTarget(g, ToClient(s.Indicator), OverlayTheme.Danger, "INDICATOR");
+
+        DrawDecision(g, s, decisionColor, direction);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _paintTimer.Dispose();
+            _paint.Dispose();
+        }
+        base.Dispose(disposing);
     }
 
     private void EnsureScreenBounds()
@@ -151,24 +165,6 @@ public sealed class VisionOverlayForm : Form, App.IVisionOverlay
 
     private Point ToClient(Point screen) => new(screen.X - _screenBounds.Left, screen.Y - _screenBounds.Top);
 
-    private static Color ZoneColor(VisionSnapshot s, string zone)
-    {
-        string active = string.IsNullOrEmpty(s.DecisionDirection) ? DirectionLabel(s.GuardDirection) : s.DecisionDirection;
-        return active == zone ? StateColor(s.ReactionState) : CyanDim;
-    }
-
-    private static Color StateColor(string state)
-    {
-        if (state.Contains("PARRY", StringComparison.OrdinalIgnoreCase)) return Red;
-        if (state.Contains("DEFLECT", StringComparison.OrdinalIgnoreCase)) return Orange;
-        if (state.Contains("BULWARK", StringComparison.OrdinalIgnoreCase)) return Green;
-        if (state.Contains("CRUSHING", StringComparison.OrdinalIgnoreCase)) return Yellow;
-        if (state.Contains("ORANGE", StringComparison.OrdinalIgnoreCase) || state.Contains("DODGE", StringComparison.OrdinalIgnoreCase)) return Orange;
-        if (state.Contains("GUARD", StringComparison.OrdinalIgnoreCase)) return Green;
-        if (state.Contains("SKIPPED", StringComparison.OrdinalIgnoreCase) || state.Contains("BLOCK ONLY", StringComparison.OrdinalIgnoreCase)) return Yellow;
-        return Cyan;
-    }
-
     private static string DirectionLabel(string guard) => guard switch
     {
         "LFT" => "LEFT",
@@ -177,112 +173,113 @@ public sealed class VisionOverlayForm : Form, App.IVisionOverlay
         _ => ""
     };
 
-    private static void DrawHeader(Graphics g, VisionSnapshot s)
+    private void DrawHeader(Graphics g, VisionSnapshot s)
     {
-        string mode = s.Running ? "LIVE" : "IDLE";
-        string line = $"DANBOT // VISION    {mode}    {s.LoopHz} FPS";
-        DrawChip(g, new Point(16, 16), line, s.Running ? Green : Cyan);
+        Rectangle title = DrawChip(g, new Point(16, 16), "DANBOT // VISION", OverlayTheme.Accent, _paint.Label);
+        Rectangle pill = DrawPill(g, new Point(title.Right + ChipGap, title.Top), s.Running ? "LIVE" : "IDLE",
+            s.Running ? OverlayTheme.Ok : OverlayTheme.SignalDim, filled: s.Running, height: title.Height);
+        DrawChip(g, new Point(pill.Right + ChipGap, title.Top), $"{s.LoopHz} FPS", OverlayTheme.Signal, _paint.Label);
+
         string diagnostics = $"BOX {s.Box} V{s.TrackingVersion}   ANCHOR {s.AnchorAgeMs}ms   SCAN {s.AnchorCandidateCount}/{s.AnchorCandidateDistance}px   GUARD {s.GuardRemainingMs}ms   CAND {s.CandidateId}/{s.CandidateAgeMs}ms   {s.ActionWorkerState}   {s.LegitParryStatus}   TELEMETRY {(s.TelemetryRecording ? "ON" : "OFF")}";
-        DrawChip(g, new Point(16, 43), diagnostics, s.TelemetryRecording ? Green : CyanDim);
+        DrawChip(g, new Point(16, title.Bottom + ChipGap), diagnostics,
+            s.TelemetryRecording ? OverlayTheme.Ok : OverlayTheme.SignalDim, _paint.Mono, OverlayTheme.TextMuted);
     }
 
-    private void DrawAnchorScan(Graphics g, VisionSnapshot s)
-    {
-        RectangleF region = ToClient(s.AnchorScan);
-        DrawRegion(g, region, s.MarkerFound ? Cyan : CyanDim, "ANCHOR SCAN", 1f);
-    }
-
-    private static void DrawFeatureList(Graphics g, OverlayFeatureSnapshot features)
+    private void DrawFeatureList(Graphics g, OverlayFeatureSnapshot features)
     {
         var items = new List<(string Text, Color Color)>();
-        if (features.AutoBlock) items.Add(("AUTO BLOCK", Green));
-        if (features.AutoParry) items.Add(("AUTO PARRY", Red));
-        if (features.AutoCrushing) items.Add(("AUTO CRUSH", Yellow));
-        if (features.AutoDeflect) items.Add(("AUTO DEFLECT", Orange));
-        if (features.AutoDodge) items.Add(("AUTO DODGE", Orange));
-        if (features.OrangeLight) items.Add(("ORANGE LIGHT", Orange));
-        if (features.OrangeParry) items.Add(("ORANGE PARRY", Red));
-        if (features.Legit) items.Add(($"LEGIT {features.LegitChance}%", Cyan));
-        if (features.BulwarkFallback) items.Add(("BULWARK", Green));
-        if (features.Telemetry) items.Add(("TELEMETRY", Cyan));
+        if (features.AutoBlock) items.Add(("AUTO BLOCK", OverlayTheme.Ok));
+        if (features.AutoParry) items.Add(("AUTO PARRY", OverlayTheme.Danger));
+        if (features.AutoCrushing) items.Add(("AUTO CRUSH", OverlayTheme.Yellow));
+        if (features.AutoDeflect) items.Add(("AUTO DEFLECT", OverlayTheme.Orange));
+        if (features.AutoDodge) items.Add(("AUTO DODGE", OverlayTheme.Orange));
+        if (features.OrangeLight) items.Add(("ORANGE LIGHT", OverlayTheme.Orange));
+        if (features.OrangeParry) items.Add(("ORANGE PARRY", OverlayTheme.Danger));
+        if (features.Legit) items.Add(($"LEGIT {features.LegitChance}%", OverlayTheme.Signal));
+        if (features.BulwarkFallback) items.Add(("BULWARK", OverlayTheme.Ok));
+        if (features.Telemetry) items.Add(("TELEMETRY", OverlayTheme.Signal));
 
-        const int rightMargin = 18;
-        const int top = 16;
-        int y = top;
-        DrawRightChip(g, new Point(g.VisibleClipBounds.Right > 0 ? (int)g.VisibleClipBounds.Right - rightMargin : 0, y), "MODULES", CyanDim);
-        y += 29;
+        // ClientSize, not VisibleClipBounds: the clip shrinks on partial invalidation.
+        int right = ClientSize.Width - 18;
+        Rectangle heading = DrawChip(g, new Point(right, 16), "MODULES", OverlayTheme.SignalDim, _paint.Label,
+            OverlayTheme.TextMuted, alignRight: true);
+        int y = heading.Bottom + ChipGap;
 
         if (items.Count == 0)
         {
-            DrawRightChip(g, new Point((int)g.VisibleClipBounds.Right - rightMargin, y), "NO MODULES", CyanDim);
+            DrawChip(g, new Point(right, y), "NO MODULES", OverlayTheme.SignalDim, _paint.Label, OverlayTheme.TextMuted, alignRight: true);
             return;
         }
 
         foreach ((string text, Color color) in items)
         {
-            DrawRightChip(g, new Point((int)g.VisibleClipBounds.Right - rightMargin, y), text, color);
-            y += 29;
+            y = DrawChip(g, new Point(right, y), text, color, _paint.Label, alignRight: true).Bottom + 4;
         }
     }
 
-    private static void DrawRightChip(Graphics g, Point rightAlignedLocation, string text, Color color)
-    {
-        using var font = new Font("Consolas", 8.2f, FontStyle.Bold, GraphicsUnit.Point);
-        SizeF size = g.MeasureString(text, font);
-        var rect = new RectangleF(rightAlignedLocation.X - size.Width - 12, rightAlignedLocation.Y, size.Width + 12, size.Height + 6);
-        using var fill = new SolidBrush(Panel);
-        using var border = new Pen(Color.FromArgb(220, color));
-        using var foreground = new SolidBrush(Color.FromArgb(235, 241, 246));
-        g.FillRectangle(fill, rect);
-        g.DrawRectangle(border, rect.X, rect.Y, rect.Width, rect.Height);
-        g.DrawString(text, font, foreground, rect.X + 6, rect.Y + 3);
-    }
-
-    private static void DrawRegion(Graphics g, RectangleF region, Color color, string label, float width)
+    private void DrawRegion(Graphics g, RectangleF region, Color color, string label, bool active)
     {
         if (region.Width <= 0 || region.Height <= 0) return;
-        using var pen = new Pen(Color.FromArgb(210, color), width) { DashStyle = DashStyle.Dash };
-        g.DrawRectangle(pen, region.X, region.Y, region.Width, region.Height);
-        DrawChip(g, new Point((int)region.Left + 5, Math.Max(3, (int)region.Top - 23)), label, color);
+        Pen pen = active ? _paint.Pen(color, 2f) : _paint.Pen(color, 1f, DashStyle.Dash);
+        g.DrawRectangle(pen, (int)region.X, (int)region.Y, (int)region.Width, (int)region.Height);
+        Rectangle chip = MeasureChip(g, label, _paint.Label);
+        DrawChip(g, new Point((int)region.Left, Math.Max(3, (int)region.Top - chip.Height - 4)), label, color, _paint.Label,
+            active ? OverlayTheme.Text : OverlayTheme.TextMuted);
     }
 
-    private static void DrawTarget(Graphics g, Point point, Color color, string label)
+    private void DrawTarget(Graphics g, Point point, Color color, string label)
     {
         const int radius = 7;
-        using var pen = new Pen(color, 1.5f);
+        Pen pen = _paint.Pen(color, 1.5f);
+        g.SmoothingMode = SmoothingMode.AntiAlias;
         g.DrawEllipse(pen, point.X - radius, point.Y - radius, radius * 2, radius * 2);
-        g.DrawLine(pen, point.X - 13, point.Y, point.X + 13, point.Y);
-        g.DrawLine(pen, point.X, point.Y - 13, point.X, point.Y + 13);
-        DrawChip(g, new Point(point.X + 12, point.Y + 10), label, color);
+        g.SmoothingMode = SmoothingMode.None;
+        g.DrawLine(pen, point.X - 13, point.Y, point.X - radius - 2, point.Y);
+        g.DrawLine(pen, point.X + radius + 2, point.Y, point.X + 13, point.Y);
+        g.DrawLine(pen, point.X, point.Y - 13, point.X, point.Y - radius - 2);
+        g.DrawLine(pen, point.X, point.Y + radius + 2, point.X, point.Y + 13);
+        DrawChip(g, new Point(point.X + 14, point.Y + 10), label, color, _paint.Label);
     }
 
     private void DrawDecision(Graphics g, VisionSnapshot s, Color color, string direction)
     {
         RectangleF roi = ToClient(s.CombatRoi);
-        Point location = new((int)roi.Left + 6, (int)roi.Bottom + 7);
+        var location = new Point((int)roi.Left, (int)roi.Bottom + 8);
         string text = s.ReactionState;
         if (!string.IsNullOrEmpty(direction) && !text.StartsWith(direction, StringComparison.OrdinalIgnoreCase))
             text = direction + " → " + text;
-        DrawChip(g, location, text, color);
-        DrawChip(g, new Point(location.X, location.Y + 27), s.ReactionReason, CyanDim);
+        Rectangle decision = DrawChip(g, location, text, color, _paint.LabelLarge);
+        if (!string.IsNullOrEmpty(s.ReactionReason))
+            DrawChip(g, new Point(location.X, decision.Bottom + 4), s.ReactionReason, OverlayTheme.SignalDim, _paint.Mono, OverlayTheme.TextMuted);
     }
 
-    private static void DrawChip(Graphics g, Point location, string text, Color color)
+    private Rectangle MeasureChip(Graphics g, string text, Font font)
     {
-        using var font = new Font("Consolas", 8.2f, FontStyle.Bold, GraphicsUnit.Point);
-        SizeF size = g.MeasureString(text, font);
-        var rect = new RectangleF(location.X, location.Y, size.Width + 12, size.Height + 6);
-        using var fill = new SolidBrush(Panel);
-        using var border = new Pen(Color.FromArgb(220, color));
-        using var foreground = new SolidBrush(Color.FromArgb(235, 241, 246));
-        g.FillRectangle(fill, rect);
-        g.DrawRectangle(border, rect.X, rect.Y, rect.Width, rect.Height);
-        g.DrawString(text, font, foreground, rect.X + 6, rect.Y + 3);
+        SizeF size = g.MeasureString(text, font, PointF.Empty, _paint.Format);
+        return new Rectangle(0, 0, ChipBar + ChipPadX * 2 + (int)Math.Ceiling(size.Width), ChipPadY * 2 + (int)Math.Ceiling(size.Height));
     }
 
-    protected override void Dispose(bool disposing)
+    /// <summary>Opaque chip: panel fill, hairline border, a 3px bar in the state color, then text.</summary>
+    private Rectangle DrawChip(Graphics g, Point location, string text, Color accent, Font font,
+        Color? textColor = null, bool alignRight = false)
     {
-        if (disposing) _paintTimer.Dispose();
-        base.Dispose(disposing);
+        Rectangle rect = MeasureChip(g, text, font);
+        rect.Location = new Point(alignRight ? location.X - rect.Width : location.X, location.Y);
+        g.FillRectangle(_paint.Brush(OverlayTheme.Panel), rect);
+        g.DrawRectangle(_paint.Pen(OverlayTheme.PanelLine), rect.X, rect.Y, rect.Width - 1, rect.Height - 1);
+        g.FillRectangle(_paint.Brush(accent), rect.X, rect.Y, ChipBar, rect.Height);
+        g.DrawString(text, font, _paint.Brush(textColor ?? OverlayTheme.Text), rect.X + ChipBar + ChipPadX, rect.Y + ChipPadY, _paint.Format);
+        return rect;
+    }
+
+    private Rectangle DrawPill(Graphics g, Point location, string text, Color color, bool filled, int height)
+    {
+        SizeF size = g.MeasureString(text, _paint.Label, PointF.Empty, _paint.Format);
+        var rect = new Rectangle(location.X, location.Y, (int)Math.Ceiling(size.Width) + ChipPadX * 2, height);
+        g.FillRectangle(_paint.Brush(filled ? color : OverlayTheme.Panel), rect);
+        g.DrawRectangle(_paint.Pen(color), rect.X, rect.Y, rect.Width - 1, rect.Height - 1);
+        g.DrawString(text, _paint.Label, _paint.Brush(filled ? OverlayTheme.Panel : color), rect.X + ChipPadX,
+            rect.Y + (height - size.Height) / 2f, _paint.Format);
+        return rect;
     }
 }
