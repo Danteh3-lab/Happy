@@ -26,6 +26,8 @@ public sealed class MainForm : Form, IUiSink, IUiDispatcher
     };
     private const int WmNcLButtonDown = 0xA1;
     private const int HtCaption = 0x2;
+    private const string AppHost = "danbot.app.example";
+    private const string AppOrigin = "https://" + AppHost + "/";
 
     private readonly BotCore _bot = new();
     private readonly DeckController _controller;
@@ -105,18 +107,35 @@ public sealed class MainForm : Form, IUiSink, IUiDispatcher
             var environment = await CoreWebView2Environment.CreateAsync(null, userDataFolder);
             await _webView.EnsureCoreWebView2Async(environment);
 
-            _webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
-            _webView.CoreWebView2.Settings.AreDevToolsEnabled = false;
-            _webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
-            _webView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
-            _webView.CoreWebView2.NavigationCompleted += (_, _) =>
+            CoreWebView2 core = _webView.CoreWebView2;
+            core.Settings.AreDefaultContextMenusEnabled = false;
+#if DEBUG
+            core.Settings.AreDevToolsEnabled = true;
+#else
+            core.Settings.AreDevToolsEnabled = false;
+#endif
+            core.Settings.IsStatusBarEnabled = false;
+
+            // Serve ui/ from a virtual https origin: ES module scripts do not load
+            // over file://, and a real origin lets us pin navigation and messages.
+            // A reserved .example name avoids the DNS stall .local triggers.
+            core.SetVirtualHostNameToFolderMapping(AppHost, Path.Combine(AppContext.BaseDirectory, "ui"),
+                CoreWebView2HostResourceAccessKind.Deny);
+            core.NavigationStarting += (_, args) =>
+            {
+                if (!args.Uri.StartsWith(AppOrigin, StringComparison.OrdinalIgnoreCase)) args.Cancel = true;
+            };
+            core.NewWindowRequested += (_, args) => args.Handled = true;
+            core.WebMessageReceived += OnWebMessageReceived;
+            core.NavigationCompleted += (_, _) =>
             {
                 _webReady = true;
                 _controller.Handle(new ReadyCommand());
             };
 
-            string page = Path.Combine(AppContext.BaseDirectory, "ui", "index.html");
-            _webView.CoreWebView2.Navigate(new Uri(page).AbsoluteUri);
+            // A rebuilt ui/ must never be served from a stale cache.
+            await core.Profile.ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.DiskCache);
+            core.Navigate(AppOrigin + "index.html");
         }
         catch (Exception ex)
         {
@@ -127,6 +146,9 @@ public sealed class MainForm : Form, IUiSink, IUiDispatcher
 
     private void OnWebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
+        // Only the deck page may drive the bot.
+        if (!e.Source.StartsWith(AppOrigin, StringComparison.OrdinalIgnoreCase)) return;
+
         UiCommand command;
         try
         {
