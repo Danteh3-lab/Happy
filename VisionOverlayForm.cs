@@ -6,7 +6,7 @@ namespace HappyBot;
 /// A non-activating transparent HUD. It displays only state already produced by
 /// BotCore and is excluded from Windows screen capture before it is shown.
 /// </summary>
-public sealed class VisionOverlayForm : Form
+public sealed class VisionOverlayForm : Form, App.IVisionOverlay
 {
     private const int WsExLayered = 0x00080000;
     private const int WsExTransparent = 0x00000020;
@@ -90,6 +90,10 @@ public sealed class VisionOverlayForm : Form
         _paintTimer.Stop();
         if (Visible) Hide();
     }
+
+    bool App.IVisionOverlay.TryShow() => TryShowOverlay();
+
+    void App.IVisionOverlay.Hide() => HideOverlay();
 
     protected override void WndProc(ref Message m)
     {

@@ -287,41 +287,19 @@ public sealed class TelemetryRecorder : IDisposable
             region, relativePath, snapshot)) ? relativePath : "";
     }
 
-    public bool ExportLatest(IWin32Window owner, out string result)
+    public bool TryGetLatestSessionPath(out string path)
     {
-        string source;
-        lock (_sync) source = (_active ?? _last)?.Path;
-        if (string.IsNullOrEmpty(source) || !Directory.Exists(source))
-        {
-            result = "No telemetry session has been recorded yet.";
-            return false;
-        }
+        lock (_sync) path = (_active ?? _last)?.Path;
+        if (!string.IsNullOrEmpty(path) && Directory.Exists(path)) return true;
+        path = null;
+        return false;
+    }
 
-        using var dialog = new SaveFileDialog
-        {
-            Title = "Export DANBOT telemetry",
-            Filter = "ZIP archive|*.zip",
-            FileName = Path.GetFileName(source) + ".zip",
-            OverwritePrompt = true
-        };
-        if (dialog.ShowDialog(owner) != DialogResult.OK)
-        {
-            result = "Export cancelled.";
-            return false;
-        }
-
-        try
-        {
-            if (File.Exists(dialog.FileName)) File.Delete(dialog.FileName);
-            ZipFile.CreateFromDirectory(source, dialog.FileName, CompressionLevel.Fastest, false);
-            result = dialog.FileName;
-            return true;
-        }
-        catch (Exception ex)
-        {
-            result = ex.Message;
-            return false;
-        }
+    /// <summary>Zips a session folder, replacing any existing archive. Throws on failure.</summary>
+    public static void ExportTo(string sessionPath, string zipPath)
+    {
+        if (File.Exists(zipPath)) File.Delete(zipPath);
+        ZipFile.CreateFromDirectory(sessionPath, zipPath, CompressionLevel.Fastest, false);
     }
 
     private void RecordInternal(TelemetrySession session, string name, object payload, bool failure)

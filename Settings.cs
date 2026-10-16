@@ -93,23 +93,48 @@ public sealed class Settings
         Chars = new Dictionary<string, bool>(source.Chars, StringComparer.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Every numeric value that waits for Apply before reaching the live bot.
+    /// Copying and dirty-checking both read this table so they cannot drift.
+    /// </summary>
+    internal static readonly (string Key, Func<Settings, int> Get, Action<Settings, int> Set)[] TimingFields =
+    {
+        ("Pause", s => s.Pause, (s, v) => s.Pause = v),
+        ("Pause1", s => s.Pause1, (s, v) => s.Pause1 = v),
+        ("Pause2", s => s.Pause2, (s, v) => s.Pause2 = v),
+        ("Pause3", s => s.Pause3, (s, v) => s.Pause3 = v),
+        ("ParryDelay", s => s.ParryDelay, (s, v) => s.ParryDelay = v),
+        ("LegitParryChance", s => s.LegitParryChance, (s, v) => s.LegitParryChance = v),
+        ("CrushingFallbackChance", s => s.CrushingFallbackChance, (s, v) => s.CrushingFallbackChance = v),
+        ("DeflectFallbackChance", s => s.DeflectFallbackChance, (s, v) => s.DeflectFallbackChance = v),
+        ("GuardHold", s => s.GuardHold, (s, v) => s.GuardHold = v),
+        ("Left", s => s.Left, (s, v) => s.Left = v),
+        ("Right", s => s.Right, (s, v) => s.Right = v),
+        ("TopDeflect", s => s.TopDeflect, (s, v) => s.TopDeflect = v)
+    };
+
+    public bool TimingsEqual(Settings other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        foreach (var field in TimingFields)
+        {
+            if (field.Get(this) != field.Get(other)) return false;
+        }
+        return true;
+    }
+
+    public void CopyTimingsFrom(Settings source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        foreach (var field in TimingFields) field.Set(this, field.Get(source));
+    }
+
     public void CopyFrom(Settings source)
     {
         ArgumentNullException.ThrowIfNull(source);
         Res1 = source.Res1;
         Res2 = source.Res2;
-        Pause = source.Pause;
-        Pause1 = source.Pause1;
-        Pause2 = source.Pause2;
-        Pause3 = source.Pause3;
-        ParryDelay = source.ParryDelay;
-        LegitParryChance = source.LegitParryChance;
-        GuardHold = source.GuardHold;
-        Left = source.Left;
-        Right = source.Right;
-        TopDeflect = source.TopDeflect;
-        CrushingFallbackChance = source.CrushingFallbackChance;
-        DeflectFallbackChance = source.DeflectFallbackChance;
+        CopyTimingsFrom(source);
         CopyLiveSwitchesFrom(source);
     }
 }

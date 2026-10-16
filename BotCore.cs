@@ -325,7 +325,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
         });
     }
 
-    public bool ExportTelemetry(IWin32Window owner, out string result) => _telemetry.ExportLatest(owner, out result);
+    public bool TryGetLatestTelemetryPath(out string path) => _telemetry.TryGetLatestSessionPath(out path);
 
     public VisionSnapshot GetVisionSnapshot()
     {
