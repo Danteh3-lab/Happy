@@ -110,7 +110,7 @@ static partial class Program
     private static void OrangeExplicitSideDodgeBeatsHeldForward()
     {
         var leftInput = new FakeInputGateway();
-        leftInput.HeldKeys.Add(HappyBot.Input.VK_W);
+        leftInput.ForwardHeld = true;
         var leftSettings = OrangeDodgeSettings(left: true);
         var leftHost = new FakeAutomationHost(leftInput, leftSettings, 201);
         var leftScheduler = new ActionScheduler(leftHost.ShutdownToken);
@@ -128,7 +128,7 @@ static partial class Program
         finally { leftScheduler.Dispose(); }
 
         var rightInput = new FakeInputGateway();
-        rightInput.HeldKeys.Add(HappyBot.Input.VK_W);
+        rightInput.ForwardHeld = true;
         var rightSettings = OrangeDodgeSettings(right: true);
         var rightHost = new FakeAutomationHost(rightInput, rightSettings, 202);
         var rightScheduler = new ActionScheduler(rightHost.ShutdownToken);
@@ -146,7 +146,7 @@ static partial class Program
         finally { rightScheduler.Dispose(); }
 
         var bothInput = new FakeInputGateway();
-        bothInput.HeldKeys.Add(HappyBot.Input.VK_W);
+        bothInput.ForwardHeld = true;
         var bothSettings = OrangeDodgeSettings(left: true, right: true);
         var bothHost = new FakeAutomationHost(bothInput, bothSettings, 203);
         var bothScheduler = new ActionScheduler(bothHost.ShutdownToken);
@@ -167,7 +167,7 @@ static partial class Program
     private static void OrangeBackDodgeCancelsHeldForward()
     {
         var input = new FakeInputGateway();
-        input.HeldKeys.Add(HappyBot.Input.VK_W);
+        input.ForwardHeld = true;
         var settings = OrangeDodgeSettings();
         var host = new FakeAutomationHost(input, settings, 204);
         var scheduler = new ActionScheduler(host.ShutdownToken);
@@ -210,7 +210,6 @@ static partial class Program
     private static void OrangeBulwarkStaysHighestPriority()
     {
         var input = new FakeInputGateway { ForwardHeld = true };
-        input.HeldKeys.Add(HappyBot.Input.VK_W);
         var settings = OrangeDodgeSettings(left: true);
         settings.Chars["Blackprior"] = true;
         var host = new FakeAutomationHost(input, settings, 206);

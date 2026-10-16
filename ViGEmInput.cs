@@ -24,6 +24,8 @@ public static class ViGEmInput
     private static bool _sourceConnected;
     private static int _sourceSlot = -1;
     private static long _lastRecoveryTick;
+    private static int _recoveryRunning;
+    private static volatile bool _closing;
     private static ushort _lastButtons;
     private static byte _lastLeftTrigger;
     private static byte _lastRightTrigger;
@@ -195,14 +197,53 @@ public static class ViGEmInput
         }
     }
 
+    /// <summary>
+    /// Schedules a bridge reconnect on a pool thread and returns immediately.
+    /// Shutdown can wait up to 500 ms for the source timer and up to 2 s for a
+    /// stalled HID reader, so running it on the caller (the UI status timer)
+    /// froze the window while the bridge was down.
+    /// </summary>
     public static void TryRecover()
     {
-        if (IsAvailable) return;
+        if (IsAvailable || _closing) return;
         long now = Environment.TickCount64;
-        if (now - _lastRecoveryTick < 2000) return;
-        _lastRecoveryTick = now;
+        if (now - Interlocked.Read(ref _lastRecoveryTick) < 2000) return;
+        if (Interlocked.CompareExchange(ref _recoveryRunning, 1, 0) != 0) return;
+        Interlocked.Exchange(ref _lastRecoveryTick, now);
+        ThreadPool.QueueUserWorkItem(_ =>
+        {
+            try
+            {
+                lock (LifecycleSync)
+                {
+                    // Close() takes this lock too, so it waits for an in-flight
+                    // recovery and no recovery can reconnect after it.
+                    if (_closing || IsAvailable) return;
+                    Shutdown();
+                    Init();
+                }
+            }
+            catch
+            {
+                // Init already falls back to Shutdown on failure; the next
+                // status tick schedules another attempt.
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _lastRecoveryTick, Environment.TickCount64);
+                Volatile.Write(ref _recoveryRunning, 0);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Final shutdown on application exit. Unlike <see cref="Shutdown"/>, it
+    /// also stops background recovery from reconnecting the controller.
+    /// </summary>
+    public static void Close()
+    {
+        _closing = true;
         Shutdown();
-        Init();
     }
 
     private static void OnDirectSourceState(IControllerSource sender, ControllerState state, ControllerSourceDiagnostics diagnostics)
