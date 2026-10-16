@@ -1,0 +1,52 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { deriveView } from "../js/model/view-model.js";
+
+test("run state covers standby, live, paused and error", () => {
+  assert.equal(deriveView({}, {}, {}).runState, "standby");
+  assert.equal(deriveView({}, { running: true }, {}).runState, "live");
+  assert.equal(deriveView({}, { running: true, paused: true }, {}).runState, "paused");
+  const error = deriveView({}, { running: true, error: "Capture failed" }, {});
+  assert.equal(error.runState, "error");
+  assert.equal(error.runCopy, "Capture failed");
+});
+
+test("start and apply controls follow run and pending state", () => {
+  const live = deriveView({}, { running: true, timingsDirty: true }, { applyPending: false });
+  assert.equal(live.startDisabled, true);
+  assert.equal(live.pauseDisabled, false);
+  assert.equal(live.startNote, false);
+  const idle = deriveView({}, { timingsDirty: true }, { applyPending: false });
+  assert.equal(idle.startNote, true);
+  assert.equal(idle.applyDisabled, false);
+  assert.equal(idle.timingState, "warn");
+  const applying = deriveView({}, { timingsDirty: true }, { applyPending: true });
+  assert.equal(applying.timingState, "busy");
+  assert.equal(applying.applyDisabled, true);
+  assert.equal(applying.startDisabled, true);
+});
+
+test("last reaction confirmation maps to a state", () => {
+  const vm = deriveView({}, { lastReaction: { state: "PARRY SENT", confirmation: "INPUT SENT", delayMs: 60, direction: "LEFT" } }, {});
+  assert.equal(vm.lastConfirmationState, "warn");
+  assert.equal(vm.lastDelay, "60 ms");
+  assert.equal(deriveView({}, {}, {}).lastState, "No reaction yet");
+});
+
+test("bind capture replaces the label", () => {
+  const vm = deriveView({}, { autoDodgeBind: "LB", bindingOrangeParry: true }, {});
+  assert.equal(vm.bindAutoDodge, "LB");
+  assert.equal(vm.bindAutoDodgeState, "ok");
+  assert.equal(vm.bindOrangeParryCapturing, true);
+  assert.equal(vm.bindOrangeParryState, "busy");
+  assert.equal(vm.bindAutoParry, "UNBOUND");
+});
+
+test("every binding key used in the markup is produced by the view model", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const vm = deriveView({}, {}, {});
+  const keys = [...html.matchAll(/data-bind(?:-state|-on|-disabled|-show|-hide)?="([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(keys.length > 50);
+  for (const key of new Set(keys)) assert.ok(key in vm, "view model is missing " + key);
+});

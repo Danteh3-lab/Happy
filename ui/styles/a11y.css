@@ -1,0 +1,30 @@
+/* Reduced motion: keep state changes, drop movement. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Windows High Contrast: rely on system colors, keep borders and focus visible. */
+@media (forced-colors: active) {
+  .card, .stat, .counter, .switch-tile, .toggle-btn, .readiness-row, .bind-row, .action-row,
+  .chip, .badge, .run-pill, .listbox-trigger, .field-control, .commit-bar, .sidebar, .titlebar {
+    border: 1px solid CanvasText;
+    forced-color-adjust: auto;
+  }
+  .icon { stroke: CanvasText; }
+  .run-orb .icon, .nav-item[aria-current="page"] .icon { stroke: Highlight; }
+  .nav-item[aria-current="page"], .segmented button[aria-checked="true"], .listbox-option[aria-selected="true"] {
+    color: HighlightText;
+    background: Highlight;
+  }
+  .switch { border-color: CanvasText; }
+  .switch::after { background: CanvasText; }
+  input:checked + .switch::after, input:checked ~ .switch::after, [aria-pressed="true"] > .switch::after { background: Highlight; }
+  .stat::before { background: CanvasText; }
+  :focus-visible { outline: 2px solid Highlight; }
+  .page-scroll { background-image: none; }
+}

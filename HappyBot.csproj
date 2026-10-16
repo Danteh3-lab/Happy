@@ -20,7 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="ui\**\*">
+    <Content Include="ui\**\*" Exclude="ui\tests\**;ui\dev\**;ui\package.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

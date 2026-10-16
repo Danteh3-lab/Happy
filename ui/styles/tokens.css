@@ -1,0 +1,97 @@
+/* Design tokens: the runtime source of truth (DESIGN.md documents them,
+   Overlay/OverlayTheme.cs mirrors the colors; OverlayThemeTests checks it). */
+:root {
+  color-scheme: dark;
+
+  /* Surfaces, darkest to most raised */
+  --surface-0: #0a0b0e;   /* app background */
+  --surface-1: #101217;   /* titlebar, sidebar, commit bar */
+  --surface-2: #151820;   /* cards */
+  --surface-3: #1d212b;   /* raised / hover */
+  --surface-inset: #07080b; /* inputs, wells */
+
+  --line-1: rgba(255, 255, 255, 0.06);
+  --line-2: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.17);
+
+  --text-1: #f2f3f6;
+  --text-2: #a7acb8;
+  --text-3: #767d8b;
+
+  /* Brand accent: selection, focus, primary action */
+  --accent: #e2554a;
+  --accent-hover: #f06a5f;
+  --accent-soft: rgba(226, 85, 74, 0.14);
+  --accent-line: rgba(226, 85, 74, 0.38);
+  --accent-glow: rgba(226, 85, 74, 0.35);
+
+  /* Live readouts and HUD geometry */
+  --signal: #4adae6;
+  --signal-soft: rgba(74, 218, 230, 0.12);
+  --signal-dim: #5a949d;
+
+  /* States. Danger is rose so it never reads as the coral accent. */
+  --ok: #3dcf8e;
+  --ok-soft: rgba(61, 207, 142, 0.12);
+  --warn: #f0b35a;
+  --warn-soft: rgba(240, 179, 90, 0.12);
+  --danger: #ff5c7a;
+  --danger-soft: rgba(255, 92, 122, 0.12);
+  --idle: #767d8b;
+  --idle-soft: rgba(255, 255, 255, 0.04);
+
+  /* Type */
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Bahnschrift", "Segoe UI Variable Display", "Segoe UI", sans-serif;
+  --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, monospace;
+  --fs-11: 11px;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-15: 15px;
+  --fs-18: 18px;
+  --fs-24: 24px;
+  --fs-32: 32px;
+  --fs-44: 44px;
+
+  /* Spacing (4px grid) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 28px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+
+  /* Radii */
+  --r-xs: 6px;
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 18px;
+  --r-pill: 999px;
+
+  /* Elevation */
+  --elev-1: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 8px 24px rgba(0, 0, 0, 0.22);
+  --elev-2: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 18px 48px rgba(0, 0, 0, 0.5);
+
+  /* Motion */
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 320ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Component sizes */
+  --titlebar-h: 48px;
+  --sidebar-w: 212px;
+  --commitbar-h: 60px;
+  --btn-h: 36px;
+  --page-max: 1180px;
+
+  /* Layers */
+  --z-sticky: 10;
+  --z-menu: 40;
+  --z-panel: 60;
+  --z-modal: 80;
+  --z-toast: 90;
+}

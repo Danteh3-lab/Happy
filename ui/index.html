@@ -1,332 +1,742 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-run="standby">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'">
   <title>DANBOT Control Deck</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles/tokens.css">
+  <link rel="stylesheet" href="styles/base.css">
+  <link rel="stylesheet" href="styles/layout.css">
+  <link rel="stylesheet" href="styles/components.css">
+  <link rel="stylesheet" href="styles/pages.css">
+  <link rel="stylesheet" href="styles/responsive.css">
+  <link rel="stylesheet" href="styles/a11y.css">
+  <script type="module" src="js/main.js"></script>
 </head>
 <body>
+  <svg class="sprite" aria-hidden="true" focusable="false">
+    <symbol id="i-logo" viewBox="0 0 24 24"><path d="M12 2l9 10-9 10-9-10z"/><path d="M12 7.5l4 4.5-4 4.5-4-4.5z"/></symbol>
+    <symbol id="i-dashboard" viewBox="0 0 24 24"><rect x="3" y="3" width="7.5" height="9" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="5" rx="1.5"/><rect x="13.5" y="11" width="7.5" height="10" rx="1.5"/><rect x="3" y="15" width="7.5" height="6" rx="1.5"/></symbol>
+    <symbol id="i-combat" viewBox="0 0 24 24"><path d="M4 4l10 10"/><path d="M4 4h4M4 4v4"/><path d="M20 4L10 14"/><path d="M20 4h-4M20 4v4"/><path d="M6.5 14.5l3 3M17.5 14.5l-3 3"/><path d="M8 19l-3 2M16 19l3 2"/></symbol>
+    <symbol id="i-hero" viewBox="0 0 24 24"><path d="M12 3c-3.9 0-7 3.1-7 7v5l3 2h8l3-2v-5c0-3.9-3.1-7-7-7z"/><path d="M8.5 11h7"/><path d="M12 11v6"/><path d="M9 21h6"/></symbol>
+    <symbol id="i-gamepad" viewBox="0 0 24 24"><path d="M7 7h10a5 5 0 0 1 5 5v1.5a3.5 3.5 0 0 1-6.3 2.1L14.5 14h-5l-1.2 1.6A3.5 3.5 0 0 1 2 13.5V12a5 5 0 0 1 5-5z"/><path d="M7.5 9.5v3M6 11h3"/><path d="M15.5 10h.01M17.5 12h.01"/></symbol>
+    <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M2 12h4l2.5-6 4.5 12 2.5-6H22"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.6 2.2c-.7.4-1.1.9-1.1 1.6v.4"/><path d="M12 17h.01"/></symbol>
+    <symbol id="i-min" viewBox="0 0 24 24"><path d="M6 12h12"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 5.5v13M15 5.5v13"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="1.5"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><path d="M12 16.5h.01"/></symbol>
+    <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3.5l9.5 16.5h-19z"/><path d="M12 10v4.5"/><path d="M12 17.5h.01"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><path d="M12 7.5h.01"/></symbol>
+    <symbol id="i-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5"/></symbol>
+    <symbol id="i-spinner" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 3.5h11l3.5 3.5v13.5H5z"/><path d="M8.5 3.5v5h7v-5"/><path d="M8.5 20.5v-6h7v6"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2.5L4.5 13.5h6.5l-1 8 8.5-11h-6.5z"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 8.5V5a1 1 0 0 1 1-1h3.5M15.5 4H19a1 1 0 0 1 1 1v3.5M20 15.5V19a1 1 0 0 1-1 1h-3.5M8.5 20H5a1 1 0 0 1-1-1v-3.5"/><path d="M4 12h16"/></symbol>
+    <symbol id="i-record" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10.5l5 5 5-5"/><path d="M5 20h14"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4.5v5h-5"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z"/></symbol>
+    <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
+    <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 2.5c.8 3.8 5.5 5.5 5.5 10.5a5.5 5.5 0 0 1-11 0c0-2.7 1.6-4 2.2-5.6.6 1.6 1.6 2.3 2.3 2.4-.2-2.6-.1-4.8 1-7.3z"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></symbol>
+  </svg>
+
   <div class="app">
-    <header class="titlebar" data-drag>
-      <div class="brand-lockup">
-        <div class="brand-chip">D</div>
-        <div>
-          <div class="brand-name">DANBOT</div>
-          <div class="brand-subtitle">VI-GEM CONTROL DECK</div>
-        </div>
+    <header class="titlebar">
+      <div class="brand">
+        <svg class="icon brand-mark" aria-hidden="true"><use href="#i-logo"/></svg>
+        <span class="brand-name">DANBOT</span>
+        <span class="brand-sub">Control Deck</span>
       </div>
       <div class="titlebar-spacer"></div>
-      <div class="top-runtime" id="top-runtime"><span class="status-dot"></span> STANDBY</div>
-      <button class="window-button" data-action="minimize" aria-label="Minimize">_</button>
-      <button class="window-button close" data-action="close" aria-label="Close">x</button>
+      <div class="run-pill" data-bind-state="runState" role="status" aria-live="polite">
+        <svg class="icon" data-for="live" aria-hidden="true"><use href="#i-play"/></svg>
+        <svg class="icon" data-for="paused" aria-hidden="true"><use href="#i-pause"/></svg>
+        <svg class="icon" data-for="standby" aria-hidden="true"><use href="#i-stop"/></svg>
+        <svg class="icon" data-for="error" aria-hidden="true"><use href="#i-alert"/></svg>
+        <span data-bind="runLabel">STANDBY</span>
+      </div>
+      <button class="title-btn" type="button" data-action="help" aria-label="Help" aria-expanded="false" aria-controls="help-panel"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg></button>
+      <button class="title-btn" type="button" data-action="minimize" aria-label="Minimize"><svg class="icon" aria-hidden="true"><use href="#i-min"/></svg></button>
+      <button class="title-btn close" type="button" data-action="close" aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
     </header>
 
     <div class="workspace">
-      <aside class="sidebar">
-        <div class="sidebar-heading">CONTROL SURFACE</div>
-        <nav class="nav-list">
-          <button class="nav-item active" data-view-target="overview"><span class="nav-icon">+</span><span>Overview</span></button>
-          <button class="nav-item" data-view-target="features"><span class="nav-icon">*</span><span>Features</span></button>
-           <button class="nav-item" data-view-target="heroes"><span class="nav-icon">#</span><span>Heroes</span></button>
-           <button class="nav-item" data-view-target="timing"><span class="nav-icon">~</span><span>Timing</span></button>
-           <button class="nav-item" data-view-target="diagnostics"><span class="nav-icon">!</span><span>Diagnostics</span></button>
-           <button class="nav-item" data-view-target="guide"><span class="nav-icon">?</span><span>Guide</span></button>
-        </nav>
-        <div class="sidebar-bottom">
-          <div class="sidebar-line"></div>
-          <div class="sidebar-meta">INPUT ENGINE</div>
-          <div class="sidebar-engine"><span class="status-dot green"></span><span id="sidebar-input">ViGEm / idle</span></div>
-          <div class="sidebar-meta">BUILD</div>
-          <div class="sidebar-version" id="sidebar-version">DANBOT / v2.0.0</div>
+      <nav class="sidebar" aria-label="Pages">
+        <ul class="nav-list">
+          <li><button class="nav-item" type="button" title="Dashboard (Ctrl+1)" data-nav="dashboard" data-nav-item="dashboard"><svg class="icon" aria-hidden="true"><use href="#i-dashboard"/></svg><span class="nav-label">Dashboard</span></button></li>
+          <li><button class="nav-item" type="button" title="Combat (Ctrl+2)" data-nav="combat" data-nav-item="combat"><svg class="icon" aria-hidden="true"><use href="#i-combat"/></svg><span class="nav-label">Combat</span></button></li>
+          <li><button class="nav-item" type="button" title="Heroes &amp; Timing (Ctrl+3)" data-nav="heroes" data-nav-item="heroes"><svg class="icon" aria-hidden="true"><use href="#i-hero"/></svg><span class="nav-label">Heroes &amp; Timing</span></button></li>
+          <li><button class="nav-item" type="button" title="Controller &amp; Binds (Ctrl+4)" data-nav="controller" data-nav-item="controller"><svg class="icon" aria-hidden="true"><use href="#i-gamepad"/></svg><span class="nav-label">Controller &amp; Binds</span></button></li>
+          <li><button class="nav-item" type="button" title="Diagnostics (Ctrl+5)" data-nav="diagnostics" data-nav-item="diagnostics"><svg class="icon" aria-hidden="true"><use href="#i-pulse"/></svg><span class="nav-label">Diagnostics</span></button></li>
+        </ul>
+        <div class="sidebar-foot">
+          <div class="foot-row" data-bind-state="sidebarInputState">
+            <span class="foot-label">Input engine</span>
+            <span class="foot-value"><svg class="icon dot" aria-hidden="true"><use href="#i-dot"/></svg><span data-bind="sidebarInput">ViGEm / idle</span></span>
+          </div>
+          <div class="foot-row">
+            <span class="foot-label">Build</span>
+            <span class="foot-value mono" data-bind="version">v2.0.0</span>
+          </div>
         </div>
-      </aside>
+      </nav>
 
-      <main class="main-wrap">
-        <section class="behavior-dock" aria-labelledby="active-behavior-title">
-          <div class="behavior-head">
-            <div>
-              <div class="eyebrow">ACTIVE BEHAVIOR</div>
-              <h2 id="active-behavior-title">What the bot will do</h2>
-            </div>
-            <div class="behavior-head-right">
-              <div class="behavior-identity" aria-label="Active hero and profile">
-                <span><small>Hero</small><strong id="behavior-hero">None</strong></span>
-                <span><small>Profile</small><strong id="behavior-profile">Default</strong></span>
+      <main class="main">
+        <div class="page-scroll" id="page-scroll">
+
+          <!-- ============================== DASHBOARD -->
+          <section class="page" data-page="dashboard" aria-labelledby="dashboard-title">
+            <header class="page-head">
+              <div>
+                <p class="eyebrow">Operations</p>
+                <h1 id="dashboard-title" tabindex="-1">Dashboard</h1>
               </div>
-              <button class="behavior-expand" id="behavior-expand" type="button" data-action="toggle-behavior-details" aria-controls="behavior-grid" aria-expanded="false">Show details</button>
-            </div>
-          </div>
-          <div class="behavior-grid" id="behavior-grid">
-            <div class="behavior-action"><span class="behavior-key">F / LT</span><div><strong id="behavior-f-action">None</strong><p id="behavior-f-detail">No reaction is configured.</p></div></div>
-            <div class="behavior-action"><span class="behavior-key">E</span><div><strong id="behavior-e-action">None</strong><p id="behavior-e-detail">No reaction is configured.</p></div></div>
-          </div>
-          <div class="behavior-notices" id="behavior-notices" aria-live="polite"></div>
-          <div class="settings-bar" aria-label="Profile and settings status">
-            <div class="profile-picker">
-              <span class="profile-label">PROFILE</span>
-              <div class="profile-select" id="profile-select">
-                <button class="profile-select-trigger" id="profile-select-trigger" type="button" aria-label="Active configuration profile" aria-haspopup="listbox" aria-expanded="false" aria-controls="profile-select-menu">
-                  <span id="profile-select-value">Default</span><span class="profile-select-chevron" aria-hidden="true"></span>
-                </button>
-                <div class="profile-select-menu" id="profile-select-menu" role="listbox" tabindex="-1" aria-label="Configuration profiles" hidden></div>
-              </div>
-            </div>
-            <div class="settings-states" aria-live="polite">
-              <span class="settings-state" id="timing-state"><span class="state-dot"></span>Timings applied</span>
-              <span class="settings-state" id="profile-state"><span class="state-dot"></span>Profile saved</span>
-            </div>
-            <div class="settings-actions">
-              <button class="btn btn-secondary" id="apply-button" data-action="apply">Apply timings</button>
-              <button class="btn btn-primary" id="save-profile-button" data-action="profile-save">Save profile</button>
-              <button class="btn btn-secondary compact" data-action="profile-save-as">Save as</button>
-              <button class="btn btn-secondary compact" data-action="profile-load">Reload</button>
-            </div>
-          </div>
-        </section>
+            </header>
 
-        <section class="view active" data-view="overview">
-          <div class="page-heading stack">
-            <div>
-              <div class="eyebrow">OPERATIONS / OVERVIEW</div>
-              <h1>Control deck</h1>
-              <p>Screen-aware reactions with a merged virtual controller path.</p>
-            </div>
-            <div class="heading-badge" id="heading-badge">READY TO CONFIGURE</div>
-          </div>
-
-           <div class="hero-card card stack">
-             <div class="hero-card-top">
-               <div>
-                 <div class="eyebrow">RUNTIME CORE</div>
-                 <h2 id="runtime-title">Waiting for launch</h2>
-                 <p id="runtime-copy">Configure a feature set, then start the bot before returning to the game.</p>
-               </div>
-               <div class="runtime-orb" id="runtime-orb"><span></span></div>
-             </div>
-             <div class="hero-actions">
-               <button class="btn btn-primary" id="start-button" data-action="start">Start bot</button>
-               <button class="btn btn-secondary" id="pause-button" data-action="toggle-pause" disabled>Pause bot</button>
-             </div>
-             <div class="readiness-grid" aria-label="Startup readiness">
-               <div class="readiness-item" id="readiness-input"><span class="state-dot"></span><span><b>Virtual controller</b><small>Checking input bridge</small></span></div>
-               <div class="readiness-item" id="readiness-resolution"><span class="state-dot"></span><span><b>Screen calibration</b><small>Checking resolution</small></span></div>
-               <div class="readiness-item" id="readiness-profile"><span class="state-dot"></span><span><b>Active profile</b><small>Ready to configure</small></span></div>
-             </div>
-           </div>
-         </section>
-
-        <section class="view" data-view="features">
-          <div class="page-heading stack"><div><div class="eyebrow">CONFIGURATION / FEATURES</div><h1>Feature switches</h1><p>Keep automation explicit. Every switch updates the live bot state.</p></div></div>
-          <div class="immediate-note stack"><span class="state-dot live"></span><strong>Switches apply immediately.</strong><span>Use Apply timings for numeric delays and percentages, then Save profile to keep either type of change.</span></div>
-          <div class="content-grid stack">
-            <article class="card">
-              <div class="card-head"><div><div class="eyebrow">AUTO FEATURES</div><h3>Reaction layers</h3></div><span class="icon-chip">A</span></div>
-               <div class="toggle-list">
-                 <label class="toggle-row"><input type="checkbox" data-setting="Unblockables"><span class="toggle-ui"></span><span><b>Enable orange response</b><small>Dodge by default; F5 enables orange parry for red/feint. Own RT/RB attacks are ignored.</small></span></label>
-                 <label class="toggle-row"><input type="checkbox" data-setting="OrangeLight"><span class="toggle-ui"></span><span><b>Auto light on orange</b><small>Orange-only: random left, top, or right RB light</small></span></label>
-                <label class="toggle-row"><input type="checkbox" data-setting="Autoblock"><span class="toggle-ui"></span><span><b>Auto block</b><small>Follow red guard indicators</small></span></label>
-                <label class="toggle-row"><input type="checkbox" data-setting="Lightbash"><span class="toggle-ui"></span><span><b>Bash after dodge</b><small>Guard break follow-up</small></span></label>
-                <label class="toggle-row"><input type="checkbox" data-setting="DodgeH"><span class="toggle-ui"></span><span><b>Heavy after dodge</b><small>Send RT after the evade</small></span></label>
-                 <label class="toggle-row"><input type="checkbox" data-setting="DodgeL"><span class="toggle-ui"></span><span><b>Light after dodge</b><small>Send RB after the evade</small></span></label>
+            <div class="dash-grid">
+              <article class="card run-card" aria-labelledby="run-title">
+                <div class="run-main">
+                  <div class="run-orb" aria-hidden="true">
+                    <span class="run-ring"></span>
+                    <svg class="icon" data-for="live"><use href="#i-play"/></svg>
+                    <svg class="icon" data-for="paused"><use href="#i-pause"/></svg>
+                    <svg class="icon" data-for="standby"><use href="#i-stop"/></svg>
+                    <svg class="icon" data-for="error"><use href="#i-alert"/></svg>
+                  </div>
+                  <div class="run-text">
+                    <p class="run-word" data-bind="runLabel">STANDBY</p>
+                    <h2 id="run-title" data-bind="runTitle">Ready to launch</h2>
+                    <p class="run-copy" data-bind="runCopy">Configure your reactions, then start the bot before returning to the game.</p>
+                  </div>
                 </div>
-                <div class="dodge-direction-field">
-                  <span class="dodge-direction-label" id="dodge-direction-label">Dodge direction</span>
+                <div class="run-actions">
+                  <button class="btn btn-primary btn-lg" type="button" id="start-button" data-action="start" data-bind-disabled="startDisabled"><svg class="icon" aria-hidden="true"><use href="#i-play"/></svg><span data-bind="startLabel">Start bot</span></button>
+                  <button class="btn btn-secondary btn-lg" type="button" id="pause-button" data-action="toggle-pause" data-bind-disabled="pauseDisabled" disabled><svg class="icon" aria-hidden="true"><use href="#i-pause"/></svg><span data-bind="pauseLabel">Pause</span><kbd>F6</kbd></button>
+                  <p class="run-note" data-bind-show="startNote" hidden><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>Start applies pending timings.</p>
+                </div>
+              </article>
+
+              <article class="card readiness-card" aria-labelledby="readiness-title">
+                <div class="card-head"><h2 id="readiness-title" class="card-title">Readiness</h2></div>
+                <ul class="readiness-list">
+                  <li class="readiness-row" data-bind-state="readyInputState">
+                    <span class="state-icon" aria-hidden="true"><svg class="icon" data-for="ok"><use href="#i-check"/></svg><svg class="icon" data-for="bad"><use href="#i-alert"/></svg></span>
+                    <span class="readiness-text"><b>Virtual controller</b><small data-bind="readyInputDetail">Checking input bridge</small></span>
+                    <button class="link-btn" type="button" data-nav="controller" data-bind-show="readyFixInput" hidden>Fix</button>
+                  </li>
+                  <li class="readiness-row" data-bind-state="readyResState">
+                    <span class="state-icon" aria-hidden="true"><svg class="icon" data-for="ok"><use href="#i-check"/></svg><svg class="icon" data-for="bad"><use href="#i-alert"/></svg></span>
+                    <span class="readiness-text"><b>Screen calibration</b><small data-bind="readyResDetail">Checking resolution</small></span>
+                    <button class="link-btn" type="button" data-nav="diagnostics" data-nav-focus="#res-width" data-bind-show="readyFixRes" hidden>Fix</button>
+                  </li>
+                  <li class="readiness-row" data-bind-state="readyProfileState">
+                    <span class="state-icon" aria-hidden="true"><svg class="icon" data-for="ok"><use href="#i-check"/></svg><svg class="icon" data-for="warn"><use href="#i-warn"/></svg></span>
+                    <span class="readiness-text"><b>Active profile</b><small data-bind="readyProfileDetail">Default · saved</small></span>
+                  </li>
+                </ul>
+              </article>
+
+              <article class="card behavior-card" aria-labelledby="behavior-title">
+                <div class="card-head">
+                  <h2 id="behavior-title" class="card-title">Active behavior</h2>
+                  <div class="identity">
+                    <span class="identity-chip"><small>Hero</small><b data-bind="behaviorHero">None</b></span>
+                    <span class="identity-chip"><small>Profile</small><b data-bind="profileName">Default</b></span>
+                  </div>
+                </div>
+                <div class="action-rows">
+                  <div class="action-row" data-bind-state="fActionState">
+                    <span class="action-key">F / LT</span>
+                    <div class="action-text"><b data-bind="fAction">None</b><p data-bind="fDetail">No reaction is configured.</p></div>
+                    <kbd title="Cycle with F3">F3</kbd>
+                  </div>
+                  <div class="action-row" data-bind-state="eActionState">
+                    <span class="action-key">E</span>
+                    <div class="action-text"><b data-bind="eAction">None</b><p data-bind="eDetail">No reaction is configured.</p></div>
+                    <kbd title="Cycle with F4">F4</kbd>
+                  </div>
+                </div>
+                <ul class="notices" data-notices aria-live="polite" hidden></ul>
+              </article>
+
+              <article class="card quick-card" aria-labelledby="quick-title">
+                <div class="card-head"><h2 id="quick-title" class="card-title">Quick toggles</h2><span class="card-hint">Live immediately</span></div>
+                <div class="tile-grid">
+                  <label class="switch-tile">
+                    <input type="checkbox" role="switch" data-setting="Autoblock">
+                    <svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg>
+                    <span class="tile-text"><b>Auto block</b><small>Red guard</small></span>
+                    <span class="switch" aria-hidden="true"></span>
+                  </label>
+                  <label class="switch-tile">
+                    <input type="checkbox" role="switch" data-setting="Unblockables">
+                    <svg class="icon" aria-hidden="true"><use href="#i-flame"/></svg>
+                    <span class="tile-text"><b>Orange response</b><small>Dodge orange</small></span>
+                    <span class="switch" aria-hidden="true"></span>
+                  </label>
+                  <label class="switch-tile">
+                    <input type="checkbox" role="switch" data-setting="Parry">
+                    <svg class="icon" aria-hidden="true"><use href="#i-target"/></svg>
+                    <span class="tile-text"><b>F auto parry</b><small>RT on flash</small></span>
+                    <span class="switch" aria-hidden="true"></span>
+                  </label>
+                  <label class="switch-tile">
+                    <input type="checkbox" role="switch" data-setting="Legit">
+                    <svg class="icon" aria-hidden="true"><use href="#i-sliders"/></svg>
+                    <span class="tile-text"><b>Legit mode</b><small>Percentage parry</small></span>
+                    <span class="switch" aria-hidden="true"></span>
+                  </label>
+                  <label class="switch-tile">
+                    <input type="checkbox" role="switch" data-setting="YourHero">
+                    <svg class="icon" aria-hidden="true"><use href="#i-hero"/></svg>
+                    <span class="tile-text"><b>Hero response</b><small data-bind="heroSelected">None</small></span>
+                    <span class="switch" aria-hidden="true"></span>
+                  </label>
+                  <button class="switch-tile" type="button" data-action="orange-parry" data-bind-on="orangeParry" aria-pressed="false">
+                    <svg class="icon" aria-hidden="true"><use href="#i-bolt"/></svg>
+                    <span class="tile-text"><b>Orange parry</b><small><span data-bind="orangeParryLabel">OFF</span> · F5</small></span>
+                    <span class="switch" aria-hidden="true"></span>
+                  </button>
+                  <button class="switch-tile" type="button" data-action="vision-overlay" data-bind-on="visionOverlay" aria-pressed="false">
+                    <svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>
+                    <span class="tile-text"><b>Vision overlay</b><small><span data-bind="visionOverlayLabel">OFF</span> · F7</small></span>
+                    <span class="switch" aria-hidden="true"></span>
+                  </button>
+                </div>
+              </article>
+
+              <article class="card signal-card" aria-labelledby="dash-signal-title">
+                <div class="card-head"><h2 id="dash-signal-title" class="card-title">Live signal</h2></div>
+                <div class="stat-grid">
+                  <div class="stat" data-bind-state="markerState"><span class="stat-label">Marker</span><strong class="stat-value" data-bind="marker">MISSING</strong></div>
+                  <div class="stat" data-bind-state="holdState"><span class="stat-label">Hold gate</span><strong class="stat-value" data-bind="hold">UP</strong></div>
+                  <div class="stat" data-bind-state="indicatorState"><span class="stat-label">Indicator</span><strong class="stat-value" data-bind="indicator">NO</strong></div>
+                  <div class="stat" data-bind-state="guardState"><span class="stat-label">Guard</span><strong class="stat-value" data-bind="guard">-</strong></div>
+                  <div class="stat" data-bind-state="loopState"><span class="stat-label">Loop</span><strong class="stat-value" data-bind="loop">0 Hz</strong></div>
+                </div>
+              </article>
+
+              <article class="card session-card" aria-labelledby="session-title">
+                <div class="card-head"><h2 id="session-title" class="card-title">Session</h2><button class="link-btn" type="button" data-nav="diagnostics">Details</button></div>
+                <div class="counter-row">
+                  <div class="counter"><strong data-bind="rtSent">0</strong><span>RT sent</span></div>
+                  <div class="counter"><strong data-bind="parriesConfirmed">0</strong><span>Parries confirmed</span></div>
+                </div>
+                <div class="last-compact">
+                  <span class="badge" data-bind-state="lastConfirmationState" data-bind="lastConfirmation">WAITING</span>
+                  <span class="last-compact-state" data-bind="lastState">No reaction yet</span>
+                  <span class="last-compact-meta"><span data-bind="lastDirection">-</span> · <span data-bind="lastDelay">n/a</span></span>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <!-- ============================== COMBAT -->
+          <section class="page" data-page="combat" aria-labelledby="combat-title" hidden>
+            <header class="page-head">
+              <div>
+                <p class="eyebrow">Configuration</p>
+                <h1 id="combat-title" tabindex="-1">Combat</h1>
+                <p class="page-sub">Switches apply to the live bot immediately. Percentages wait for <b>Apply timings</b>; save the profile to keep either.</p>
+              </div>
+            </header>
+
+            <div class="behavior-strip" aria-label="Active behavior">
+              <div class="strip-item" data-bind-state="fActionState"><span class="action-key">F / LT</span><b data-bind="fAction">None</b></div>
+              <div class="strip-item" data-bind-state="eActionState"><span class="action-key">E</span><b data-bind="eAction">None</b></div>
+              <ul class="notices notices-inline" data-notices aria-live="polite" hidden></ul>
+            </div>
+
+            <div class="two-col">
+              <article class="card" aria-labelledby="orange-title">
+                <div class="card-head"><div><p class="eyebrow">Automatic</p><h2 id="orange-title" class="card-title">Orange response</h2></div><svg class="icon card-icon" aria-hidden="true"><use href="#i-flame"/></svg></div>
+                <div class="switch-list">
+                  <label class="switch-row"><input type="checkbox" role="switch" data-setting="Unblockables"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Enable orange response</b><small>Dodge by default; F5 enables orange parry for red/feint. Own RT/RB attacks are ignored.</small></span></label>
+                  <label class="switch-row"><input type="checkbox" role="switch" data-setting="OrangeLight"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Auto light on orange</b><small>Orange-only: random left, top, or right RB light</small></span></label>
+                  <label class="switch-row"><input type="checkbox" role="switch" data-setting="Lightbash"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Bash after dodge</b><small>Guard break follow-up</small></span></label>
+                  <label class="switch-row"><input type="checkbox" role="switch" data-setting="DodgeH"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Heavy after dodge</b><small>Send RT after the evade</small></span></label>
+                  <label class="switch-row"><input type="checkbox" role="switch" data-setting="DodgeL"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Light after dodge</b><small>Send RB after the evade</small></span></label>
+                </div>
+                <div class="subfield">
+                  <span class="subfield-label" id="dodge-direction-label">Dodge direction</span>
                   <div class="segmented" role="radiogroup" aria-labelledby="dodge-direction-label" id="dodge-direction">
                     <button type="button" role="radio" aria-checked="true" tabindex="0" data-dodge="back">Back</button>
                     <button type="button" role="radio" aria-checked="false" tabindex="-1" data-dodge="left">Left</button>
                     <button type="button" role="radio" aria-checked="false" tabindex="-1" data-dodge="right">Right</button>
                   </div>
-                  <small class="dodge-direction-hint">Back dodges neutral; Left/Right dodge to the side even while holding forward.</small>
+                  <small class="hint">Back dodges neutral; Left/Right dodge to the side even while holding forward.</small>
                 </div>
-                <button class="btn btn-secondary full btn-toggle" id="orange-parry-button" data-action="toggle-orange-parry">Orange parry: OFF · F5</button>
-             </article>
-            <article class="card">
-              <div class="card-head"><div><div class="eyebrow">F HOLD</div><h3>Primary reactions</h3></div><span class="icon-chip">F</span></div>
-              <div class="toggle-list">
-                <label class="toggle-row"><input type="checkbox" data-setting="Parry"><span class="toggle-ui"></span><span><b>Auto parry</b><small>Right mouse / RT</small></span></label>
-                <label class="toggle-row"><input type="checkbox" data-setting="Crushing"><span class="toggle-ui"></span><span><b>Auto crushing counter</b><small>Left mouse / RB</small></span></label>
-                <label class="toggle-row"><input type="checkbox" data-setting="Deflect"><span class="toggle-ui"></span><span><b>Auto deflect</b><small>Directional dodge</small></span></label>
-                 <label class="toggle-row"><input type="checkbox" data-setting="Legit"><span class="toggle-ui"></span><span><b>Legit mode</b><small>Parry a configurable percentage; otherwise use an enabled fallback or guard</small></span></label>
-                 <label class="field legit-chance"><span>Legit parry chance</span><input type="number" min="0" max="100" step="1" data-setting="LegitParryChance"><small>Percentage of valid F/E parry flashes that send RT</small></label>
-                 <label class="toggle-row"><input type="checkbox" data-setting="BulwarkFallback"><span class="toggle-ui"></span><span><b>Bulwark fallback</b><small>Failed LT/F Legit rolls flip with Black Prior; requires Auto block</small></span></label>
-                 <label class="field legit-chance"><span>Crushing fallback chance</span><input type="number" min="0" max="100" step="1" data-setting="CrushingFallbackChance"><small>F hold only; failed Legit rolls mix Crushing and Bulwark when both are available</small></label>
-                 <label class="field legit-chance"><span>Deflect fallback chance</span><input type="number" min="0" max="100" step="1" data-setting="DeflectFallbackChance"><small>F hold only; share of failed Legit rolls that dodge before other fallbacks</small></label>
-               </div>
-               <div class="weight-heading"><span>LEGIT FALLBACK FLOW</span><small>Deflect chance, then Crushing/Bulwark mix</small></div>
-            </article>
-            <article class="card compact-card">
-              <div class="card-head"><div><div class="eyebrow">E HOLD</div><h3>Secondary reactions</h3></div><span class="icon-chip">E</span></div>
-              <div class="split-toggles">
-                <label class="toggle-row"><input type="checkbox" data-setting="Parry2"><span class="toggle-ui"></span><span><b>Auto parry</b><small>Secondary hold</small></span></label>
-                <label class="toggle-row"><input type="checkbox" data-setting="Crushing2"><span class="toggle-ui"></span><span><b>Auto CC</b><small>Secondary hold</small></span></label>
-              </div>
-            </article>
-          </div>
-        </section>
+                <button class="toggle-btn" type="button" id="orange-parry-button" data-action="orange-parry" data-bind-on="orangeParry" aria-pressed="false">
+                  <svg class="icon" aria-hidden="true"><use href="#i-bolt"/></svg>
+                  <span class="toggle-btn-text"><b>Orange parry</b><small>Parry red/feint follow-ups instead of dodging</small></span>
+                  <span class="toggle-btn-state" data-bind="orangeParryLabel">OFF</span>
+                  <kbd>F5</kbd>
+                </button>
+              </article>
 
-        <section class="view" data-view="heroes">
-          <div class="page-heading stack"><div><div class="eyebrow">CONFIGURATION / HEROES</div><h1>Hero response</h1><p>Choose one hero and see exactly how that choice changes reactions.</p></div></div>
-          <div class="immediate-note stack"><span class="state-dot live"></span><strong>Hero changes apply immediately.</strong><span>Save the profile when you want to keep them.</span></div>
-          <div class="hero-control-grid stack">
-            <article class="card hero-picker-card">
-              <div class="card-head"><div><div class="eyebrow">PLAYING AS</div><h3>Hero selection</h3></div><span class="icon-chip">H</span></div>
-              <label class="field hero-select-field"><span id="hero-picker-label">Selected hero</span>
-                <div class="hero-select" id="hero-select">
-                  <button class="hero-select-trigger" id="hero-select-trigger" type="button" aria-labelledby="hero-picker-label hero-select-value" aria-haspopup="listbox" aria-expanded="false" aria-controls="hero-select-menu">
-                    <span id="hero-select-value">None</span><span class="hero-select-chevron" aria-hidden="true"></span>
+              <article class="card" aria-labelledby="guard-title">
+                <div class="card-head"><div><p class="eyebrow">F / LT hold</p><h2 id="guard-title" class="card-title">Guard &amp; primary reactions</h2></div><svg class="icon card-icon" aria-hidden="true"><use href="#i-shield"/></svg></div>
+                <div class="switch-list">
+                  <label class="switch-row"><input type="checkbox" role="switch" data-setting="Autoblock"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Auto block</b><small>Follow red guard indicators. Required by every F/LT and E reaction.</small></span></label>
+                  <label class="switch-row"><input type="checkbox" role="switch" data-setting="Parry"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Auto parry</b><small>Right mouse / RT</small></span></label>
+                  <label class="switch-row"><input type="checkbox" role="switch" data-setting="Crushing"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Auto crushing counter</b><small>Left mouse / RB</small></span></label>
+                  <label class="switch-row"><input type="checkbox" role="switch" data-setting="Deflect"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Auto deflect</b><small>Directional dodge</small></span></label>
+                </div>
+                <p class="hint">F3 cycles Parry → Crushing → Deflect.</p>
+              </article>
+
+              <article class="card" aria-labelledby="legit-title">
+                <div class="card-head"><div><p class="eyebrow">F / LT hold</p><h2 id="legit-title" class="card-title">Legit &amp; fallbacks</h2></div><svg class="icon card-icon" aria-hidden="true"><use href="#i-sliders"/></svg></div>
+                <div class="switch-list">
+                  <label class="switch-row"><input type="checkbox" role="switch" data-setting="Legit"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Legit mode</b><small>Parry a configurable percentage; otherwise use an enabled fallback or guard</small></span></label>
+                  <label class="switch-row"><input type="checkbox" role="switch" data-setting="BulwarkFallback"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Bulwark fallback</b><small>Failed F/LT Legit rolls flip with Black Prior; requires Auto block</small></span></label>
+                </div>
+                <div class="field-grid three">
+                  <label class="field">
+                    <span class="field-label">Legit parry chance</span>
+                    <span class="field-control"><input type="number" min="0" max="100" step="1" required data-setting="LegitParryChance" data-timing="advanced" aria-describedby="legit-chance-help err-LegitParryChance"><span class="unit">%</span></span>
+                    <small class="field-help" id="legit-chance-help">Valid F/E parry flashes that send RT.</small>
+                    <small class="field-error" id="err-LegitParryChance" data-error-for="LegitParryChance"></small>
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Deflect fallback</span>
+                    <span class="field-control"><input type="number" min="0" max="100" step="1" required data-setting="DeflectFallbackChance" data-timing="advanced" aria-describedby="deflect-fallback-help err-DeflectFallbackChance"><span class="unit">%</span></span>
+                    <small class="field-help" id="deflect-fallback-help">Share of failed F rolls that dodge first. Needs Deflect.</small>
+                    <small class="field-error" id="err-DeflectFallbackChance" data-error-for="DeflectFallbackChance"></small>
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Crushing fallback</span>
+                    <span class="field-control"><input type="number" min="0" max="100" step="1" required data-setting="CrushingFallbackChance" data-timing="advanced" aria-describedby="crushing-fallback-help err-CrushingFallbackChance"><span class="unit">%</span></span>
+                    <small class="field-help" id="crushing-fallback-help">Mix of Crushing vs Bulwark when both are available.</small>
+                    <small class="field-error" id="err-CrushingFallbackChance" data-error-for="CrushingFallbackChance"></small>
+                  </label>
+                </div>
+                <p class="flow-note"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>Failed Legit roll → Deflect chance → Crushing / Bulwark mix → guard.</p>
+              </article>
+
+              <article class="card" aria-labelledby="ehold-title">
+                <div class="card-head"><div><p class="eyebrow">E hold</p><h2 id="ehold-title" class="card-title">Secondary reactions</h2></div><span class="key-badge">E</span></div>
+                <div class="switch-list">
+                  <label class="switch-row"><input type="checkbox" role="switch" data-setting="Parry2"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Auto parry</b><small>Secondary hold</small></span></label>
+                  <label class="switch-row"><input type="checkbox" role="switch" data-setting="Crushing2"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Auto crushing counter</b><small>Secondary hold</small></span></label>
+                </div>
+                <p class="hint">F4 cycles Parry → Crushing → Off.</p>
+              </article>
+            </div>
+          </section>
+
+          <!-- ============================== HEROES & TIMING -->
+          <section class="page" data-page="heroes" aria-labelledby="heroes-title" hidden>
+            <header class="page-head">
+              <div>
+                <p class="eyebrow">Configuration</p>
+                <h1 id="heroes-title" tabindex="-1">Heroes &amp; Timing</h1>
+                <p class="page-sub">Hero changes apply immediately. Delays stay pending until you apply them.</p>
+              </div>
+            </header>
+
+            <div class="hero-grid">
+              <article class="card" aria-labelledby="hero-pick-title">
+                <div class="card-head"><div><p class="eyebrow">Playing as</p><h2 id="hero-pick-title" class="card-title">Hero selection</h2></div><svg class="icon card-icon" aria-hidden="true"><use href="#i-hero"/></svg></div>
+                <div class="field">
+                  <span class="field-label" id="hero-picker-label">Selected hero</span>
+                  <div class="listbox" id="hero-select">
+                    <button class="listbox-trigger" id="hero-select-trigger" type="button" aria-labelledby="hero-picker-label hero-select-value" aria-haspopup="listbox" aria-expanded="false" aria-controls="hero-select-menu">
+                      <span id="hero-select-value">None</span><svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+                    </button>
+                    <div class="listbox-menu" id="hero-select-menu" role="listbox" tabindex="-1" aria-label="Available heroes" hidden></div>
+                  </div>
+                </div>
+                <label class="switch-row prominent"><input type="checkbox" role="switch" data-setting="YourHero"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Enable hero response</b><small data-bind="heroResponseNote">Choose a hero first.</small></span></label>
+              </article>
+
+              <article class="card hero-detail" aria-labelledby="hero-detail-title" aria-live="polite">
+                <div class="card-head"><div><p class="eyebrow">Implemented behavior</p><h2 id="hero-detail-title" class="card-title" data-bind="heroDetailTitle">No hero selected</h2></div><span class="badge" data-bind-state="heroModeState" data-bind="heroMode">INACTIVE</span></div>
+                <p class="hero-copy" data-bind="heroDetailBehavior">Choose a hero to see its behavior.</p>
+                <dl class="facts">
+                  <div><dt>Current status</dt><dd data-bind="heroDetailStatus">No hero-specific response is active.</dd></div>
+                  <div><dt>Requirements</dt><dd data-bind="heroDetailRequirements">Select a hero, then enable hero response.</dd></div>
+                  <div><dt>Applicable timings</dt><dd data-bind="heroDetailTimings">No hero timing applies.</dd></div>
+                </dl>
+              </article>
+            </div>
+
+            <div class="section-head">
+              <h2 class="section-title">Reaction timings</h2>
+              <p class="context-note" role="status" data-bind="timingContext">Timing values are edited locally and stay pending until Apply timings succeeds.</p>
+            </div>
+
+            <div class="two-col">
+              <article class="card" aria-labelledby="parry-title">
+                <div class="card-head"><div><p class="eyebrow">Parry</p><h2 id="parry-title" class="card-title">Flash-to-RT delay</h2></div><svg class="icon card-icon" aria-hidden="true"><use href="#i-target"/></svg></div>
+                <p class="card-copy">Starts after a valid flash is detected and the parry reaction is armed.</p>
+                <label class="field">
+                  <span class="field-label">Parry delay</span>
+                  <span class="field-control"><input type="number" min="0" max="10000" step="1" required data-setting="ParryDelay" data-timing="parry" aria-describedby="parry-delay-help err-ParryDelay"><span class="unit">ms</span></span>
+                  <small class="field-help" id="parry-delay-help">Applies to F/E Parry and orange parry when enabled.</small>
+                  <small class="field-error" id="err-ParryDelay" data-error-for="ParryDelay"></small>
+                </label>
+                <p class="affects" data-bind="parryAffects">Timing eligibility is reported after the current settings are acknowledged.</p>
+              </article>
+
+              <article class="card" aria-labelledby="deflect-title">
+                <div class="card-head"><div><p class="eyebrow">Deflect</p><h2 id="deflect-title" class="card-title">Directional dodge delay</h2></div><svg class="icon card-icon" aria-hidden="true"><use href="#i-combat"/></svg></div>
+                <p class="card-copy">Starts after the flash gate. The bot waits, dodges toward the attack, then sends the light follow-up.</p>
+                <div class="field-grid three">
+                  <label class="field">
+                    <span class="field-label">Left</span>
+                    <span class="field-control"><input type="number" min="0" max="10000" step="1" required data-setting="Left" data-timing="deflect" aria-describedby="err-Left"><span class="unit">ms</span></span>
+                    <small class="field-error" id="err-Left" data-error-for="Left"></small>
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Top</span>
+                    <span class="field-control"><input type="number" min="0" max="10000" step="1" required data-setting="TopDeflect" data-timing="deflect" aria-describedby="err-TopDeflect"><span class="unit">ms</span></span>
+                    <small class="field-error" id="err-TopDeflect" data-error-for="TopDeflect"></small>
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Right</span>
+                    <span class="field-control"><input type="number" min="0" max="10000" step="1" required data-setting="Right" data-timing="deflect" aria-describedby="err-Right"><span class="unit">ms</span></span>
+                    <small class="field-error" id="err-Right" data-error-for="Right"></small>
+                  </label>
+                </div>
+                <p class="callout" data-state="warn" data-bind-show="peacekeeper" hidden><svg class="icon" aria-hidden="true"><use href="#i-warn"/></svg><span><b>Peacekeeper override:</b> side deflects use 100 ms when timings are applied. Top still uses the Top value.</span></p>
+                <p class="affects" data-bind="deflectAffects">Timing eligibility is reported after the current settings are acknowledged.</p>
+              </article>
+
+              <article class="card" aria-labelledby="orange-delay-title">
+                <div class="card-head"><div><p class="eyebrow">Orange</p><h2 id="orange-delay-title" class="card-title">Orange-response delays</h2></div><svg class="icon card-icon" aria-hidden="true"><use href="#i-flame"/></svg></div>
+                <p class="card-copy">These start from orange detection or the feint transition and govern orange follow-ups.</p>
+                <div class="field-grid three">
+                  <label class="field">
+                    <span class="field-label">Orange delay <kbd>F1</kbd></span>
+                    <span class="field-control"><input type="number" min="0" max="10000" step="1" required data-setting="Pause" data-timing="dodge" aria-describedby="pause-help err-Pause"><span class="unit">ms</span></span>
+                    <small class="field-help" id="pause-help">From a fresh orange indicator. F1 toggles 0 ↔ 80 ms live.</small>
+                    <small class="field-error" id="err-Pause" data-error-for="Pause"></small>
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Feint transition</span>
+                    <span class="field-control"><input type="number" min="0" max="10000" step="1" required data-setting="Pause1" data-timing="dodge" aria-describedby="pause1-help err-Pause1"><span class="unit">ms</span></span>
+                    <small class="field-help" id="pause1-help">After an orange feint transition is recognized.</small>
+                    <small class="field-error" id="err-Pause1" data-error-for="Pause1"></small>
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Follow-up delay</span>
+                    <span class="field-control"><input type="number" min="0" max="10000" step="1" required data-setting="Pause2" data-timing="dodge" aria-describedby="pause2-help err-Pause2"><span class="unit">ms</span></span>
+                    <small class="field-help" id="pause2-help">After the orange dodge, before Light, Heavy, or Bash.</small>
+                    <small class="field-error" id="err-Pause2" data-error-for="Pause2"></small>
+                  </label>
+                </div>
+                <p class="affects" data-bind="dodgeAffects">Timing eligibility is reported after the current settings are acknowledged.</p>
+              </article>
+
+              <article class="card" aria-labelledby="guard-hold-title">
+                <div class="card-head"><div><p class="eyebrow">Guard</p><h2 id="guard-hold-title" class="card-title">Guard persistence</h2></div><svg class="icon card-icon" aria-hidden="true"><use href="#i-shield"/></svg></div>
+                <p class="card-copy">How long Auto block holds a guard direction.</p>
+                <label class="field">
+                  <span class="field-label">Guard hold</span>
+                  <span class="field-control"><input type="number" min="60" max="10000" step="1" required data-setting="GuardHold" data-timing="advanced" aria-describedby="guard-hold-help err-GuardHold"><span class="unit">ms</span></span>
+                  <small class="field-help" id="guard-hold-help">Starts when Auto block presses a guard direction.</small>
+                  <small class="field-error" id="err-GuardHold" data-error-for="GuardHold"></small>
+                </label>
+                <details class="advanced">
+                  <summary>Advanced</summary>
+                  <label class="field">
+                    <span class="field-label">Legacy block delay</span>
+                    <span class="field-control"><input type="number" min="0" max="10000" step="1" required data-setting="Pause3" data-timing="advanced" aria-describedby="pause3-help err-Pause3"><span class="unit">ms</span></span>
+                    <small class="field-help" id="pause3-help">Reserved compatibility value; not read by the current reaction executor.</small>
+                    <small class="field-error" id="err-Pause3" data-error-for="Pause3"></small>
+                  </label>
+                </details>
+              </article>
+            </div>
+          </section>
+
+          <!-- ============================== CONTROLLER & BINDS -->
+          <section class="page" data-page="controller" aria-labelledby="controller-title" hidden>
+            <header class="page-head">
+              <div>
+                <p class="eyebrow">Hardware</p>
+                <h1 id="controller-title" tabindex="-1">Controller &amp; Binds</h1>
+                <p class="page-sub">Bind source-controller buttons to toggle features mid-match, and check the virtual controller path.</p>
+              </div>
+            </header>
+
+            <div class="two-col">
+              <article class="card" aria-labelledby="binds-title">
+                <div class="card-head"><div><p class="eyebrow">Toggle binds</p><h2 id="binds-title" class="card-title">Controller buttons</h2></div><svg class="icon card-icon" aria-hidden="true"><use href="#i-link"/></svg></div>
+                <p class="card-copy">Choose Bind, then press a button on the physical controller. Each button toggles one feature; press Bind again to cancel.</p>
+                <ul class="bind-list">
+                  <li class="bind-row" data-bind-state="bindAutoDodgeState">
+                    <span class="bind-name"><b>Auto dodge</b><small>Orange response on/off</small></span>
+                    <span class="bind-value mono" data-bind="bindAutoDodge">UNBOUND</span>
+                    <button class="btn btn-secondary btn-sm" type="button" id="auto-dodge-bind-button" data-action="bind-auto-dodge" data-bind-on="bindAutoDodgeCapturing" aria-pressed="false">Bind</button>
+                  </li>
+                  <li class="bind-row" data-bind-state="bindOrangeParryState">
+                    <span class="bind-name"><b>Orange parry</b><small>Same as F5</small></span>
+                    <span class="bind-value mono" data-bind="bindOrangeParry">UNBOUND</span>
+                    <button class="btn btn-secondary btn-sm" type="button" id="orange-parry-bind-button" data-action="bind-orange-parry" data-bind-on="bindOrangeParryCapturing" aria-pressed="false">Bind</button>
+                  </li>
+                  <li class="bind-row" data-bind-state="bindAutoParryState">
+                    <span class="bind-name"><b>F auto parry</b><small>Parry on/off</small></span>
+                    <span class="bind-value mono" data-bind="bindAutoParry">UNBOUND</span>
+                    <button class="btn btn-secondary btn-sm" type="button" id="auto-parry-bind-button" data-action="bind-auto-parry" data-bind-on="bindAutoParryCapturing" aria-pressed="false">Bind</button>
+                  </li>
+                </ul>
+              </article>
+
+              <article class="card" aria-labelledby="bridge-title">
+                <div class="card-head"><div><p class="eyebrow">Controller path</p><h2 id="bridge-title" class="card-title">Input bridge</h2></div><svg class="icon card-icon" aria-hidden="true"><use href="#i-gamepad"/></svg></div>
+                <div class="stat-grid cols-3">
+                  <div class="stat" data-bind-state="modeState"><span class="stat-label">Mode</span><strong class="stat-value" data-bind="mode">ViGEm</strong></div>
+                  <div class="stat" data-bind-state="sourceState"><span class="stat-label">Source</span><strong class="stat-value" data-bind="source">OFF</strong></div>
+                  <div class="stat" data-bind-state="virtualState"><span class="stat-label">Virtual</span><strong class="stat-value" data-bind="virtual">OFF</strong></div>
+                  <div class="stat" data-state="idle"><span class="stat-label">Source type</span><strong class="stat-value" data-bind="sourceType">-</strong></div>
+                  <div class="stat" data-state="idle"><span class="stat-label">Transport</span><strong class="stat-value" data-bind="sourceTransport">-</strong></div>
+                  <div class="stat" data-bind-state="loopState"><span class="stat-label">Loop</span><strong class="stat-value" data-bind="loop">0 Hz</strong></div>
+                </div>
+                <p class="callout" data-state="warn" data-bind-show="otherXInputWarning" hidden><svg class="icon" aria-hidden="true"><use href="#i-warn"/></svg><span>Direct DS4 mode sees <b data-bind="otherXInput">0</b> other XInput controller(s). Close DS4Windows or other virtual-pad tools.</span></p>
+              </article>
+
+              <article class="card" aria-labelledby="test-title">
+                <div class="card-head"><div><p class="eyebrow">Output test</p><h2 id="test-title" class="card-title">Test input</h2></div><svg class="icon card-icon" aria-hidden="true"><use href="#i-bolt"/></svg></div>
+                <p class="card-copy">Each press tests the next output (Dodge, Heavy, Light, Guard break, Guard top/left/right): it waits 3 seconds so you can switch to the game, then sends it 5 times. Pause the bot first.</p>
+                <button class="btn btn-secondary" type="button" data-action="test"><svg class="icon" aria-hidden="true"><use href="#i-play"/></svg>Run next test</button>
+              </article>
+
+              <article class="card" aria-labelledby="hotkeys-title">
+                <div class="card-head"><div><p class="eyebrow">Reference</p><h2 id="hotkeys-title" class="card-title">Hotkeys &amp; mapping</h2></div><svg class="icon card-icon" aria-hidden="true"><use href="#i-help"/></svg></div>
+                <dl class="hotkeys">
+                  <div><dt><kbd>F1</kbd></dt><dd>Orange delay 0 ↔ 80 ms (live)</dd></div>
+                  <div><dt><kbd>F3</kbd></dt><dd>Cycle F/LT action</dd></div>
+                  <div><dt><kbd>F4</kbd></dt><dd>Cycle E action</dd></div>
+                  <div><dt><kbd>F5</kbd></dt><dd>Orange parry on/off</dd></div>
+                  <div><dt><kbd>F6</kbd></dt><dd>Pause / resume</dd></div>
+                  <div><dt><kbd>F7</kbd></dt><dd>Vision overlay</dd></div>
+                  <div><dt><kbd>E</kbd> / <kbd>F</kbd></dt><dd>Hold for parry actions</dd></div>
+                  <div><dt><kbd>LT</kbd></dt><dd>Alternate F hold</dd></div>
+                </dl>
+                <div class="mapping">
+                  <div><b>RT</b><span>Heavy / parry</span></div>
+                  <div><b>RB</b><span>Light</span></div>
+                  <div><b>X</b><span>Guard break</span></div>
+                  <div><b>A</b><span>Dodge</span></div>
+                  <div><b>LT</b><span>Alt F hold</span></div>
+                  <div><b>R-stick</b><span>Guard direction</span></div>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <!-- ============================== DIAGNOSTICS -->
+          <section class="page" data-page="diagnostics" aria-labelledby="diagnostics-title" hidden>
+            <header class="page-head">
+              <div>
+                <p class="eyebrow">Operations</p>
+                <h1 id="diagnostics-title" tabindex="-1">Diagnostics</h1>
+                <p class="page-sub">Calibration, detection, the last reaction decision, and telemetry.</p>
+              </div>
+            </header>
+
+            <div class="two-col">
+              <article class="card" aria-labelledby="vision-title">
+                <div class="card-head"><div><p class="eyebrow">Vision</p><h2 id="vision-title" class="card-title">Calibration &amp; overlay</h2></div><svg class="icon card-icon" aria-hidden="true"><use href="#i-scan"/></svg></div>
+                <p class="card-copy">Match the game render exactly so detection regions land on the right pixels.</p>
+                <div class="field-grid two">
+                  <label class="field">
+                    <span class="field-label">Width</span>
+                    <span class="field-control"><input id="res-width" type="number" min="1" max="16384" step="1" required data-setting="res1" data-calibration="true" aria-describedby="resolution-help err-res1"><span class="unit">px</span></span>
+                    <small class="field-error" id="err-res1" data-error-for="res1"></small>
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Height</span>
+                    <span class="field-control"><input type="number" min="1" max="16384" step="1" required data-setting="res2" data-calibration="true" aria-describedby="resolution-help err-res2"><span class="unit">px</span></span>
+                    <small class="field-error" id="err-res2" data-error-for="res2"></small>
+                  </label>
+                </div>
+                <small class="field-help" id="resolution-help">Calibration only; it does not change reaction delays.</small>
+                <div class="button-row">
+                  <button class="btn btn-secondary" type="button" data-action="resolution"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Apply resolution</button>
+                  <button class="btn btn-secondary" type="button" data-action="scan"><svg class="icon" aria-hidden="true"><use href="#i-scan"/></svg>Scan screen</button>
+                </div>
+                <div class="toggle-stack">
+                  <button class="toggle-btn" type="button" id="vision-overlay-button" data-action="vision-overlay" data-bind-on="visionOverlay" aria-pressed="false">
+                    <svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>
+                    <span class="toggle-btn-text"><b>Vision overlay</b><small>Click-through HUD, hidden from capture</small></span>
+                    <span class="toggle-btn-state" data-bind="visionOverlayLabel">OFF</span>
+                    <kbd>F7</kbd>
                   </button>
-                  <div class="hero-select-menu" id="hero-select-menu" role="listbox" tabindex="-1" aria-label="Available heroes" hidden></div>
+                  <button class="toggle-btn" type="button" id="anchor-scan-button" data-action="anchor-scan" data-bind-on="anchorScan" aria-pressed="true">
+                    <svg class="icon" aria-hidden="true"><use href="#i-target"/></svg>
+                    <span class="toggle-btn-text"><b>Anchor scan</b><small>Show the anchor search region on the overlay</small></span>
+                    <span class="toggle-btn-state" data-bind="anchorScanLabel">ON</span>
+                  </button>
                 </div>
-              </label>
-              <label class="toggle-row prominent hero-response-toggle"><input type="checkbox" data-setting="YourHero" id="hero-response-enabled"><span class="toggle-ui"></span><span><b>Enable standalone hero response</b><small id="hero-response-note">Choose a hero first.</small></span></label>
-            </article>
-            <article class="card hero-detail-card" aria-live="polite">
-              <div class="card-head"><div><div class="eyebrow">IMPLEMENTED BEHAVIOR</div><h3 id="hero-detail-title">No hero selected</h3></div><span class="behavior-status" id="hero-detail-state">INACTIVE</span></div>
-              <p class="hero-behavior-copy" id="hero-detail-behavior">Choose a hero to see its behavior.</p>
-              <dl class="hero-facts">
-                <div><dt>Current status</dt><dd id="hero-detail-status">No hero-specific response is active.</dd></div>
-                <div><dt>Requirements</dt><dd id="hero-detail-requirements">Select a hero, then enable standalone hero response.</dd></div>
-                <div><dt>Applicable timings</dt><dd id="hero-detail-timings">No hero timing applies.</dd></div>
-              </dl>
-            </article>
+              </article>
+
+              <article class="card" aria-labelledby="signal-title">
+                <div class="card-head"><div><p class="eyebrow">Live signal</p><h2 id="signal-title" class="card-title">Detection state</h2></div><svg class="icon card-icon" aria-hidden="true"><use href="#i-pulse"/></svg></div>
+                <div class="stat-grid cols-2">
+                  <div class="stat" data-bind-state="markerState"><span class="stat-label">Marker</span><strong class="stat-value" data-bind="marker">MISSING</strong></div>
+                  <div class="stat" data-bind-state="holdState"><span class="stat-label">Hold gate</span><strong class="stat-value" data-bind="hold">UP</strong></div>
+                  <div class="stat" data-bind-state="indicatorState"><span class="stat-label">Indicator</span><strong class="stat-value" data-bind="indicator">NO</strong></div>
+                  <div class="stat" data-bind-state="guardState"><span class="stat-label">Guard</span><strong class="stat-value" data-bind="guard">-</strong></div>
+                </div>
+              </article>
+
+              <article class="card" aria-labelledby="last-title" aria-live="polite">
+                <div class="card-head"><div><p class="eyebrow">Last reaction</p><h2 id="last-title" class="card-title" data-bind="lastState">No reaction yet</h2></div><span class="badge" data-bind-state="lastConfirmationState" data-bind="lastConfirmation">WAITING</span></div>
+                <div class="stat-grid cols-2">
+                  <div class="stat" data-state="idle"><span class="stat-label">Direction</span><strong class="stat-value" data-bind="lastDirection">-</strong></div>
+                  <div class="stat" data-state="idle"><span class="stat-label">Delay</span><strong class="stat-value" data-bind="lastDelay">n/a</strong></div>
+                </div>
+                <p class="card-copy" data-bind="lastReason">Start the bot to see why the next reaction was sent or skipped.</p>
+              </article>
+
+              <article class="card" aria-labelledby="counters-title">
+                <div class="card-head"><div><p class="eyebrow">Input evidence</p><h2 id="counters-title" class="card-title">Reaction counters</h2></div><svg class="icon card-icon" aria-hidden="true"><use href="#i-check"/></svg></div>
+                <div class="counter-row four">
+                  <div class="counter"><strong data-bind="rtSent">0</strong><span>RT sent</span></div>
+                  <div class="counter"><strong data-bind="parriesConfirmed">0</strong><span>Confirmed</span></div>
+                  <div class="counter"><strong data-bind="parriesUnconfirmed">0</strong><span>Unconfirmed</span></div>
+                  <div class="counter"><strong data-bind="injected">0</strong><span>Inputs injected</span></div>
+                </div>
+                <p class="card-copy">“RT sent” records controller delivery. A confirmed parry also needs the follow-up visual impact check.</p>
+              </article>
+
+              <article class="card" aria-labelledby="telemetry-title">
+                <div class="card-head"><div><p class="eyebrow">Recording</p><h2 id="telemetry-title" class="card-title">Telemetry</h2></div><span class="badge" data-bind-state="telemetryState"><svg class="icon" aria-hidden="true"><use href="#i-record"/></svg><span data-bind="telemetryStatus">Not recording</span></span></div>
+                <p class="card-copy">Records detection frames and decisions locally for tuning. Nothing is uploaded.</p>
+                <div class="button-row">
+                  <label class="select-field"><span class="sr-only">Session label</span>
+                    <select id="telemetry-label"><option value="Training">Training</option><option value="2v2-Custom">2v2 / Custom</option><option value="Other">Other</option></select>
+                  </label>
+                  <button class="btn btn-secondary" type="button" id="telemetry-button" data-action="telemetry" data-bind-on="telemetryOn" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-record"/></svg><span data-bind="telemetryLabel">Start recording</span></button>
+                  <button class="btn btn-secondary" type="button" data-action="export-telemetry"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>Export latest</button>
+                </div>
+              </article>
+
+              <article class="card" aria-labelledby="app-title">
+                <div class="card-head"><div><p class="eyebrow">Application</p><h2 id="app-title" class="card-title">DANBOT</h2></div><span class="badge mono" data-state="idle" data-bind="version">v2.0.0</span></div>
+                <div class="button-row">
+                  <button class="btn btn-secondary" type="button" data-action="help" data-help-section="help-setup"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg>Setup guide</button>
+                  <button class="btn btn-secondary" type="button" data-action="help" data-help-section="help-features"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>Feature notes</button>
+                  <button class="btn btn-secondary" type="button" data-action="reload"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Restart app</button>
+                </div>
+              </article>
+            </div>
+          </section>
+        </div>
+
+        <!-- ============================== COMMIT BAR -->
+        <footer class="commit-bar" aria-label="Profile and settings status">
+          <div class="commit-profile">
+            <span class="commit-label" id="profile-label">Profile</span>
+            <div class="listbox up" id="profile-select">
+              <button class="listbox-trigger" id="profile-select-trigger" type="button" aria-labelledby="profile-label profile-select-value" aria-haspopup="listbox" aria-expanded="false" aria-controls="profile-select-menu">
+                <span id="profile-select-value">Default</span><svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+              </button>
+              <div class="listbox-menu" id="profile-select-menu" role="listbox" tabindex="-1" aria-label="Configuration profiles" hidden></div>
+            </div>
           </div>
-        </section>
-
-        <section class="view" data-view="timing">
-          <div class="page-heading stack"><div><div class="eyebrow">CONFIGURATION / TIMING</div><h1>Reaction timings</h1><p>Each delay starts at a specific detection or input step. Values stay pending until you apply them.</p></div></div>
-          <div class="timing-context stack" id="timing-context" role="status" aria-live="polite">Timing notes update when you change the active hero or reaction switches.</div>
-          <div class="validation-summary stack" id="timing-validation-summary" role="alert" hidden></div>
-          <div class="timing-grid stack">
-            <article class="card timing-card calibration-card">
-              <div class="card-head"><div><div class="eyebrow">CALIBRATION</div><h3>Game resolution</h3></div><span class="icon-chip">R</span></div>
-              <p class="card-copy">Match the game render exactly so detection regions land on the right pixels.</p>
-              <div class="field-grid two">
-                <label class="field validation-field"><span>Width</span><div class="timing-control"><input type="number" min="1" max="16384" step="1" required data-setting="res1" data-calibration="true" aria-describedby="resolution-help"></div><small class="field-error" data-error-for="res1"></small></label>
-                <label class="field validation-field"><span>Height</span><div class="timing-control"><input type="number" min="1" max="16384" step="1" required data-setting="res2" data-calibration="true" aria-describedby="resolution-help"></div><small class="field-error" data-error-for="res2"></small></label>
-              </div>
-              <button class="btn btn-secondary full" data-action="resolution">Apply resolution</button>
-              <small class="field-hint" id="resolution-help">Resolution is calibration only; it does not change reaction delays.</small>
-            </article>
-
-            <article class="card timing-card deflect-card">
-              <div class="card-head"><div><div class="eyebrow">DEFLECT</div><h3>Directional dodge delay</h3></div><span class="icon-chip">D</span></div>
-              <p class="card-copy">Starts after the flash gate. The bot waits, dodges in the attack direction, then sends the F/LT light follow-up.</p>
-              <div class="timing-fields deflect-fields">
-                <label class="field validation-field"><span>Left</span><div class="timing-control"><input type="number" min="0" max="10000" step="1" required data-setting="Left" data-timing="deflect" aria-describedby="left-deflect-help"><span class="unit">ms</span></div><small id="left-deflect-help">Used for left deflects and eligible Legit fallback.</small><small class="field-error" data-error-for="Left"></small></label>
-                <label class="field validation-field"><span>Top</span><div class="timing-control"><input type="number" min="0" max="10000" step="1" required data-setting="TopDeflect" data-timing="deflect" aria-describedby="top-deflect-help"><span class="unit">ms</span></div><small id="top-deflect-help">Used for top deflects when the active reaction allows them.</small><small class="field-error" data-error-for="TopDeflect"></small></label>
-                <label class="field validation-field"><span>Right</span><div class="timing-control"><input type="number" min="0" max="10000" step="1" required data-setting="Right" data-timing="deflect" aria-describedby="right-deflect-help"><span class="unit">ms</span></div><small id="right-deflect-help">Used for right deflects and eligible Legit fallback.</small><small class="field-error" data-error-for="Right"></small></label>
-              </div>
-              <p class="timing-override" id="peacekeeper-override" hidden><strong>Peacekeeper override active:</strong> side deflects use 100 ms when timings are applied. Top still uses the Top value.</p>
-              <p class="timing-affects" id="deflect-affects">Deflect is not selected, so these values do not affect the current F/LT response.</p>
-            </article>
-
-            <article class="card timing-card parry-card">
-              <div class="card-head"><div><div class="eyebrow">PARRY</div><h3>Flash-to-RT delay</h3></div><span class="icon-chip">P</span></div>
-              <p class="card-copy">Starts after a valid flash is detected and the parry reaction is armed. RT is sent after this delay.</p>
-              <label class="field validation-field"><span>Parry delay</span><div class="timing-control"><input type="number" min="0" max="10000" step="1" required data-setting="ParryDelay" data-timing="parry" aria-describedby="parry-delay-help"><span class="unit">ms</span></div><small id="parry-delay-help">Applies to F/E Parry and orange parry when enabled.</small><small class="field-error" data-error-for="ParryDelay"></small></label>
-              <p class="timing-affects" id="parry-affects">Parry is not the current priority, so this delay may be inactive.</p>
-            </article>
-
-            <article class="card timing-card dodge-card">
-              <div class="card-head"><div><div class="eyebrow">DODGE</div><h3>Orange-response delays</h3></div><span class="icon-chip">O</span></div>
-              <p class="card-copy">These delays start from orange detection or the feint transition and govern orange follow-ups.</p>
-              <div class="timing-fields">
-                <label class="field validation-field"><span>Orange delay</span><div class="timing-control"><input type="number" min="0" max="10000" step="1" required data-setting="Pause" data-timing="dodge" aria-describedby="pause-help"><span class="unit">ms</span></div><small id="pause-help">Starts when a fresh orange indicator is detected.</small><small class="field-error" data-error-for="Pause"></small></label>
-                <label class="field validation-field"><span>Feint transition</span><div class="timing-control"><input type="number" min="0" max="10000" step="1" required data-setting="Pause1" data-timing="dodge" aria-describedby="pause1-help"><span class="unit">ms</span></div><small id="pause1-help">Starts after an orange feint transition is recognized.</small><small class="field-error" data-error-for="Pause1"></small></label>
-                <label class="field validation-field"><span>Follow-up delay</span><div class="timing-control"><input type="number" min="0" max="10000" step="1" required data-setting="Pause2" data-timing="dodge" aria-describedby="pause2-help"><span class="unit">ms</span></div><small id="pause2-help">Starts after the orange dodge before Light, Heavy, or Bash.</small><small class="field-error" data-error-for="Pause2"></small></label>
-              </div>
-              <p class="timing-affects" id="dodge-affects">Orange response is disabled, so these delays do not affect the current reaction.</p>
-            </article>
-
-            <article class="card timing-card advanced-card">
-              <div class="card-head"><div><div class="eyebrow">ADVANCED</div><h3>Guard and Legit controls</h3></div><span class="icon-chip">A</span></div>
-              <p class="card-copy">These controls affect guard persistence or fallback selection rather than the primary reaction delay.</p>
-              <div class="timing-fields">
-                <label class="field validation-field"><span>Guard hold</span><div class="timing-control"><input type="number" min="60" max="10000" step="1" required data-setting="GuardHold" data-timing="advanced" aria-describedby="guard-hold-help"><span class="unit">ms</span></div><small id="guard-hold-help">Starts when Auto Block presses a guard direction.</small><small class="field-error" data-error-for="GuardHold"></small></label>
-                <label class="field validation-field"><span>Legacy block delay</span><div class="timing-control"><input type="number" min="0" max="10000" step="1" required data-setting="Pause3" data-timing="advanced" aria-describedby="pause3-help"><span class="unit">ms</span></div><small id="pause3-help">Reserved compatibility value; not read by the current reaction executor.</small><small class="field-error" data-error-for="Pause3"></small></label>
-                <label class="field validation-field"><span>Legit parry chance</span><div class="timing-control"><input type="number" min="0" max="100" step="1" required data-setting="LegitParryChance" data-timing="advanced" aria-describedby="legit-chance-help"><span class="unit">%</span></div><small id="legit-chance-help">Controls how often a valid F/E parry flash sends RT in Legit mode.</small><small class="field-error" data-error-for="LegitParryChance"></small></label>
-                <label class="field validation-field"><span>Deflect fallback chance</span><div class="timing-control"><input type="number" min="0" max="100" step="1" required data-setting="DeflectFallbackChance" data-timing="advanced" aria-describedby="deflect-fallback-help"><span class="unit">%</span></div><small id="deflect-fallback-help">Used only on failed Legit rolls when Deflect is eligible.</small><small class="field-error" data-error-for="DeflectFallbackChance"></small></label>
-                <label class="field validation-field"><span>Crushing fallback chance</span><div class="timing-control"><input type="number" min="0" max="100" step="1" required data-setting="CrushingFallbackChance" data-timing="advanced" aria-describedby="crushing-fallback-help"><span class="unit">%</span></div><small id="crushing-fallback-help">Used only on failed Legit rolls when Crushing fallback is eligible.</small><small class="field-error" data-error-for="CrushingFallbackChance"></small></label>
-              </div>
-            </article>
+          <div class="commit-states" role="status" aria-live="polite">
+            <span class="chip" id="timing-state" data-bind-state="timingState">
+              <svg class="icon" data-for="ok" aria-hidden="true"><use href="#i-check"/></svg>
+              <svg class="icon" data-for="warn" aria-hidden="true"><use href="#i-warn"/></svg>
+              <svg class="icon spin" data-for="busy" aria-hidden="true"><use href="#i-spinner"/></svg>
+              <span data-bind="timingStateLabel">Timings applied</span>
+            </span>
+            <span class="chip" id="profile-state" data-bind-state="profileState">
+              <svg class="icon" data-for="ok" aria-hidden="true"><use href="#i-check"/></svg>
+              <svg class="icon" data-for="warn" aria-hidden="true"><use href="#i-warn"/></svg>
+              <span data-bind="profileStateLabel">Profile saved</span>
+            </span>
           </div>
-        </section>
-
-        <section class="view" data-view="diagnostics">
-          <div class="page-heading stack"><div><div class="eyebrow">OPERATIONS / DIAGNOSTICS</div><h1>Diagnostics</h1><p>Inspect detection, controller delivery, overlays, scans, and the most recent reaction decision.</p></div></div>
-          <div class="content-grid stack diagnostics-grid">
-            <article class="card diagnostics-actions">
-              <div class="card-head"><div><div class="eyebrow">TOOLS</div><h3>Test and inspect</h3></div><span class="icon-chip">!</span></div>
-              <div class="diagnostic-action-grid">
-                <button class="btn btn-secondary" data-action="scan">Scan screen</button>
-                <button class="btn btn-secondary" data-action="test">Test input</button>
-                <button class="btn btn-secondary btn-toggle" id="vision-overlay-button" data-action="vision-overlay">Vision overlay: OFF - F7</button>
-                <button class="btn btn-secondary btn-toggle active" id="anchor-scan-button" data-action="anchor-scan">Anchor scan: ON</button>
-                <button class="btn btn-secondary bind-button" id="auto-dodge-bind-button" data-action="bind-auto-dodge" aria-pressed="false">Auto dodge bind: UNBOUND</button>
-                <button class="btn btn-secondary bind-button" id="orange-parry-bind-button" data-action="bind-orange-parry" aria-pressed="false">Orange parry bind: UNBOUND</button>
-                <button class="btn btn-secondary bind-button" id="auto-parry-bind-button" data-action="bind-auto-parry" aria-pressed="false">F auto parry bind: UNBOUND</button>
-                <select class="btn btn-secondary" id="telemetry-label" aria-label="Telemetry session label"><option value="Training">Training</option><option value="2v2-Custom">2v2 / Custom</option><option value="Other">Other</option></select>
-                <button class="btn btn-secondary btn-toggle" id="telemetry-button" data-action="telemetry">Telemetry: OFF</button>
-                <button class="btn btn-secondary" data-action="export-telemetry">Export latest</button>
+          <div class="commit-actions">
+            <button class="btn btn-secondary" type="button" id="apply-button" data-action="apply" data-bind-disabled="applyDisabled" disabled><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg><span data-bind="applyLabel">Apply timings</span></button>
+            <button class="btn btn-primary" type="button" id="save-profile-button" data-action="profile-save" data-bind-disabled="saveDisabled" disabled><svg class="icon" aria-hidden="true"><use href="#i-save"/></svg>Save profile</button>
+            <div class="menu" id="profile-menu">
+              <button class="btn btn-ghost btn-icon" type="button" id="profile-menu-trigger" aria-label="More profile actions" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-menu-list"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg></button>
+              <div class="menu-list" id="profile-menu-list" role="menu" aria-label="Profile actions" hidden>
+                <button type="button" role="menuitem" tabindex="-1" data-menu-action="profile-save-as"><svg class="icon" aria-hidden="true"><use href="#i-save"/></svg>Save as…</button>
+                <button type="button" role="menuitem" tabindex="-1" data-menu-action="profile-load"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Reload saved</button>
+                <button type="button" role="menuitem" tabindex="-1" data-menu-action="profile-delete" class="danger"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg>Delete profile</button>
               </div>
-              <div class="utility-actions diagnostics-utilities">
-                <span id="telemetry-status">Telemetry OFF</span>
-                <button data-action="profile-delete">Delete profile</button>
-                <button data-action="howto">How to use</button>
-                <button data-action="readme">Feature notes</button>
-                <button data-action="reload">Reload app</button>
-              </div>
-            </article>
-            <article class="card signal-card">
-              <div class="card-head"><div><div class="eyebrow">LIVE SIGNAL</div><h3>Detection state</h3></div><span class="icon-chip">S</span></div>
-              <div class="metric-grid">
-                <div class="metric"><span>Marker</span><strong id="metric-marker">MISSING</strong></div>
-                <div class="metric"><span>Hold gate</span><strong id="metric-hold">UP</strong></div>
-                <div class="metric"><span>Indicator</span><strong id="metric-indicator">NO</strong></div>
-                <div class="metric"><span>Guard</span><strong id="metric-guard">-</strong></div>
-              </div>
-            </article>
-            <article class="card signal-card">
-              <div class="card-head"><div><div class="eyebrow">CONTROLLER PATH</div><h3>Input bridge</h3></div><span class="icon-chip">V</span></div>
-              <div class="metric-grid">
-                <div class="metric"><span>Mode</span><strong id="metric-mode">ViGEm</strong></div>
-                <div class="metric"><span>Source</span><strong id="metric-source">OFF</strong></div>
-                <div class="metric"><span>Virtual</span><strong id="metric-virtual">OFF</strong></div>
-                <div class="metric"><span>Loop</span><strong id="metric-loop">0 Hz</strong></div>
-              </div>
-            </article>
-            <article class="card last-reaction-card" aria-live="polite">
-              <div class="card-head"><div><div class="eyebrow">LAST REACTION</div><h3 id="last-reaction-state">No reaction yet</h3></div><span class="badge badge-muted" id="last-reaction-confirmation">Waiting</span></div>
-              <div class="last-reaction-facts"><span><small>Direction</small><strong id="last-reaction-direction">-</strong></span><span><small>Delay</small><strong id="last-reaction-delay">-</strong></span></div>
-              <p class="card-copy" id="last-reaction-reason">Start the bot to see why the next reaction was sent or skipped.</p>
-            </article>
-            <article class="card quick-card diagnostics-counters">
-              <div class="card-head"><div><div class="eyebrow">INPUT EVIDENCE</div><h3>Reaction counters</h3></div><div class="badge-row"><span class="badge badge-muted" id="parry-count">0 RT sent</span><span class="badge badge-muted" id="parry-confirmed-count">0 Parries confirmed</span></div></div>
-              <p class="card-copy">“Input sent” records controller delivery. A confirmed parry requires the follow-up visual impact check.</p>
-            </article>
+            </div>
           </div>
-        </section>
-
-        <section class="view" data-view="guide">
-          <div class="page-heading stack"><div><div class="eyebrow">REFERENCE / GUIDE</div><h1>Quick guide</h1><p>Keep the game and the input bridge in the same frame of reference.</p></div><button class="btn btn-secondary" data-action="howto">Open setup guide</button></div>
-          <div class="guide-grid stack">
-            <article class="card guide-card"><div class="card-head"><div><div class="eyebrow">SETUP</div><h3>Before starting</h3></div><span class="icon-chip">1</span></div><ol><li>Use fullscreen or borderless fullscreen, not windowed mode.</li><li>Match the resolution fields to the game render.</li><li>Set FOV to 81 and contrast to 55.</li><li>Hide physical/source controllers in HidHide and leave the ViGEm output visible.</li><li>Choose features and your hero, then press Start bot.</li></ol></article>
-            <article class="card guide-card"><div class="card-head"><div><div class="eyebrow">CONTROLS</div><h3>Hotkeys and holds</h3></div><span class="icon-chip">2</span></div><div class="hotkey-list"><div><kbd>F3</kbd><span>Cycle F-mode action</span></div><div><kbd>F4</kbd><span>Cycle E-mode action</span></div><div><kbd>F5</kbd><span>Orange parry on/off</span></div><div><kbd>F6</kbd><span>Pause/resume</span></div><div><kbd>F7</kbd><span>Toggle vision overlay</span></div><div><kbd>E / F</kbd><span>Hold for parry actions</span></div><div><kbd>LT</kbd><span>Optional alternate F hold</span></div></div></article>
-            <article class="card guide-card wide"><div class="card-head"><div><div class="eyebrow">MAPPING</div><h3>Virtual controller path</h3></div><span class="badge badge-success">VIGEM</span></div><div class="mapping-grid"><div><b>RT</b><span>Heavy / parry</span></div><div><b>RB</b><span>Light</span></div><div><b>X</b><span>Guard break</span></div><div><b>A</b><span>Dodge</span></div><div><b>LT</b><span>Alternate F hold</span></div><div><b>Right stick</b><span>Guard direction</span></div></div></article>
-          </div>
-        </section>
+        </footer>
       </main>
     </div>
   </div>
 
+  <!-- ============================== HELP PANEL -->
+  <aside class="help-panel" id="help-panel" aria-labelledby="help-title" hidden>
+    <div class="help-head">
+      <h2 id="help-title" tabindex="-1">Help</h2>
+      <button class="title-btn" type="button" data-help-close aria-label="Close help"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+    </div>
+    <div class="help-body">
+      <section aria-labelledby="help-setup">
+        <h3 id="help-setup" tabindex="-1">Before starting</h3>
+        <ol>
+          <li>Use fullscreen or borderless fullscreen, not windowed mode.</li>
+          <li>Match the resolution in Diagnostics to the game render.</li>
+          <li>Set FOV to 81 and contrast to 55.</li>
+          <li>Disable shadows, motion blur, ambient occlusion, dynamic reflections and dynamic shadows.</li>
+          <li>Hide physical controllers in HidHide and leave the ViGEm output visible.</li>
+          <li>Choose reactions and your hero, then press <b>Start bot</b>.</li>
+        </ol>
+      </section>
+      <section aria-labelledby="help-hotkeys">
+        <h3 id="help-hotkeys" tabindex="-1">Hotkeys and holds</h3>
+        <dl class="hotkeys">
+          <div><dt><kbd>F1</kbd></dt><dd>Orange delay 0 ↔ 80 ms (live)</dd></div>
+          <div><dt><kbd>F3</kbd></dt><dd>Cycle F/LT action</dd></div>
+          <div><dt><kbd>F4</kbd></dt><dd>Cycle E action</dd></div>
+          <div><dt><kbd>F5</kbd></dt><dd>Orange parry on/off</dd></div>
+          <div><dt><kbd>F6</kbd></dt><dd>Pause / resume</dd></div>
+          <div><dt><kbd>F7</kbd></dt><dd>Vision overlay</dd></div>
+          <div><dt><kbd>E</kbd> / <kbd>F</kbd></dt><dd>Hold before an attack for parry/counter actions</dd></div>
+          <div><dt><kbd>LT</kbd></dt><dd>Alternate F hold</dd></div>
+          <div><dt><kbd>Ctrl 1–5</kbd></dt><dd>Switch pages</dd></div>
+        </dl>
+      </section>
+      <section aria-labelledby="help-features">
+        <h3 id="help-features" tabindex="-1">Features</h3>
+        <ul>
+          <li>Screen-aware orange and red indicator detection.</li>
+          <li>Orange-only dodge/light and optional orange plus red RT parry. Your own controller RT/RB attacks are ignored until their orange clears.</li>
+          <li>Auto block and directional guard.</li>
+          <li>Hero-specific evades and reactions.</li>
+          <li>ViGEm source/output merge.</li>
+          <li>Configurable reaction delays.</li>
+          <li>F7 anchor-following vision overlay. It is click-through, hidden from capture, and does not change bot behavior.</li>
+        </ul>
+        <p class="help-foot">DANBOT by Danteh.</p>
+      </section>
+    </div>
+  </aside>
+
+  <!-- ============================== MODAL + TOASTS -->
   <div class="modal-root" id="modal-root" hidden>
-    <div class="modal-backdrop" data-action="close-modal"></div>
+    <div class="modal-backdrop" data-modal-close></div>
     <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-body">
-      <div class="modal-head"><div><div class="eyebrow" id="modal-eyebrow">MESSAGE</div><h2 id="modal-title">Message</h2></div><button class="modal-close" id="modal-close-button" data-action="close-modal" aria-label="Close dialog">x</button></div>
-      <pre class="modal-body" id="modal-body"></pre>
+      <div class="modal-head">
+        <div><p class="eyebrow" id="modal-eyebrow">MESSAGE</p><h2 id="modal-title">Message</h2></div>
+        <button class="title-btn" id="modal-close-button" type="button" data-modal-close aria-label="Close dialog"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+      </div>
+      <p class="modal-body" id="modal-body"></p>
       <div class="modal-form" id="modal-form" hidden>
-        <label class="field"><span id="modal-input-label">Profile name</span><input id="modal-input" type="text" maxlength="48" autocomplete="off"></label>
+        <label class="field"><span class="field-label" id="modal-input-label">Profile name</span><span class="field-control"><input id="modal-input" type="text" maxlength="48" autocomplete="off"></span></label>
       </div>
       <div class="modal-actions" id="modal-actions" hidden>
         <button class="btn btn-secondary" id="modal-cancel-button" type="button">Cancel</button>
@@ -334,9 +744,6 @@
       </div>
     </section>
   </div>
-  <div class="toast-stack" id="toast-stack" role="status" aria-live="polite" aria-atomic="true"></div>
-  <script src="apply-revision.js"></script>
-  <script src="dodge-direction.js"></script>
-  <script src="app.js"></script>
+  <div class="toast-stack" id="toast-stack" role="status" aria-live="polite"></div>
 </body>
 </html>
