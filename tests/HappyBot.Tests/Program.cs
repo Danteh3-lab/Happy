@@ -92,6 +92,19 @@ static partial class Program
             ProfileEditorDirtyLifecycle();
             ShutdownWithoutStartReleasesInputsInBackground();
             ShutdownDuringBlockedCleanupStillTearsDownAfterUnblock();
+            UiCommandParserMapsEveryMessage();
+            StatusPayloadKeepsWireNames();
+            ProtocolNamesMatchPage();
+            SettingsSessionKeepsLiveSwitchesEqualToDraft();
+            TimingFieldsCoverEveryNumericSetting();
+            DeckControllerApplyCommitsAndReportsInOrder();
+            DeckControllerStartRejectsWhenNotReady();
+            DeckControllerHotkeysKeepDraftAndLiveInStep();
+            DeckControllerOverlayAndTelemetryReportFailures();
+            DeckControllerBindsAndTogglesFromController();
+            ControllerBindingCaptureEdgesAndThresholds();
+            OverlayThemeMatchesUiTokens();
+            VisionOverlayDrawsOpaqueHud();
             Console.WriteLine("ReactionCoordinator and seam tests passed.");
             return 0;
         }
