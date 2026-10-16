@@ -56,7 +56,7 @@ Recommended startup order:
 1. Connect the DS4 and start DS4Windows using an Xbox 360 profile.
 2. Start HidHide with the source devices hidden from the game.
 3. Run `HappyBot-ViGEm.bat`.
-4. Confirm the status shows `V:ON` and `Src:ON`.
+4. Confirm the Dashboard shows **Virtual controller: Ready**, and that **Controller & Binds › Input bridge** reports Source `ON`.
 5. Start or restart the game after the virtual controller exists.
 
 The bot does not need administrator rights in ViGEm mode. Driver installation and HidHide configuration require administrator rights.
@@ -103,34 +103,72 @@ HappyBot's internal output mapping is:
 
 The configured hold button is `LT`, which also drives the bot's F-button response path.
 
-## Using The Menu
+## Using The Control Deck
 
-1. Set the game resolution in the HappyBot window.
-2. Select the hero being played.
+The window has five pages (switch with the sidebar or **Ctrl+1–5**) and a
+commit bar along the bottom of every page.
+
+| Page | What it holds |
+| --- | --- |
+| **Dashboard** | Start / Pause, readiness checks, the active F/LT and E behavior, quick toggles, live signal, and session counters. |
+| **Combat** | Orange response, guard and F/LT reactions, Legit mode with its fallback percentages, and E-hold reactions. |
+| **Heroes & Timing** | The hero picker, hero response, and every reaction delay. |
+| **Controller & Binds** | Controller toggle binds, the input bridge state, **Test input**, and the hotkey/mapping reference. |
+| **Diagnostics** | Resolution calibration, Scan screen, the vision overlay, live detection, the last reaction, counters, telemetry, and app actions. |
+
+Typical setup:
+
+1. Set the game resolution in **Diagnostics › Calibration & overlay**.
+2. Pick the hero being played in **Heroes & Timing**.
 3. Enable only the features needed for the test.
-4. Click **Start** to begin the bot.
+4. Click **Start bot** on the Dashboard.
 
-Checkbox changes apply while the bot is running. The **Apply Settings** button is not required for checkbox changes.
+Switches apply to the running bot immediately. Numbers (delays and
+percentages) stay pending until **Apply timings** in the commit bar; **Start
+bot** also applies them. **Save profile** writes either kind of change to the
+active profile. The commit bar shows "Timings applied/not applied" and "Profile
+saved/not saved" separately; **⋯** offers Save as, Reload saved, and Delete
+profile. The **?** button in the title bar opens the setup guide.
 
 Important feature switches:
 
-- **Auto Block** controls automatic guard direction changes.
-- **Auto Parry** in the F section controls the generic F/LT parry path.
-- **Auto Parry** in the E section controls the E-key path.
-- **Auto Deflect** controls directional dodge deflects.
-- **Unblockables** controls unblockable detection and dodge responses.
-- **Your Hero** enables hero-specific F/LT counters.
-- **No Hero** suppresses hero-specific behavior.
+- **Auto block** controls automatic guard direction changes and is required by every F/LT and E reaction.
+- **Auto parry** under Guard & primary reactions controls the generic F/LT parry path.
+- **Auto parry** under E hold controls the E-key path.
+- **Auto deflect** controls directional dodge deflects.
+- **Orange response** (`Unblockables`) controls orange detection and dodge responses.
+- **Hero response** enables hero-specific behavior for the selected hero.
+
+## Hotkeys
+
+| Key | Action |
+| --- | --- |
+| F1 | Orange delay 0 ↔ 80 ms (applied live) |
+| F3 | Cycle F/LT action: Parry → Crushing → Deflect |
+| F4 | Cycle E action: Parry → Crushing → Off |
+| F5 | Orange parry on/off |
+| F6 | Pause / resume |
+| F7 | Vision overlay on/off |
+
+**Controller & Binds** can also bind source-controller buttons to toggle Auto
+dodge, Orange parry, and F auto parry.
 
 ## Vision Overlay
 
-Press **F7** or use **Vision overlay** on the Overview page to show DANBOT's diagnostic HUD. The overlay is click-through and displays the real anchor scan area, the green/yellow anchor, the derived combat and guard regions, and the live reaction stage (for example, `LEFT → GUARD`, `LEFT → PARRY READY`, then `LEFT → PARRY SENT`). It is hidden by default and does not change detection or input behavior.
+Press **F7** or use **Vision overlay** in Diagnostics (or the Dashboard quick
+toggles) to show DANBOT's diagnostic HUD. The overlay is click-through, hidden
+from screen capture, and displays the anchor scan area, the green/yellow anchor,
+the derived combat and guard regions, and the live reaction stage (for example,
+`LEFT → GUARD`, `LEFT → PARRY READY`, then `LEFT → PARRY SENT`). It is hidden by
+default and does not change detection or input behavior.
 
-The status line exposes the active settings as `P1`, `P2`, and `U`. `F:DOWN` confirms the configured hold button is detected.
+The Dashboard's **Live signal** shows `Hold gate: DOWN` when the configured hold
+button is detected.
 
 ## Test Input
 
-Click **Test Input** to cycle through diagnostic actions:
+Click **Run next test** in **Controller & Binds** to cycle through diagnostic
+actions:
 
 - Dodge (A)
 - Heavy (RT)
@@ -140,7 +178,41 @@ Click **Test Input** to cycle through diagnostic actions:
 - Guard Left
 - Guard Right
 
-Each test sends five inputs after a three-second delay.
+Each test sends five inputs after a three-second delay. Pause the bot first.
+
+## Development
+
+```powershell
+dotnet build HappyBot.csproj -c Debug                       # build
+dotnet run --project tests\HappyBot.Tests\HappyBot.Tests.csproj   # C# tests
+node --test "ui/tests/*.test.js"                             # UI tests (Node 22+)
+node ui/dev/serve.js                                         # browser preview: http://localhost:5174/?fake
+```
+
+The browser preview runs the control deck against `ui/dev/fake-host.js`, a
+stand-in for the bot, so the UI can be worked on without WebView2.
+
+Architecture:
+
+```text
+ui/ (HTML/CSS/ES modules, served from https://danbot.app.example/)
+  ⇅ JSON messages (App/Protocol, mirrored in ui/js/protocol.js)
+MainForm         WebView2 host: window chrome, hotkeys, timers, message routing
+  → DeckController   all control-deck behavior, UI-free and unit-tested
+      → SettingsSession  draft vs live settings (switches live, timings on Apply)
+      → BotCore          detection and reactions
+```
+
+Design tokens live in `ui/styles/tokens.css` and are documented in `DESIGN.md`;
+the F7 overlay mirrors them in `Overlay/OverlayTheme.cs`.
+
+UI protocol v1 — page → host: `ready`, `settings`, `start`, `apply`,
+`toggle-pause`, `resolution`, `scan`, `test`, `profile-select`, `profile-load`,
+`profile-save`, `profile-save-as`, `profile-delete`, `orange-parry`,
+`vision-overlay`, `anchor-scan`, `bind-auto-dodge`, `bind-orange-parry`,
+`bind-auto-parry`, `telemetry`, `export-telemetry`, `howto`, `readme`, `reload`,
+`minimize`, `close`, `drag`. Host → page: `init` (settings, status, protocol),
+`status` (every 200 ms), `settings`, `apply-result`, `toast`, `dialog`.
 
 ## Legacy Input
 
