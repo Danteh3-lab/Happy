@@ -121,7 +121,8 @@ internal sealed record OutgoingOrangeGuardResult(
     long SuppressionUntilMs,
     bool SuppressesOrange,
     bool SelfOrangeStarted,
-    bool SelfOrangeCleared);
+    bool SelfOrangeCleared,
+    bool EnemyOrangeStarted = false);
 
 internal sealed class OutgoingOrangeGuard
 {
@@ -137,6 +138,7 @@ internal sealed class OutgoingOrangeGuard
     private bool _windowSourceLightSeen;
     private bool _selfOrangeSourceHeavy;
     private bool _selfOrangeSourceLight;
+    private bool _enemyOrangeLatched;
 
     private static string SourceName(bool sourceHeavy, bool sourceLight) =>
         sourceHeavy && sourceLight ? "RT+RB" : sourceHeavy ? "RT" : sourceLight ? "RB" : "";
@@ -161,7 +163,13 @@ internal sealed class OutgoingOrangeGuard
         }
     }
 
-    public OutgoingOrangeGuardResult Observe(long now, bool markerFound, bool orangeIndicator, bool sourceHeavyHeld, bool sourceLightHeld = false)
+    /// <param name="incomingDirection">
+    /// The frame shows a classified enemy attack direction. Own attacks never
+    /// produce one, so an orange that arrives with it is the enemy's
+    /// unblockable even inside the outgoing window, and stays theirs until it clears.
+    /// </param>
+    public OutgoingOrangeGuardResult Observe(long now, bool markerFound, bool orangeIndicator, bool sourceHeavyHeld,
+        bool sourceLightHeld = false, bool incomingDirection = false)
     {
         lock (_sync)
         {
@@ -188,9 +196,23 @@ internal sealed class OutgoingOrangeGuard
                 selfOrangeCleared = true;
             }
 
+            if (_enemyOrangeLatched && OrangeResponseLatch.IsConfirmedClear(markerFound, orangeIndicator))
+                _enemyOrangeLatched = false;
+
             bool windowActive = now < _suppressionUntilMs;
+            bool enemyOrangeStarted = false;
+            if (!_enemyOrangeLatched && markerFound && orangeIndicator && incomingDirection)
+            {
+                // Hand a mistaken self attribution back to the enemy response.
+                _enemyOrangeLatched = true;
+                _selfOrangeLatched = false;
+                _selfOrangeSourceHeavy = false;
+                _selfOrangeSourceLight = false;
+                enemyOrangeStarted = true;
+            }
+
             bool selfOrangeStarted = false;
-            if (!_selfOrangeLatched && windowActive && markerFound && orangeIndicator)
+            if (!_enemyOrangeLatched && !_selfOrangeLatched && windowActive && markerFound && orangeIndicator)
             {
                 _selfOrangeLatched = true;
                 _selfOrangeSourceHeavy = _windowSourceHeavySeen;
@@ -209,9 +231,10 @@ internal sealed class OutgoingOrangeGuard
                 windowActive,
                 _selfOrangeLatched,
                 _suppressionUntilMs,
-                windowActive || _selfOrangeLatched,
+                !_enemyOrangeLatched && (windowActive || _selfOrangeLatched),
                 selfOrangeStarted,
-                selfOrangeCleared);
+                selfOrangeCleared,
+                enemyOrangeStarted);
         }
     }
 }

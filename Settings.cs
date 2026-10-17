@@ -37,6 +37,7 @@ public sealed class Settings
     public bool YourHero;
     public bool Legit;
     public bool BulwarkFallback;
+    public bool IgnoreOwnOrange = true;
     public int CrushingFallbackChance = 50;
     public int DeflectFallbackChance = 50;
 
@@ -90,6 +91,7 @@ public sealed class Settings
         YourHero = source.YourHero;
         Legit = source.Legit;
         BulwarkFallback = source.BulwarkFallback;
+        IgnoreOwnOrange = source.IgnoreOwnOrange;
         Chars = new Dictionary<string, bool>(source.Chars, StringComparer.OrdinalIgnoreCase);
     }
 

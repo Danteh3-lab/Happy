@@ -15,7 +15,7 @@ const settings = {
   AutoDodgeBind: "LB", OrangeParryBind: "", AutoParryBind: "",
   DodgeL: false, DodgeH: true, Leftdodge: false, Rightdodge: false, Unblockables: true, OrangeLight: false,
   OrangeParry: false, Autoblock: true, Lightbash: false, Parry: true, Crushing: false, Deflect: false, Parry2: true,
-  Crushing2: false, Nohero: false, YourHero: true, Legit: true, BulwarkFallback: false,
+  Crushing2: false, Nohero: false, YourHero: true, Legit: true, BulwarkFallback: false, IgnoreOwnOrange: true,
 };
 heroes.forEach((hero) => { settings[hero] = hero === "Orochi"; });
 

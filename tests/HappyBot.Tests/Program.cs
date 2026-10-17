@@ -33,7 +33,9 @@ static partial class Program
             OrangeParryEvidenceArmsOnFeint();
             OrangeFeintGraceExpiresBeforePlainOrange();
             OrangeMarkerLossDoesNotClearResponseLatch();
+            IgnoreOwnOrangeDefaultsOnAndRoundTrips();
             OutgoingOrangeGuardSuppressesOwnAttackUntilClear();
+            OutgoingOrangeGuardYieldsToEnemyDirection();
             OutgoingOrangeGuardAutomationLightSuppressesUntilClear();
             OutgoingOrangeGuardAutomationHeavySuppressesUntilClear();
             FailedLegitDecisionLeavesCandidateAvailableForGuard();

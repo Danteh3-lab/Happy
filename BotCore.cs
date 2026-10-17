@@ -298,7 +298,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
         lock (_parryEvidenceSync) _parryEvidence = null;
         lock (_combatStateSync) _flashCalibration = null;
         _telemetry.Start(label);
-        _telemetry.Record("runtime-settings", new { resolution = new { S.Res1, S.Res2 }, S.GuardHold, S.Pause3, S.ParryDelay, S.Left, S.Right, S.TopDeflect, S.Legit, S.LegitParryChance, S.BulwarkFallback, S.CrushingFallbackChance, S.DeflectFallbackChance, S.OrangeLight, outgoingOrangeSuppressionWindowMs = OutgoingOrangeGuard.SuppressionWindowMs });
+        _telemetry.Record("runtime-settings", new { resolution = new { S.Res1, S.Res2 }, S.GuardHold, S.Pause3, S.ParryDelay, S.Left, S.Right, S.TopDeflect, S.Legit, S.LegitParryChance, S.BulwarkFallback, S.CrushingFallbackChance, S.DeflectFallbackChance, S.OrangeLight, S.IgnoreOwnOrange, outgoingOrangeSuppressionWindowMs = OutgoingOrangeGuard.SuppressionWindowMs });
     }
 
     public void StopTelemetry()
@@ -531,7 +531,12 @@ public sealed class BotCore : IAutomationHost, IDisposable
             observation.MarkerFound,
             observation.OrangeIndicator,
             observation.SourceHeavyHeld,
-            observation.SourceLightHeld);
+            observation.SourceLightHeld,
+            observation.HasIndicator && observation.Direction != CombatDirection.None);
+        // The guard keeps tracking while disabled so re-enabling mid-fight
+        // still attributes an orange that is already on screen.
+        if (!S.IgnoreOwnOrange)
+            outgoingOrange = outgoingOrange with { SuppressesOrange = false, SelfOrangeStarted = false };
         _outgoingOrangeState = outgoingOrange;
         if (outgoingOrange.SourceHeavyHeld != _lastSourceHeavyHeld)
         {
@@ -576,6 +581,17 @@ public sealed class BotCore : IAutomationHost, IDisposable
             });
             _telemetry.CaptureRoi("orange-self-attack-suppressed", observation.CombatRoi);
             SetVisionReaction("ORANGE IGNORED", $"Own source {outgoingOrange.AttributionSource} attack", "", 1300, -1);
+        }
+        if (outgoingOrange.EnemyOrangeStarted && outgoingOrange.WindowActive)
+        {
+            RecordTelemetry("orange-enemy-in-outgoing-window", new
+            {
+                direction = observation.Direction.ToString(),
+                sourceRtHeld = outgoingOrange.SourceHeavyHeld,
+                sourceRbHeld = outgoingOrange.SourceLightHeld,
+                suppressionUntilMs = outgoingOrange.SuppressionUntilMs,
+                indicator = observation.Indicator
+            });
         }
         if (outgoingOrange.SelfOrangeCleared)
         {

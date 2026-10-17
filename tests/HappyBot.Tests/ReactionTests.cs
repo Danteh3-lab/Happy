@@ -420,6 +420,46 @@ static partial class Program
             "only a valid marker frame with no orange can clear the response latch");
     }
 
+    private static void IgnoreOwnOrangeDefaultsOnAndRoundTrips()
+    {
+        var s = new Settings();
+        Require(s.IgnoreOwnOrange, "own-orange suppression must default to on for existing profiles");
+        SettingsCodec.SetCheck(s, "IgnoreOwnOrange", false);
+        Require(!SettingsCodec.GetCheck(s, "IgnoreOwnOrange") && !s.Clone().IgnoreOwnOrange,
+            "the own-orange switch must round-trip through the codec and clone");
+        var live = new Settings();
+        live.CopyLiveSwitchesFrom(s);
+        Require(!live.IgnoreOwnOrange, "the own-orange switch must apply live");
+    }
+
+    private static void OutgoingOrangeGuardYieldsToEnemyDirection()
+    {
+        // Deflect follow-up light opens the window; the enemy answers with an unblockable.
+        var guard = new OutgoingOrangeGuard();
+        guard.RegisterAutomationLight(100);
+        OutgoingOrangeGuardResult enemy = guard.Observe(500, true, true, false, false, incomingDirection: true);
+        Require(!enemy.SuppressesOrange && enemy.EnemyOrangeStarted && !enemy.SelfOrangeLatched,
+            "an orange with an enemy attack direction must never be attributed to the outgoing window");
+        OutgoingOrangeGuardResult flicker = guard.Observe(520, true, true, false, false, incomingDirection: false);
+        Require(!flicker.SuppressesOrange && !flicker.SelfOrangeStarted,
+            "a directionless frame of the same enemy orange must stay the enemy's");
+        OutgoingOrangeGuardResult pressDuring = guard.Observe(540, true, true, false, true, incomingDirection: false);
+        Require(!pressDuring.SuppressesOrange,
+            "pressing RB during an enemy unblockable must not hide it");
+        guard.Observe(560, true, false, false, false);
+        OutgoingOrangeGuardResult own = guard.Observe(600, true, true, false, false);
+        Require(own.SuppressesOrange && own.SelfOrangeStarted,
+            "after the enemy orange clears, a directionless orange in the window is still treated as own");
+
+        // Orange first seen without direction, then the enemy direction resolves.
+        var late = new OutgoingOrangeGuard();
+        late.Observe(100, true, false, false, true);
+        OutgoingOrangeGuardResult early = late.Observe(300, true, true, false, false);
+        OutgoingOrangeGuardResult resolved = late.Observe(320, true, true, false, false, incomingDirection: true);
+        Require(early.SuppressesOrange && !resolved.SuppressesOrange && !resolved.SelfOrangeLatched,
+            "a late enemy direction must hand a mistaken self attribution back to the orange response");
+    }
+
     private static void OutgoingOrangeGuardSuppressesOwnAttackUntilClear()
     {
         var guard = new OutgoingOrangeGuard();

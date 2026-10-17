@@ -16,7 +16,7 @@ internal static class SettingsCodec
     public static readonly string[] CheckKeys =
     {
         "DodgeL", "DodgeH", "Leftdodge", "Rightdodge", "Unblockables", "OrangeLight", "OrangeParry", "Autoblock", "Lightbash",
-        "Parry", "Crushing", "Deflect", "Parry2", "Crushing2", "Nohero", "YourHero", "Legit", "BulwarkFallback",
+        "Parry", "Crushing", "Deflect", "Parry2", "Crushing2", "Nohero", "YourHero", "Legit", "BulwarkFallback", "IgnoreOwnOrange",
         "Warden", "Peacekeeper", "Centurion", "Blackprior", "Gryphon", "Conqueror", "Lawbringer", "Gladiator", "Warmonger",
         "Raider", "Berserker", "Highlander", "Jormungandr", "Warlord", "Valkyrie", "Shaman", "Varangian", "Null",
         "Kensei", "Orochi", "Shinobi", "Hitokiri", "Sohei", "Shugoki", "Nobushi", "Aramusha", "Kyoshin",
@@ -112,6 +112,7 @@ internal static class SettingsCodec
             "YourHero" => s.YourHero,
             "Legit" => s.Legit,
             "BulwarkFallback" => s.BulwarkFallback,
+            "IgnoreOwnOrange" => s.IgnoreOwnOrange,
             _ => s.Ch(key)
         };
     }
@@ -138,6 +139,7 @@ internal static class SettingsCodec
             case "YourHero": s.YourHero = value; break;
             case "Legit": s.Legit = value; break;
             case "BulwarkFallback": s.BulwarkFallback = value; break;
+            case "IgnoreOwnOrange": s.IgnoreOwnOrange = value; break;
             default: s.Chars[key] = value; break;
         }
     }
