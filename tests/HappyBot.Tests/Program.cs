@@ -52,6 +52,7 @@ static partial class Program
             NuxiaTopDeflectIsDisabledForYourHero();
             VisionAnalyzerUsesExplicitBoundsAndPreservesMarkerLoss();
             VisionAnalyzerUsesOriginalRoiAndStrictFlashPixel();
+            VisionAnalyzerToleratesNearFlashColour();
             VisionAnalyzerProfilesStrictFlashAtArmedIndicator();
             VisionAnalyzerGraceScanAcceptsFlashWithoutMarker();
             AnchorGraceKeepsExistingCandidateFlashOnly();

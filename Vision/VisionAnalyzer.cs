@@ -54,6 +54,15 @@ internal sealed class VisionAnalyzer
     internal const int FlashClusterTolerance = 24;
     internal const int FlashClusterMinimumMatches = 4;
 
+    /// <summary>
+    /// The flash renders a point or two off 255,154,141 on most frames, so an
+    /// exact pixel fired late or not at all (Oct 17 training: 6 of 20 lights
+    /// flashed with dozens of near pixels and no exact one). Live parry/deflect
+    /// gating takes a small cluster within this per-channel tolerance instead.
+    /// </summary>
+    internal const int LiveFlashTolerance = 2;
+    internal const int LiveFlashMinimumPixels = 3;
+
     public VisionAnalysisResult Scan(ScreenFrame frame, VisionScanRequest request)
     {
         long trackingGraceAgeMs = request.TrackingGraceAgeMs != 0
@@ -146,6 +155,7 @@ internal sealed class VisionAnalyzer
             return LiveSignalMetric.Empty;
 
         bool red = false, darkRed = false, strictFlash = false, orange = false, orangeFeint = false;
+        int flashPixels = 0;
         Point indicator = new(-1, -1);
         Point strictFlashPoint = new(-1, -1);
         int probeCount = 0;
@@ -194,10 +204,11 @@ internal sealed class VisionAnalyzer
                     indicator = new Point(x, y);
                 }
                 if (!darkRed && pixelR == 255 && pixelG == 41 && pixelB == 34) darkRed = true;
-                if (!strictFlash && pixelR == 255 && pixelG == 154 && pixelB == 141)
+                if (!strictFlash && Math.Abs(pixelR - 255) <= LiveFlashTolerance &&
+                    Math.Abs(pixelG - 154) <= LiveFlashTolerance && Math.Abs(pixelB - 141) <= LiveFlashTolerance)
                 {
-                    strictFlash = true;
-                    strictFlashPoint = new Point(x, y);
+                    if (flashPixels == 0) strictFlashPoint = new Point(x, y);
+                    strictFlash = ++flashPixels >= LiveFlashMinimumPixels;
                 }
                 if (!orange && pixelR == 246 && pixelG == 98 && pixelB == 8) orange = true;
                 if (!orangeFeint && Math.Abs(pixelR - 255) <= 3 && Math.Abs(pixelG - 34) <= 3 &&
@@ -211,6 +222,7 @@ internal sealed class VisionAnalyzer
             }
         }
 
+        if (!strictFlash) strictFlashPoint = new Point(-1, -1);
         ColorProbe probe = includeProbe
             ? new ColorProbe(probeCount, firstProbeX, firstProbeY,
                 closestDistance == int.MaxValue ? "n/a" : $"{closestR},{closestG},{closestB}",

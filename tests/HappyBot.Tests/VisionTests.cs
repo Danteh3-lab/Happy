@@ -217,6 +217,47 @@ static partial class Program
             "a near-color flash cluster must remain noise under the strict parry pixel rule");
     }
 
+    private static void VisionAnalyzerToleratesNearFlashColour()
+    {
+        var analyzer = new VisionAnalyzer();
+        VisionScanRequest request = new(
+            100, true, new Point(140, 240), 2, new Rectangle(100, 220, 80, 80),
+            0, 250, 0, 280, 150, 250, 130, 250,
+            new Rectangle(0, 0, 400, 500), false, true, true, true, false, false, false);
+
+        // Off-by-one/two shades seen in the Oct 17 training frames, none of them exact.
+        ScreenFrame nearFlash = SyntheticClusterFrame(400, 500, Array.Empty<(int x, int y)>(), 0, 0, 0);
+        SetPixel(nearFlash, 120, 260, 255, 153, 141);
+        SetPixel(nearFlash, 121, 260, 254, 156, 142);
+        SetPixel(nearFlash, 120, 261, 253, 154, 139);
+        SetPixel(nearFlash, 110, 260, 255, 49, 41);
+        CombatObservation near = analyzer.Scan(nearFlash, request).Observation;
+        Require(near.LightFlash && near.StrictFlashPoint == new Point(120, 260),
+            "three flash pixels within 2 shades must open the live flash gate without an exact match");
+
+        ScreenFrame twoPixels = SyntheticClusterFrame(400, 500, new[] { (120, 260), (121, 260) }, 255, 154, 141);
+        CombatObservation sparse = analyzer.Scan(twoPixels, request).Observation;
+        Require(!sparse.LightFlash && sparse.StrictFlashPoint == new Point(-1, -1),
+            "fewer than three flash pixels must stay closed and report no flash point");
+
+        ScreenFrame threeShadesOff = SyntheticClusterFrame(400, 500,
+            new[] { (120, 260), (121, 260), (120, 261) }, 255, 157, 141);
+        Require(!analyzer.Scan(threeShadesOff, request).Observation.LightFlash,
+            "pixels 3 shades off the flash colour are outside the live tolerance");
+
+        // The indicator's dark-red phase can carry flash-like pixels; the gate still blocks it.
+        SetPixel(nearFlash, 130, 270, 255, 41, 34);
+        CombatObservation gated = analyzer.Scan(nearFlash, request).Observation;
+        var coordinator = new ReactionCoordinator();
+        coordinator.Tick(gated with { TimestampMs = 90, LightFlash = false }, ReactionCommandKind.Deflect, "F");
+        CoordinatorTick tick = coordinator.Tick(gated, ReactionCommandKind.Deflect, "F");
+        Require(gated.LightFlash && gated.DarkRedGate && tick.Command == null,
+            "a tolerant flash beside a dark-red pixel must not be accepted");
+        CoordinatorTick clean = coordinator.Tick(near with { TimestampMs = 110 }, ReactionCommandKind.Deflect, "F");
+        Require(clean.Command is { Kind: ReactionCommandKind.Deflect, Direction: CombatDirection.Left },
+            "the same flash without dark red must be accepted for the armed candidate");
+    }
+
     private static void VisionAnalyzerProfilesStrictFlashAtArmedIndicator()
     {
         var analyzer = new VisionAnalyzer();
