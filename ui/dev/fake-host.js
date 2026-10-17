@@ -20,6 +20,8 @@ const settings = {
 heroes.forEach((hero) => { settings[hero] = hero === "Orochi"; });
 
 const host = {
+  cloudEmail: "",
+  cloudLastSync: "",
   profile: "Default",
   profiles: ["Default", "Ranked", "Duels — Orochi"],
   profileDirty: false,
@@ -82,6 +84,8 @@ function status() {
     bindingAutoDodge: host.capturing === "AutoDodge", bindingOrangeParry: host.capturing === "OrangeParry",
     bindingAutoParry: host.capturing === "AutoParry",
     visionOverlay: host.visionOverlay, anchorScan: host.anchorScan,
+    cloud: { available: true, signedIn: Boolean(host.cloudEmail), email: host.cloudEmail, busy: false,
+      lastSync: host.cloudLastSync, error: "" },
     telemetry: {
       recording: host.telemetry, label: "Training",
       durationSeconds: host.telemetry ? Math.round((Date.now() - host.telemetryStarted) / 1000) : 0, failures: 0, dropped: 0,
@@ -186,6 +190,20 @@ window.__danbotFakeHost = {
         break;
       case "export-telemetry":
         toast("Telemetry ZIP exported.", "success");
+        break;
+      case "cloud-sign-in":
+      case "cloud-sign-up":
+        host.cloudEmail = message.email;
+        host.cloudLastSync = new Date().toTimeString().slice(0, 5);
+        toast("Signed in as " + message.email + ".", "success");
+        break;
+      case "cloud-sync":
+        host.cloudLastSync = new Date().toTimeString().slice(0, 5);
+        toast("Cloud profiles are up to date.", "success");
+        break;
+      case "cloud-sign-out":
+        host.cloudEmail = "";
+        toast("Signed out. Local profiles stay on this PC.", "info");
         break;
     }
     if (message.type !== "ready") sendStatus();

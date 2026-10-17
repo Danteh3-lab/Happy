@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using HappyBot.App;
 using HappyBot.App.Protocol;
+using HappyBot.Cloud;
 using HappyBot.Shell;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -38,9 +39,12 @@ public sealed class MainForm : Form, IUiSink, IUiDispatcher
         MinimumSize = new Size(900, 620);
 
         _visionOverlay = new VisionOverlayForm(_bot.GetVisionSnapshot, _bot.GetOverlayFeatures);
-        var session = new SettingsSession(new ProfileEditorController(ProfileStore.ForApplication()), _bot);
+        ProfileStore profiles = ProfileStore.ForApplication();
+        var session = new SettingsSession(new ProfileEditorController(profiles), _bot);
+        var cloud = new CloudCoordinator(SupabaseRestApi.ForProject(), DpapiCloudSessionStore.ForApplication(), this,
+            new ProfileStoreLocalProfiles(profiles));
         _controller = new DeckController(_bot, session, this, this, new StaticInputEnvironment(), _visionOverlay,
-            new WavSoundCue(), new WinFormsSaveFilePicker(this), new InputTestRunner());
+            new WavSoundCue(), new WinFormsSaveFilePicker(this), new InputTestRunner(), cloud);
 
         var screen = Screen.PrimaryScreen.Bounds;
         _controller.Initialize(screen.Width, screen.Height);

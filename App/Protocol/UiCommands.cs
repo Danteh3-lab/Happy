@@ -23,6 +23,17 @@ internal sealed record AnchorScanToggleCommand : UiCommand;
 internal sealed record BindCaptureCommand(ControllerToggleAction Action) : UiCommand;
 internal sealed record TelemetryToggleCommand(string Label) : UiCommand;
 internal sealed record TelemetryExportCommand : UiCommand;
+internal sealed record CloudSignInCommand(string Email, string Password) : UiCommand
+{
+    // Keep the password out of logs and exception messages that print the record.
+    public override string ToString() => $"CloudSignInCommand {{ Email = {Email} }}";
+}
+internal sealed record CloudSignUpCommand(string Email, string Password) : UiCommand
+{
+    public override string ToString() => $"CloudSignUpCommand {{ Email = {Email} }}";
+}
+internal sealed record CloudSignOutCommand : UiCommand;
+internal sealed record CloudSyncCommand : UiCommand;
 internal sealed record HelpCommand(HelpTopic Topic) : UiCommand;
 internal sealed record WindowCommand(WindowCommandKind Kind) : UiCommand;
 internal sealed record UnknownCommand(string Type) : UiCommand;
@@ -86,6 +97,10 @@ internal static class UiCommandParser
             UiMessageTypes.Inbound.BindAutoParry => new BindCaptureCommand(ControllerToggleAction.AutoParry),
             UiMessageTypes.Inbound.Telemetry => new TelemetryToggleCommand(ReadString(root, "label", "Other")),
             UiMessageTypes.Inbound.ExportTelemetry => new TelemetryExportCommand(),
+            UiMessageTypes.Inbound.CloudSignIn => new CloudSignInCommand(ReadString(root, "email"), ReadString(root, "password")),
+            UiMessageTypes.Inbound.CloudSignUp => new CloudSignUpCommand(ReadString(root, "email"), ReadString(root, "password")),
+            UiMessageTypes.Inbound.CloudSignOut => new CloudSignOutCommand(),
+            UiMessageTypes.Inbound.CloudSync => new CloudSyncCommand(),
             _ => new UnknownCommand(type)
         };
     }

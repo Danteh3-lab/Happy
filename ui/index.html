@@ -597,6 +597,35 @@
                 </div>
               </article>
 
+              <article class="card" aria-labelledby="cloud-title">
+                <div class="card-head"><div><p class="eyebrow">Account</p><h2 id="cloud-title" class="card-title">Cloud profiles</h2></div><span class="badge" data-bind-state="cloudState"><svg class="icon" aria-hidden="true"><use href="#i-link"/></svg><span data-bind="cloudBadge">Signed out</span></span></div>
+                <p class="card-copy">Back up your profiles to an account and use them on any PC. Profiles stay on this PC as well, and the bot never waits on the cloud.</p>
+                <form class="cloud-form" id="cloud-form" data-bind-show="cloudSignedOut" novalidate>
+                  <div class="field-grid two">
+                    <label class="field">
+                      <span class="field-label">Email</span>
+                      <span class="field-control"><input type="email" id="cloud-email" autocomplete="username" spellcheck="false"></span>
+                    </label>
+                    <label class="field">
+                      <span class="field-label">Password</span>
+                      <span class="field-control"><input type="password" id="cloud-password" autocomplete="current-password"></span>
+                    </label>
+                  </div>
+                  <div class="button-row">
+                    <button class="btn btn-primary" type="submit" data-bind-disabled="cloudBusy">Sign in</button>
+                    <button class="btn btn-secondary" type="button" data-action="cloud-sign-up" data-bind-disabled="cloudBusy">Create account</button>
+                  </div>
+                </form>
+                <div data-bind-show="cloudSignedIn" hidden>
+                  <p class="card-copy">Signed in as <b data-bind="cloudEmail">-</b> · <span data-bind="cloudLastSync">Not synced yet</span></p>
+                  <div class="button-row">
+                    <button class="btn btn-secondary" type="button" data-action="cloud-sync" data-bind-disabled="cloudBusy"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Sync now</button>
+                    <button class="btn btn-secondary" type="button" data-action="cloud-sign-out" data-bind-disabled="cloudBusy">Sign out</button>
+                  </div>
+                </div>
+                <p class="callout" data-state="warn" data-bind-show="cloudErrorShown" hidden><svg class="icon" aria-hidden="true"><use href="#i-warn"/></svg><span data-bind="cloudError"></span></p>
+              </article>
+
               <article class="card" aria-labelledby="app-title">
                 <div class="card-head"><div><p class="eyebrow">Application</p><h2 id="app-title" class="card-title">DANBOT</h2></div><span class="badge mono" data-state="idle" data-bind="version">v2.0.0</span></div>
                 <div class="button-row">

@@ -61,7 +61,7 @@ static partial class Program
                 "parryAttempts", "parriesConfirmed", "parriesUnconfirmed", "injected", "mode", "source", "sourceSlot",
                 "sourceType", "virtualState", "bridge", "loop", "legit", "orangeParry", "autoDodgeBind", "orangeParryBind",
                 "autoParryBind", "bindingAutoDodge", "bindingOrangeParry", "bindingAutoParry", "visionOverlay",
-                "anchorScan", "telemetry"
+                "anchorScan", "telemetry", "cloud"
             };
             string[] actual = status.EnumerateObject().Select(p => p.Name).ToArray();
             Require(actual.OrderBy(x => x).SequenceEqual(expected.OrderBy(x => x)),

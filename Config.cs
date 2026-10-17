@@ -78,6 +78,15 @@ public sealed class ProfileStore
         return sb.ToString();
     }
 
+    /// <summary>When the profile file last changed, or MinValue if it has never been written.</summary>
+    public DateTimeOffset LastWriteUtc(string profileName)
+    {
+        string normalized = NormalizeProfileName(profileName);
+        if (IsDeleted(normalized)) return DateTimeOffset.MinValue;
+        string path = ResolveReadPath(normalized);
+        return File.Exists(path) ? new DateTimeOffset(File.GetLastWriteTimeUtc(path), TimeSpan.Zero) : DateTimeOffset.MinValue;
+    }
+
     public void Write(string profileName, string key, string value)
     {
         WriteAll(profileName, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { [key] = value ?? "" });

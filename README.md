@@ -138,6 +138,28 @@ Important feature switches:
 **Controller & Binds** can bind DS4 buttons to toggle Auto dodge, Orange
 parry, and Auto parry. Everything else is set from the control deck.
 
+## Cloud Profiles
+
+**Diagnostics › Cloud profiles** signs in to a DANBOT account (Supabase) so
+profiles follow you between PCs. Local profile files stay the real copy: the
+bot runs the same offline or signed out, and signing out never deletes them.
+
+- **Sign in** downloads your cloud profiles and uploads the local ones.
+- **Save profile** and **Save as** upload that profile; deleting a profile
+  deletes it from the account too.
+- If a profile changed in both places, the newer copy wins and the other is
+  kept as a new `<name> backup` profile, so nothing is lost.
+- Only the profile settings are synced; machine settings such as
+  `HoldButton` stay on each PC.
+- New accounts must confirm their email before the first sign-in.
+
+The app ships only the project URL and its publishable key
+(`Cloud/SupabaseProject.cs`). Row-level security on `public.bot_profiles`
+limits every account to its own rows. The password goes over HTTPS and is
+never stored; the rotating refresh token is kept in
+`%LOCALAPPDATA%\DANBOT\cloud-session.bin`, encrypted with Windows DPAPI for
+the current user.
+
 ## Vision Overlay
 
 Use **Vision overlay** in Diagnostics (or the Dashboard quick toggles) to show DANBOT's diagnostic HUD. The overlay is click-through, hidden
@@ -184,6 +206,7 @@ ui/ (HTML/CSS/ES modules, served from https://danbot.app.example/)
 MainForm         WebView2 host: window chrome, timers, message routing
   → DeckController   all control-deck behavior, UI-free and unit-tested
       → SettingsSession  draft vs live settings (switches live, timings on Apply)
+      → CloudCoordinator account sign-in and profile sync (Cloud/, Supabase REST)
       → BotCore          detection and reactions
 ```
 
@@ -194,7 +217,8 @@ UI protocol v1 — page → host: `ready`, `settings`, `start`, `apply`,
 `toggle-pause`, `resolution`, `scan`, `test`, `profile-select`, `profile-load`,
 `profile-save`, `profile-save-as`, `profile-delete`, `orange-parry`,
 `vision-overlay`, `anchor-scan`, `bind-auto-dodge`, `bind-orange-parry`,
-`bind-auto-parry`, `telemetry`, `export-telemetry`, `howto`, `readme`, `reload`,
+`bind-auto-parry`, `telemetry`, `export-telemetry`, `cloud-sign-in`,
+`cloud-sign-up`, `cloud-sign-out`, `cloud-sync`, `howto`, `readme`, `reload`,
 `minimize`, `close`, `drag`. Host → page: `init` (settings, status, protocol),
 `status` (every 200 ms), `settings`, `apply-result`, `toast`, `dialog`.
 

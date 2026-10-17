@@ -211,6 +211,19 @@ export function deriveView(settings, status, flags) {
       Number(telemetry.failures || 0) + " failures · " + Number(telemetry.dropped || 0) + " dropped"
     : "Not recording";
 
+  // Cloud profiles
+  const cloud = st.cloud || {};
+  const signedIn = cloud.signedIn === true;
+  vm.cloudSignedIn = signedIn;
+  vm.cloudSignedOut = !signedIn;
+  vm.cloudBusy = cloud.busy === true || cloud.available === false;
+  vm.cloudEmail = String(cloud.email || "-");
+  vm.cloudLastSync = cloud.lastSync ? "Last synced " + cloud.lastSync : "Not synced yet";
+  vm.cloudError = String(cloud.error || "");
+  vm.cloudErrorShown = vm.cloudError.length > 0;
+  vm.cloudBadge = cloud.available === false ? "Unavailable" : cloud.busy ? "Syncing" : signedIn ? "Signed in" : "Signed out";
+  vm.cloudState = cloud.busy ? "busy" : vm.cloudErrorShown ? "warn" : signedIn ? "ok" : "idle";
+
   // Controller binds
   for (const [key, bindKey, captureKey] of [
     ["AutoDodge", "autoDodgeBind", "bindingAutoDodge"],

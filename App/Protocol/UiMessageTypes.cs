@@ -39,6 +39,10 @@ internal static class UiMessageTypes
         public const string BindAutoParry = "bind-auto-parry";
         public const string Telemetry = "telemetry";
         public const string ExportTelemetry = "export-telemetry";
+        public const string CloudSignIn = "cloud-sign-in";
+        public const string CloudSignUp = "cloud-sign-up";
+        public const string CloudSignOut = "cloud-sign-out";
+        public const string CloudSync = "cloud-sync";
 
         // Legacy aliases still accepted from older pages.
         public const string LegacySave = "save";

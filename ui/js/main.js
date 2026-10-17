@@ -325,7 +325,32 @@ const actions = {
   "bind-auto-parry": () => send(MSG.BIND_AUTO_PARRY),
   telemetry: () => send(MSG.TELEMETRY, { label: $("#telemetry-label").value }),
   "export-telemetry": () => send(MSG.EXPORT_TELEMETRY),
+  "cloud-sign-in": () => sendCloudCredentials(MSG.CLOUD_SIGN_IN),
+  "cloud-sign-up": () => sendCloudCredentials(MSG.CLOUD_SIGN_UP),
+  "cloud-sign-out": () => send(MSG.CLOUD_SIGN_OUT),
+  "cloud-sync": () => send(MSG.CLOUD_SYNC),
 };
+
+// The password goes straight to the host (which sends it to Supabase over
+// HTTPS) and is cleared from the page; only a refresh token is ever stored.
+function sendCloudCredentials(type) {
+  const email = $("#cloud-email").value.trim();
+  const passwordField = $("#cloud-password");
+  const password = passwordField.value;
+  if (!email || !password) {
+    toast("Enter an email and password.", "error");
+    return;
+  }
+  send(type, { email, password });
+  passwordField.value = "";
+}
+
+// Sign in runs on submit, so Enter and the button take the same path; the
+// browser never navigates.
+$("#cloud-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  actions["cloud-sign-in"]();
+});
 
 document.addEventListener("click", (event) => {
   const target = event.target.closest("[data-action]");

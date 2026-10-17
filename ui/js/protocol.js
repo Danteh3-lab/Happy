@@ -31,6 +31,10 @@ export const MSG = Object.freeze({
   BIND_AUTO_PARRY: "bind-auto-parry",
   TELEMETRY: "telemetry",
   EXPORT_TELEMETRY: "export-telemetry",
+  CLOUD_SIGN_IN: "cloud-sign-in",
+  CLOUD_SIGN_UP: "cloud-sign-up",
+  CLOUD_SIGN_OUT: "cloud-sign-out",
+  CLOUD_SYNC: "cloud-sync",
 });
 
 // Host → page

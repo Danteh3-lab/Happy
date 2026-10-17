@@ -74,6 +74,19 @@ internal sealed record TelemetryDto(
     [property: JsonPropertyName("failures")] long Failures,
     [property: JsonPropertyName("dropped")] long Dropped);
 
+/// <summary>Account and sync state for the Cloud profiles card.</summary>
+internal sealed record CloudStatusDto
+{
+    public static readonly CloudStatusDto Unavailable = new();
+
+    [JsonPropertyName("available")] public bool Available { get; init; }
+    [JsonPropertyName("signedIn")] public bool SignedIn { get; init; }
+    [JsonPropertyName("email")] public string Email { get; init; } = "";
+    [JsonPropertyName("busy")] public bool Busy { get; init; }
+    [JsonPropertyName("lastSync")] public string LastSync { get; init; } = "";
+    [JsonPropertyName("error")] public string Error { get; init; } = "";
+}
+
 /// <summary>The 200 ms status payload. Field names are the page contract.</summary>
 internal sealed class StatusDto
 {
@@ -119,6 +132,7 @@ internal sealed class StatusDto
     [JsonPropertyName("visionOverlay")] public bool VisionOverlay { get; init; }
     [JsonPropertyName("anchorScan")] public bool AnchorScan { get; init; }
     [JsonPropertyName("telemetry")] public TelemetryDto Telemetry { get; init; }
+    [JsonPropertyName("cloud")] public CloudStatusDto Cloud { get; init; } = CloudStatusDto.Unavailable;
 }
 
 internal static class UiJson

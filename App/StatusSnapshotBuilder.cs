@@ -9,7 +9,8 @@ internal static class StatusSnapshotBuilder
     internal readonly record struct UiFlags(
         ControllerToggleAction Capturing,
         bool VisionOverlayVisible,
-        bool AnchorScanVisible);
+        bool AnchorScanVisible,
+        CloudStatusDto Cloud = null);
 
     public static StatusDto Build(BotCore bot, SettingsSession session, IInputEnvironment input, UiFlags flags)
     {
@@ -19,6 +20,7 @@ internal static class StatusSnapshotBuilder
         int parryCount = bot.ParryCount;
         return new StatusDto
         {
+            Cloud = flags.Cloud ?? CloudStatusDto.Unavailable,
             Version = BuildInfo.Version,
             Build = BuildInfo.Configuration,
             Profile = session.ActiveProfile,

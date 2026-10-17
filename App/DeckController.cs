@@ -20,11 +20,12 @@ internal sealed class DeckController : IDisposable
     private readonly InputTestRunner _tests;
     private readonly ControllerBindingCapture _capture = new();
     private readonly TelemetryCoordinator _telemetry;
+    private readonly CloudCoordinator _cloud;
     private bool _directSourceWarningShown;
 
     public DeckController(BotCore bot, SettingsSession session, IUiSink ui, IUiDispatcher dispatcher,
         IInputEnvironment input, IVisionOverlay overlay, ISoundCue sound, ISaveFilePicker savePicker,
-        InputTestRunner tests)
+        InputTestRunner tests, CloudCoordinator cloud = null)
     {
         _bot = bot ?? throw new ArgumentNullException(nameof(bot));
         _session = session ?? throw new ArgumentNullException(nameof(session));
@@ -36,6 +37,8 @@ internal sealed class DeckController : IDisposable
         _savePicker = savePicker ?? throw new ArgumentNullException(nameof(savePicker));
         _tests = tests ?? throw new ArgumentNullException(nameof(tests));
         _telemetry = new TelemetryCoordinator(bot, dispatcher, Toast, PostStatus);
+        _cloud = cloud;
+        _cloud?.Attach(Toast, PostStatus, OnCloudProfilesWritten);
     }
 
     public bool VisionOverlayVisible { get; private set; }
@@ -49,6 +52,7 @@ internal sealed class DeckController : IDisposable
     {
         _session.Initialize(screenWidth.ToString(), screenHeight.ToString());
         _bot.UpdateResolution(screenWidth, screenHeight);
+        _cloud?.Restore();
     }
 
     public void Handle(UiCommand command)
@@ -88,6 +92,7 @@ internal sealed class DeckController : IDisposable
                     _session.SaveActive();
                     PostStatus();
                     Toast($"Profile saved: {_session.ActiveProfile}.", "success");
+                    _cloud?.UploadProfile(_session.ActiveProfile);
                     break;
                 case ProfileLoadCommand c:
                     OnProfileLoaded(_session.TryLoadActive(c.Discard, c.DraftDirty), statusOnError: true);
@@ -124,6 +129,18 @@ internal sealed class DeckController : IDisposable
                     break;
                 case TelemetryExportCommand:
                     _telemetry.Export(_savePicker);
+                    break;
+                case CloudSignInCommand c:
+                    WithCloud(cloud => cloud.SignIn(c.Email, c.Password));
+                    break;
+                case CloudSignUpCommand c:
+                    WithCloud(cloud => cloud.SignUp(c.Email, c.Password));
+                    break;
+                case CloudSignOutCommand:
+                    WithCloud(cloud => cloud.SignOut());
+                    break;
+                case CloudSyncCommand:
+                    WithCloud(cloud => cloud.Sync());
                     break;
             }
         }
@@ -178,7 +195,7 @@ internal sealed class DeckController : IDisposable
     }
 
     public StatusDto BuildStatus() => StatusSnapshotBuilder.Build(_bot, _session, _input,
-        new StatusSnapshotBuilder.UiFlags(_capture.Capturing, VisionOverlayVisible, AnchorScanVisible));
+        new StatusSnapshotBuilder.UiFlags(_capture.Capturing, VisionOverlayVisible, AnchorScanVisible, _cloud?.Status));
 
     public void Dispose() => _tests.Dispose();
 
@@ -304,6 +321,7 @@ internal sealed class DeckController : IDisposable
         SendSettings();
         PostStatus();
         Toast($"Profile saved as: {_session.ActiveProfile}.", "success");
+        _cloud?.UploadProfile(_session.ActiveProfile);
     }
 
     private void OnProfileDelete(string profileName, bool discard, bool draftDirty)
@@ -318,7 +336,33 @@ internal sealed class DeckController : IDisposable
         SendSettings();
         PostStatus();
         // Validated inside Delete, so this cannot throw on the success path.
-        Toast($"Profile deleted: {ProfileStore.NormalizeProfileName(profileName)}.", "success");
+        string deleted = ProfileStore.NormalizeProfileName(profileName);
+        Toast($"Profile deleted: {deleted}.", "success");
+        _cloud?.DeleteProfile(deleted);
+    }
+
+    private void WithCloud(Action<CloudCoordinator> action)
+    {
+        if (_cloud == null)
+        {
+            Toast("Cloud profiles are not available in this build.", "error");
+            return;
+        }
+        action(_cloud);
+    }
+
+    /// <summary>
+    /// Sync wrote local profile files. Reload the active one only when the
+    /// draft has no unsaved edits, so a download never discards work.
+    /// </summary>
+    private void OnCloudProfilesWritten(IReadOnlyCollection<string> names)
+    {
+        bool activeChanged = names.Contains(_session.ActiveProfile, StringComparer.OrdinalIgnoreCase);
+        if (activeChanged && !_session.IsDirty && _session.TryLoadActive(discard: true, draftDirty: false) == null)
+            SendSettings();
+        else if (activeChanged)
+            Toast($"A newer cloud copy of {_session.ActiveProfile} was saved. Reload the profile to use it.", "warning");
+        PostStatus();
     }
 
     private void ToggleOrangeParry()

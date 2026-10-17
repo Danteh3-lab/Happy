@@ -110,6 +110,11 @@ static partial class Program
             DeckControllerOrangeParryUpdatesLiveAndDraft();
             DeckControllerOverlayAndTelemetryReportFailures();
             DeckControllerBindsAndTogglesFromController();
+            ProfileSyncPlannerCoversEveryCase();
+            SupabaseRestApiShapesRequestsAndErrors();
+            DpapiSessionStoreRoundTripsAndRejectsTampering();
+            CloudCoordinatorSignInSyncsAndRecovers();
+            DeckControllerUsesCloudForProfiles();
             ControllerBindingCaptureEdgesAndThresholds();
             OverlayThemeMatchesUiTokens();
             VisionOverlayDrawsOpaqueHud();
