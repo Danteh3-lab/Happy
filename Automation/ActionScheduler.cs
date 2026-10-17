@@ -75,12 +75,15 @@ internal sealed class ActionScheduler : IDisposable
         }
     }
 
-    public bool CancelPending(string reason, bool force, Action<ActionSchedulerSnapshot> recordCancellation)
+    /// <param name="candidateFilter">When set, only cancels work whose candidate id it accepts.</param>
+    public bool CancelPending(string reason, bool force, Action<ActionSchedulerSnapshot> recordCancellation,
+        Func<long, bool> candidateFilter = null)
     {
         ActionSchedulerSnapshot snapshot;
         lock (_sync)
         {
             if (_activeOperation == 0 || (_committed && !force)) return false;
+            if (candidateFilter != null && !candidateFilter(_candidateId)) return false;
             snapshot = SnapshotLocked();
             _cts?.Cancel();
         }

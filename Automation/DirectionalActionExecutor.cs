@@ -37,7 +37,17 @@ internal sealed class DirectionalActionExecutor : IDisposable
     public void ProcessOrangeObservation(CombatObservation observation, bool suppressOrange) =>
         _orange.ProcessObservation(observation, suppressOrange);
 
-    public void CancelPendingAction(string reason, bool force = false)
+    public void CancelPendingAction(string reason, bool force = false) =>
+        CancelPending(reason, force, null);
+
+    /// <summary>
+    /// Cancels pending reaction work only. Orange responses run under
+    /// candidate 0 and do not depend on an F/LT/E hold.
+    /// </summary>
+    public void CancelPendingReaction(string reason) =>
+        CancelPending(reason, false, candidateId => candidateId != 0);
+
+    private void CancelPending(string reason, bool force, Func<long, bool> candidateFilter)
     {
         _scheduler.CancelPending(reason, force, snapshot =>
             _host.RecordTelemetry("action-cancel-request", new
@@ -46,7 +56,7 @@ internal sealed class DirectionalActionExecutor : IDisposable
                 candidateId = snapshot.CandidateId,
                 state = snapshot.State,
                 force
-            }));
+            }), candidateFilter);
     }
 
     public void Dispose() => _scheduler.Dispose();

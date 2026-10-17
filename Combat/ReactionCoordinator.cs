@@ -103,6 +103,13 @@ internal static class OrangeResponseResolver
 /// </summary>
 internal static class OrangeResponseLatch
 {
+    /// <summary>
+    /// Orange detection drops out for single frames mid-attack (10-30ms gaps
+    /// in telemetry). A latch only clears after this long of continuous clear
+    /// frames, so one dropout cannot re-arm a second response to the same attack.
+    /// </summary>
+    public const int ClearDebounceMs = 100;
+
     public static bool IsConfirmedClear(bool markerFound, bool orangeIndicator) =>
         markerFound && !orangeIndicator;
 }
@@ -139,6 +146,7 @@ internal sealed class OutgoingOrangeGuard
     private bool _selfOrangeSourceHeavy;
     private bool _selfOrangeSourceLight;
     private bool _enemyOrangeLatched;
+    private long _clearStartedAtMs;
 
     private static string SourceName(bool sourceHeavy, bool sourceLight) =>
         sourceHeavy && sourceLight ? "RT+RB" : sourceHeavy ? "RT" : sourceLight ? "RB" : "";
@@ -185,9 +193,15 @@ internal sealed class OutgoingOrangeGuard
                 _windowSourceLightSeen = false;
             }
 
+            // Marker loss is unknown: it neither starts nor resets the clear debounce.
+            bool clearFrame = OrangeResponseLatch.IsConfirmedClear(markerFound, orangeIndicator);
+            if (markerFound && orangeIndicator) _clearStartedAtMs = 0;
+            else if (clearFrame && _clearStartedAtMs == 0) _clearStartedAtMs = now;
+            bool debouncedClear = clearFrame && now - _clearStartedAtMs >= OrangeResponseLatch.ClearDebounceMs;
+
             bool selfOrangeCleared = false;
             string clearedSource = "";
-            if (_selfOrangeLatched && OrangeResponseLatch.IsConfirmedClear(markerFound, orangeIndicator))
+            if (_selfOrangeLatched && debouncedClear)
             {
                 clearedSource = SourceName(_selfOrangeSourceHeavy, _selfOrangeSourceLight);
                 _selfOrangeLatched = false;
@@ -196,7 +210,7 @@ internal sealed class OutgoingOrangeGuard
                 selfOrangeCleared = true;
             }
 
-            if (_enemyOrangeLatched && OrangeResponseLatch.IsConfirmedClear(markerFound, orangeIndicator))
+            if (_enemyOrangeLatched && debouncedClear)
                 _enemyOrangeLatched = false;
 
             bool windowActive = now < _suppressionUntilMs;

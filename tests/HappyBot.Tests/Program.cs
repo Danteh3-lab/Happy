@@ -36,6 +36,10 @@ static partial class Program
             IgnoreOwnOrangeDefaultsOnAndRoundTrips();
             OutgoingOrangeGuardSuppressesOwnAttackUntilClear();
             OutgoingOrangeGuardYieldsToEnemyDirection();
+            OutgoingOrangeGuardDebouncesClear();
+            OrangeFlickerDoesNotRepeatResponse();
+            OrangeFlickerDuringDelayDoesNotDropResponse();
+            HoldReleaseCancelsReactionsButNotOrange();
             OutgoingOrangeGuardAutomationLightSuppressesUntilClear();
             OutgoingOrangeGuardAutomationHeavySuppressesUntilClear();
             FailedLegitDecisionLeavesCandidateAvailableForGuard();

@@ -605,7 +605,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
 
         _actions.ProcessOrangeObservation(observation, outgoingOrange.SuppressesOrange);
         if (!observation.EHeld && !observation.FHeld)
-            _actions.CancelPendingAction("hold-released");
+            _actions.CancelPendingReaction("hold-released");
         CombatObservation effectiveObservation = outgoingOrange.SuppressesOrange
             ? observation with { OrangeIndicator = false, OrangeFeint = false }
             : observation;

@@ -447,7 +447,8 @@ static partial class Program
         Require(!pressDuring.SuppressesOrange,
             "pressing RB during an enemy unblockable must not hide it");
         guard.Observe(560, true, false, false, false);
-        OutgoingOrangeGuardResult own = guard.Observe(600, true, true, false, false);
+        guard.Observe(660, true, false, false, false);
+        OutgoingOrangeGuardResult own = guard.Observe(700, true, true, false, false);
         Require(own.SuppressesOrange && own.SelfOrangeStarted,
             "after the enemy orange clears, a directionless orange in the window is still treated as own");
 
@@ -468,8 +469,9 @@ static partial class Program
         OutgoingOrangeGuardResult ownOrange = guard.Observe(1400, true, true, false);
         OutgoingOrangeGuardResult afterRelease = guard.Observe(1800, true, true, false);
         OutgoingOrangeGuardResult markerLoss = guard.Observe(1810, false, false, false);
-        OutgoingOrangeGuardResult clear = guard.Observe(1820, true, false, false);
-        OutgoingOrangeGuardResult nextEnemy = guard.Observe(1900, true, true, false);
+        guard.Observe(1820, true, false, false);
+        OutgoingOrangeGuardResult clear = guard.Observe(1920, true, false, false);
+        OutgoingOrangeGuardResult nextEnemy = guard.Observe(2000, true, true, false);
         OutgoingOrangeGuardResult noSource = new OutgoingOrangeGuard().Observe(100, true, true, false);
 
         Require(attack.WindowActive && !attack.SelfOrangeLatched,
@@ -515,11 +517,12 @@ static partial class Program
         Require(markerLoss.SuppressesOrange && markerLoss.SelfOrangeLatched,
             "marker loss must not clear the automation-light orange latch");
 
-        OutgoingOrangeGuardResult clear = guard.Observe(1601, true, false, false, false);
+        guard.Observe(1601, true, false, false, false);
+        OutgoingOrangeGuardResult clear = guard.Observe(1701, true, false, false, false);
         Require(clear.SelfOrangeCleared && !clear.SuppressesOrange,
             "a confirmed clear after the automation window must release suppression");
 
-        OutgoingOrangeGuardResult nextEnemy = guard.Observe(1700, true, true, false, false);
+        OutgoingOrangeGuardResult nextEnemy = guard.Observe(1800, true, true, false, false);
         Require(!nextEnemy.SuppressesOrange && !nextEnemy.SelfOrangeStarted,
             "a new orange after confirmed clear and window expiry must be eligible again");
     }
@@ -537,11 +540,12 @@ static partial class Program
         Require(markerLoss.SuppressesOrange && markerLoss.SelfOrangeLatched,
             "marker loss must not clear the automation-heavy orange latch");
 
-        OutgoingOrangeGuardResult clear = guard.Observe(1601, true, false, false, false);
+        guard.Observe(1601, true, false, false, false);
+        OutgoingOrangeGuardResult clear = guard.Observe(1701, true, false, false, false);
         Require(clear.SelfOrangeCleared && !clear.SuppressesOrange,
             "a confirmed clear after the automation-heavy window must release suppression");
 
-        OutgoingOrangeGuardResult nextEnemy = guard.Observe(1700, true, true, false, false);
+        OutgoingOrangeGuardResult nextEnemy = guard.Observe(1800, true, true, false, false);
         Require(!nextEnemy.SuppressesOrange && !nextEnemy.SelfOrangeStarted,
             "a new orange after confirmed clear and window expiry must be eligible again");
     }

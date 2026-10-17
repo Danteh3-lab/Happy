@@ -20,6 +20,7 @@ internal sealed class OrangeResponseController
     private bool _orangeFeintConsumed;
     private long _orangeLastActionTick;
     private long _orangeLastSeen;
+    private long _orangeClearStartedAt;
     private volatile bool _orangeMustClear;
 
     public OrangeResponseController(
@@ -40,6 +41,7 @@ internal sealed class OrangeResponseController
         if (!observation.MarkerFound) return;
 
         long now = observation.TimestampMs;
+        if (observation.OrangeFeint || observation.OrangeIndicator) _orangeClearStartedAt = 0;
         if (observation.OrangeFeint)
         {
             if (_orangeFeintConsumed) return;
@@ -105,7 +107,10 @@ internal sealed class OrangeResponseController
 
     private void HandleClearFrame(long now)
     {
-        _orangeMustClear = false;
+        // A single dropout frame must not re-arm (or, during the response
+        // delay, silently cancel) the response to the same orange.
+        if (_orangeClearStartedAt == 0) _orangeClearStartedAt = now;
+        if (now - _orangeClearStartedAt >= OrangeResponseLatch.ClearDebounceMs) _orangeMustClear = false;
         if (Interlocked.Read(ref _orangeFeintLastSeen) == 0) return;
         if (_orangeFeintClearStartedAt == 0)
         {
