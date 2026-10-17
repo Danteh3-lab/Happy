@@ -24,36 +24,31 @@ This avoids the input-device switching lag caused by exposing both the source co
 
 ## Build
 
+The app ships as one self-contained file:
+
 ```powershell
-dotnet restore
-dotnet build HappyBot.csproj --configuration Release
+dotnet publish HappyBot.csproj -p:PublishProfile=SingleExe
 ```
 
-The executable is written to:
+This writes `publish\DANBOT.exe` (about 50 MB). It bundles the .NET runtime,
+the control deck UI and the WebView2 loader, so the PC needs no .NET install;
+it still needs the ViGEmBus driver and the WebView2 runtime (built into
+Windows 10/11). Profiles, settings, telemetry and WebView2 data live in
+`%LOCALAPPDATA%\DANBOT`, so the exe can be moved or replaced freely.
 
-```text
-bin\Release\net10.0-windows\HappyBot.exe
-```
-
-`HappyBot-DirectDS4.bat` starts the Release build. If only a Debug build
-exists, it falls back to `bin\Debug\net10.0-windows\HappyBot.exe`.
+For development, `dotnet build HappyBot.csproj` still produces the regular
+`bin\<Configuration>\net10.0-windows\HappyBot.exe`.
 
 ## Run
 
-Run `HappyBot-DirectDS4.bat` from the repository root after building:
-
-```powershell
-.\HappyBot-DirectDS4.bat
-```
-
-HappyBot reads the physical DualShock 4 HID reports directly and merges them
-into a single ViGEm Xbox controller. Close DS4Windows and any other
+Double-click `DANBOT.exe`. It reads the physical DualShock 4 HID reports
+directly and merges them into a single ViGEm Xbox controller. Close DS4Windows and any other
 virtual-pad tool first, or the game sees a second controller.
 
 Recommended startup order:
 
 1. Connect the DS4 and hide it from the game with HidHide (see below).
-2. Run `HappyBot-DirectDS4.bat`.
+2. Start `DANBOT.exe`.
 3. Confirm the Dashboard shows **Virtual controller: Ready**, and that **Controller & Binds › Input bridge** reports Source `ON`.
 4. Start or restart the game after the virtual controller exists.
 
@@ -61,8 +56,9 @@ The bot does not need administrator rights. Driver installation and HidHide conf
 
 ## HidHide Setup
 
-Hide the physical Sony controller and add `HappyBot.exe` to HidHide's
-whitelist so it can still read the hidden HID device. Do not whitelist the
+Hide the physical Sony controller and add `DANBOT.exe` to HidHide's
+whitelist so it can still read the hidden HID device. HidHide matches the full
+path, so add the exe again after moving it. Do not whitelist the
 game: it should see only HappyBot's merged output controller. Reconnect the
 controller after changing HidHide settings.
 

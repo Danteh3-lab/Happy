@@ -95,7 +95,10 @@ public sealed class MainForm : Form, IUiSink, IUiDispatcher
     {
         try
         {
-            string userDataFolder = Path.Combine(AppContext.BaseDirectory, "WebView2");
+            // Not next to the exe: a single-file build runs from a temporary unpack folder.
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string userDataFolder = Path.Combine(string.IsNullOrWhiteSpace(appData) ? AppContext.BaseDirectory : appData,
+                "DANBOT", "WebView2");
             Directory.CreateDirectory(userDataFolder);
             var environment = await CoreWebView2Environment.CreateAsync(null, userDataFolder);
             await _webView.EnsureCoreWebView2Async(environment);
