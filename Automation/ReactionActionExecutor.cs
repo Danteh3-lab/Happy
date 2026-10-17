@@ -37,6 +37,14 @@ internal interface IAutomationHost
 /// </summary>
 internal sealed class ReactionActionExecutor
 {
+    /// <summary>
+    /// Deflects have 100ms start-up and close by 300ms (side dodges lose them to
+    /// i-frames at 166ms). A light or heavy pressed inside that span turns the
+    /// dodge into a dodge attack, so the follow-up waits until the window has
+    /// closed; it then lands in the deflect's 500ms all-block as the counter.
+    /// </summary>
+    internal const int DeflectFollowUpDelayMs = 300;
+
     private readonly IAutomationHost _host;
     private readonly ActionScheduler _scheduler;
     private readonly IParryRollSource _parryRolls;
@@ -129,8 +137,11 @@ internal sealed class ReactionActionExecutor
 
     private void QueueDirectionalAction(ReactionCommand command)
     {
+        // Queued on the frame that accepted the flash, so delays measure from
+        // the flash instead of from whenever the worker gets a thread.
+        long flashTimestamp = PreciseDelay.Now;
         _scheduler.TrySchedule(command.CandidateId, "ARMED " + command.Kind,
-            token => ExecuteDirectionalActionAsync(command, token),
+            token => ExecuteDirectionalActionAsync(command, flashTimestamp, token),
             snapshot => _host.RecordTelemetry("action-cancelled", new
             {
                 candidateId = command.CandidateId,
@@ -139,13 +150,13 @@ internal sealed class ReactionActionExecutor
             }));
     }
 
-    private async Task<bool> ExecuteDirectionalActionAsync(ReactionCommand command, CancellationToken token)
+    private async Task<bool> ExecuteDirectionalActionAsync(ReactionCommand command, long flashTimestamp, CancellationToken token)
     {
         if (command.Kind == ReactionCommandKind.Parry)
         {
             int delay = Math.Max(0, _host.Settings.ParryDelay);
             _host.SetVisionReaction("PARRY READY", command.Hold + " hold + flash gate", DirectionName(command.Direction), 900, delay);
-            await Task.Delay(delay, token);
+            await PreciseDelay.WaitUntilAsync(flashTimestamp, delay, token);
             if (!CanCommitAction(command, token)) return false;
             _scheduler.SetCommitted(true);
             if (!_host.Input.MouseClick(Input.VK_RBUTTON))
@@ -170,12 +181,25 @@ internal sealed class ReactionActionExecutor
         {
             int delay = command.Direction == CombatDirection.Left ? _host.Settings.Left
                 : command.Direction == CombatDirection.Right ? _host.Settings.Right : _host.Settings.TopDeflect;
-            await Task.Delay(Math.Max(0, delay), token);
+            await PreciseDelay.WaitUntilAsync(flashTimestamp, Math.Max(0, delay), token);
             if (!CanCommitAction(command, token)) return false;
             _scheduler.SetCommitted(true);
             int followUpInput = _host.IsYourChar("Orochi") ? Input.VK_RBUTTON : Input.VK_LBUTTON;
             string followUpName = followUpInput == Input.VK_RBUTTON ? "RT HEAVY" : "RB LIGHT";
-            if (SendDeflect(command.Direction) && _host.Input.MouseClick(followUpInput))
+            long dodgeTimestamp = PreciseDelay.Now;
+            bool dodgeSent = SendDeflect(command.Direction);
+            _host.RecordTelemetry("deflect-timing", new
+            {
+                candidateId = command.CandidateId,
+                direction = command.Direction.ToString(),
+                configuredDelayMs = delay,
+                flashToDodgeMs = Math.Round(PreciseDelay.ElapsedMs(flashTimestamp, dodgeTimestamp), 1),
+                followUpAfterDodgeMs = DeflectFollowUpDelayMs,
+                dodgeSent
+            });
+            if (dodgeSent)
+                await PreciseDelay.WaitUntilAsync(dodgeTimestamp, DeflectFollowUpDelayMs, token);
+            if (dodgeSent && _host.Input.MouseClick(followUpInput))
             {
                 if (followUpInput == Input.VK_LBUTTON)
                     _host.RegisterAutomationLight();

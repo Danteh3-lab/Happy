@@ -74,6 +74,7 @@ static partial class Program
             ParryConfirmationTrackerRespectsTimingAndScaledThresholds();
             DeflectSendsLightOnlyAfterSuccessfulDodge();
             OrochiDeflectSendsHeavyAfterSuccessfulDodge();
+            PreciseDelayLandsOnTarget();
             Ds4UsbReportMapsToXboxState();
             Ds4BluetoothReportMapsToXboxState();
             Ds4MalformedReportIsRejected();

@@ -251,6 +251,11 @@ static partial class Program
         var successExecutor = new ReactionActionExecutor(successHost, successScheduler, new FixedRollSource(0));
         successExecutor.QueueReaction(new ReactionCommand(104, ReactionCommandKind.Deflect, "F", CombatDirection.Left));
 
+        Require(successInput.Events.Contains("tap:" + Input.VK_SPACE) &&
+                !successInput.Events.Contains("click:" + Input.VK_LBUTTON),
+            "the deflect light must wait out the deflect window instead of turning the dodge into a dodge attack");
+        Require(SpinWait.SpinUntil(() => successHost.VisionStates.Contains("DEFLECT + LIGHT SENT"), 2000),
+            "the deflect light should follow once the deflect window has closed");
         int dodgeIndex = successInput.Events.IndexOf("tap:" + Input.VK_SPACE);
         int lightIndex = successInput.Events.IndexOf("click:" + Input.VK_LBUTTON);
         Require(dodgeIndex >= 0 && lightIndex > dodgeIndex,
@@ -284,9 +289,27 @@ static partial class Program
         var undeliveredScheduler = new ActionScheduler(undeliveredHost.ShutdownToken);
         var undeliveredExecutor = new ReactionActionExecutor(undeliveredHost, undeliveredScheduler, new FixedRollSource(0));
         undeliveredExecutor.QueueReaction(new ReactionCommand(106, ReactionCommandKind.Deflect, "F", CombatDirection.Left));
+        Require(SpinWait.SpinUntil(() => undeliveredHost.VisionStates.Contains("DEFLECT FAILED"), 2000),
+            "an undelivered RB light should publish the deflect failure");
         Require(undeliveredHost.AutomationLightRegistrations == 0,
             "an undelivered RB light must not register outgoing-orange suppression");
         undeliveredScheduler.Dispose();
+    }
+
+    private static void PreciseDelayLandsOnTarget()
+    {
+        for (int i = 0; i < 5; i++)
+        {
+            long start = PreciseDelay.Now;
+            PreciseDelay.WaitUntilAsync(start, 55, CancellationToken.None).GetAwaiter().GetResult();
+            double elapsed = PreciseDelay.ElapsedMs(start, PreciseDelay.Now);
+            Require(elapsed >= 55 && elapsed < 60,
+                $"a 55ms reaction delay should land within 5ms of target, not the timer tick (took {elapsed:F1}ms)");
+        }
+
+        long past = PreciseDelay.Now - System.Diagnostics.Stopwatch.Frequency;
+        Require(PreciseDelay.WaitUntilAsync(past, 55, CancellationToken.None).IsCompletedSuccessfully,
+            "a delay whose moment has already passed must complete synchronously");
     }
 
     private static void OrochiDeflectSendsHeavyAfterSuccessfulDodge()
