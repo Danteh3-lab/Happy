@@ -23,7 +23,6 @@ public sealed class BotCore : IAutomationHost, IDisposable
     // observe a marker flag from one frame with geometry from another.
     public bool MarkerFound => ReadTrackingSnapshot().MarkerFound;
     public volatile bool AttackIndicator;
-    public volatile bool EHeld;
     public volatile bool FHeld;
     public volatile bool OrangeParry;
     public volatile int ParryCount;
@@ -132,7 +131,6 @@ public sealed class BotCore : IAutomationHost, IDisposable
     bool IAutomationHost.MarkerFound => MarkerFound;
     bool IAutomationHost.OrangeParryEnabled => OrangeParry;
     OutgoingOrangeGuardResult IAutomationHost.OutgoingOrangeState => _outgoingOrangeState;
-    bool IAutomationHost.IsEHeld() => IsEHeld();
     bool IAutomationHost.IsFHeld() => IsFHeld();
     bool IAutomationHost.IsCurrentCandidate(long candidateId) => _reactionCoordinator.IsCurrent(candidateId);
     bool IAutomationHost.IsYourChar(string name) => YourChar(name);
@@ -152,7 +150,6 @@ public sealed class BotCore : IAutomationHost, IDisposable
         _outgoingOrangeGuard.RegisterAutomationLight(Environment.TickCount64);
     void IAutomationHost.RegisterAutomationHeavy() =>
         _outgoingOrangeGuard.RegisterAutomationHeavy(Environment.TickCount64);
-    void IAutomationHost.RestoreAutoGuardAfterDirectionalLight() => RestoreAutoGuardAfterDirectionalLight();
 
     public bool IsRunning => _thread is { IsAlive: true };
     public bool IsPaused => !_paused.IsSet;
@@ -356,9 +353,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
 
     public void RefreshVisionSnapshot() => PublishVision();
 
-    private bool IsEHeld() => _input.IsDown(Input.VK_E);
-
-    private bool IsFHeld() => _input.IsDown(Input.VK_F) || _input.HoldButtonHeld();
+    private bool IsFHeld() => _input.HoldButtonHeld();
 
     private void Loop()
     {
@@ -429,9 +424,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
     {
         long now = Environment.TickCount64;
         VisionTrackingSnapshot tracking = ReadTrackingSnapshot();
-        bool eHeld = IsEHeld();
-        bool ltHeld = _input.HoldButtonHeld();
-        bool fHeld = _input.IsDown(Input.VK_F) || ltHeld;
+        bool fHeld = IsFHeld();
         ReactionCandidate candidate = _reactionCoordinator.CurrentCandidate;
         CachedCandidateGeometry cached = _cachedCandidateGeometry;
         FlashCalibrationCandidate calibration = _flashCalibration;
@@ -464,9 +457,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
             candidateGraceScan ? cached.LeftX : tracking.X7,
             candidateGraceScan ? cached.LeftY : tracking.Y4,
             Screen.PrimaryScreen.Bounds,
-            eHeld,
             fHeld,
-            ltHeld,
             _input.IsReady,
             _input.PhysicalHeavyAttackHeld(),
             _input.PhysicalLightAttackHeld(),
@@ -604,7 +595,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
         }
 
         _actions.ProcessOrangeObservation(observation, outgoingOrange.SuppressesOrange);
-        if (!observation.EHeld && !observation.FHeld)
+        if (!observation.FHeld)
             _actions.CancelPendingReaction("hold-released");
         CombatObservation effectiveObservation = outgoingOrange.SuppressesOrange
             ? observation with { OrangeIndicator = false, OrangeFeint = false }
@@ -1066,8 +1057,6 @@ public sealed class BotCore : IAutomationHost, IDisposable
 
     private void ReleaseAutoGuard() => _autoGuard.Release("manual-stop");
 
-    private void RestoreAutoGuardAfterDirectionalLight() => _autoGuard.RestoreAfterDirectionalLight();
-
     private void ApplyCoordinatorGuard(ReactionCandidate candidate) => _autoGuard.Apply(candidate);
 
     private bool HasLiveCandidate() => _reactionCoordinator.CurrentCandidate is { Consumed: false };
@@ -1191,7 +1180,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
                 candidateAgeMs = candidate == null ? 0 : now - candidate.StartedMs,
                 lastValidAgeMs = candidate == null ? 0 : now - candidate.LastValidMs,
                 candidateDirection = candidate?.Direction.ToString() ?? "NONE",
-                EHeld, FHeld, ltHeld = _input.HoldButtonHeld(), flash = signalsCurrent && Flash
+                FHeld, flash = signalsCurrent && Flash
             },
             outgoingOrange = new
             {
@@ -1703,8 +1692,6 @@ public sealed class BotCore : IAutomationHost, IDisposable
     }
 
     private bool YourChar(string name) => ReactionPolicy.IsYourChar(S, name);
-
-    private bool HasEAction() => ReactionPolicy.HasEAction(S);
 
     private bool HasFAction() => ReactionPolicy.HasFAction(S);
 

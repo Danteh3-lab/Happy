@@ -65,14 +65,8 @@ static partial class Program
             "tracked capture must include active combat and confirmation regions");
     }
 
-    private static void ReactionPolicySelectionCoversEAndFWardenPriority()
+    private static void ReactionPolicySelectionCoversWardenPriority()
     {
-        Settings eSettings = new() { Autoblock = true, Parry2 = true };
-        ReactionSelection eSelection = ReactionPolicy.ResolveCommand(
-            Observation(10, CombatDirection.Left) with { EHeld = true, FHeld = false, LtHeld = false }, eSettings);
-        Require(eSelection.Kind == ReactionCommandKind.Parry && eSelection.Hold == "E",
-            "E should select the configured E parry action before the F path");
-
         Settings wardenSettings = new() { Autoblock = true, Parry = true, YourHero = true };
         wardenSettings.Chars["Warden"] = true;
         ReactionSelection wardenSelection = ReactionPolicy.ResolveCommand(
@@ -132,8 +126,6 @@ static partial class Program
             130,
             240,
             screenBounds,
-            false,
-            true,
             true,
             true,
             false,
@@ -187,8 +179,6 @@ static partial class Program
             130,
             250,
             new Rectangle(0, 0, 400, 500),
-            false,
-            true,
             true,
             true,
             false,
@@ -223,7 +213,7 @@ static partial class Program
         VisionScanRequest request = new(
             100, true, new Point(140, 240), 2, new Rectangle(100, 220, 80, 80),
             0, 250, 0, 280, 150, 250, 130, 250,
-            new Rectangle(0, 0, 400, 500), false, true, true, true, false, false, false);
+            new Rectangle(0, 0, 400, 500), true, true, false, false, false);
 
         // Off-by-one/two shades seen in the Oct 17 training frames, none of them exact.
         ScreenFrame nearFlash = SyntheticClusterFrame(400, 500, Array.Empty<(int x, int y)>(), 0, 0, 0);
@@ -269,7 +259,7 @@ static partial class Program
         VisionAnalysisResult result = analyzer.Scan(frame, new VisionScanRequest(
             100, true, new Point(150, 150), 2, roi,
             0, 100, 0, 150, 200, 100, 100, 100,
-            new Rectangle(0, 0, 300, 300), false, true, true, true, false, false, true,
+            new Rectangle(0, 0, 300, 300), true, true, false, false, true,
             TemporalBaseline: baseline));
 
         Require(result.Observation.LightFlash && result.Observation.StrictFlashPoint == new Point(110, 110),
@@ -281,7 +271,7 @@ static partial class Program
         VisionAnalysisResult live = analyzer.Scan(frame, new VisionScanRequest(
             101, true, new Point(150, 150), 2, roi,
             0, 100, 0, 150, 200, 100, 100, 100,
-            new Rectangle(0, 0, 300, 300), false, true, true, true, false, false, false));
+            new Rectangle(0, 0, 300, 300), true, true, false, false, false));
         Require(live.Observation.LightFlash && live.Observation.FlashClusterMatches == 0 &&
             live.Observation.IndicatorFlashClusterMatches == 0,
             "normal play must retain strict flash detection without running calibration scans");
@@ -306,8 +296,6 @@ static partial class Program
             80,
             60,
             new Rectangle(0, 0, 240, 220),
-            false,
-            true,
             true,
             true,
             false,
@@ -441,7 +429,7 @@ static partial class Program
         VisionScanRequest request = new(
             100, true, new Point(150, 150), 2, roi,
             0, 100, 0, 150, 200, 100, 100, 100,
-            new Rectangle(0, 0, 300, 300), false, true, true, true, false, false, true,
+            new Rectangle(0, 0, 300, 300), true, true, false, false, true,
             TemporalBaseline: baseline);
         VisionAnalysisResult result = analyzer.Scan(frame, request);
         Require(result.Observation.TemporalFlashMatches == 4,

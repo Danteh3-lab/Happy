@@ -121,7 +121,7 @@
                 </div>
                 <div class="run-actions">
                   <button class="btn btn-primary btn-lg" type="button" id="start-button" data-action="start" data-bind-disabled="startDisabled"><svg class="icon" aria-hidden="true"><use href="#i-play"/></svg><span data-bind="startLabel">Start bot</span></button>
-                  <button class="btn btn-secondary btn-lg" type="button" id="pause-button" data-action="toggle-pause" data-bind-disabled="pauseDisabled" disabled><svg class="icon" aria-hidden="true"><use href="#i-pause"/></svg><span data-bind="pauseLabel">Pause</span><kbd>F6</kbd></button>
+                  <button class="btn btn-secondary btn-lg" type="button" id="pause-button" data-action="toggle-pause" data-bind-disabled="pauseDisabled" disabled><svg class="icon" aria-hidden="true"><use href="#i-pause"/></svg><span data-bind="pauseLabel">Pause</span></button>
                   <p class="run-note" data-bind-show="startNote" hidden><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>Start applies pending timings.</p>
                 </div>
               </article>
@@ -156,14 +156,8 @@
                 </div>
                 <div class="action-rows">
                   <div class="action-row" data-bind-state="fActionState">
-                    <span class="action-key">F / LT</span>
+                    <span class="action-key">LT</span>
                     <div class="action-text"><b data-bind="fAction">None</b><p data-bind="fDetail">No reaction is configured.</p></div>
-                    <kbd title="Cycle with F3">F3</kbd>
-                  </div>
-                  <div class="action-row" data-bind-state="eActionState">
-                    <span class="action-key">E</span>
-                    <div class="action-text"><b data-bind="eAction">None</b><p data-bind="eDetail">No reaction is configured.</p></div>
-                    <kbd title="Cycle with F4">F4</kbd>
                   </div>
                 </div>
                 <ul class="notices" data-notices aria-live="polite" hidden></ul>
@@ -187,7 +181,7 @@
                   <label class="switch-tile">
                     <input type="checkbox" role="switch" data-setting="Parry">
                     <svg class="icon" aria-hidden="true"><use href="#i-target"/></svg>
-                    <span class="tile-text"><b>F auto parry</b><small>RT on flash</small></span>
+                    <span class="tile-text"><b>Auto parry</b><small>RT on flash</small></span>
                     <span class="switch" aria-hidden="true"></span>
                   </label>
                   <label class="switch-tile">
@@ -204,12 +198,12 @@
                   </label>
                   <button class="switch-tile" type="button" data-action="orange-parry" data-bind-on="orangeParry" aria-pressed="false">
                     <svg class="icon" aria-hidden="true"><use href="#i-bolt"/></svg>
-                    <span class="tile-text"><b>Orange parry</b><small><span data-bind="orangeParryLabel">OFF</span> · F5</small></span>
+                    <span class="tile-text"><b>Orange parry</b><small><span data-bind="orangeParryLabel">OFF</span></small></span>
                     <span class="switch" aria-hidden="true"></span>
                   </button>
                   <button class="switch-tile" type="button" data-action="vision-overlay" data-bind-on="visionOverlay" aria-pressed="false">
                     <svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>
-                    <span class="tile-text"><b>Vision overlay</b><small><span data-bind="visionOverlayLabel">OFF</span> · F7</small></span>
+                    <span class="tile-text"><b>Vision overlay</b><small><span data-bind="visionOverlayLabel">OFF</span></small></span>
                     <span class="switch" aria-hidden="true"></span>
                   </button>
                 </div>
@@ -252,8 +246,7 @@
             </header>
 
             <div class="behavior-strip" aria-label="Active behavior">
-              <div class="strip-item" data-bind-state="fActionState"><span class="action-key">F / LT</span><b data-bind="fAction">None</b></div>
-              <div class="strip-item" data-bind-state="eActionState"><span class="action-key">E</span><b data-bind="eAction">None</b></div>
+              <div class="strip-item" data-bind-state="fActionState"><span class="action-key">LT</span><b data-bind="fAction">None</b></div>
               <ul class="notices notices-inline" data-notices aria-live="polite" hidden></ul>
             </div>
 
@@ -261,7 +254,7 @@
               <article class="card" aria-labelledby="orange-title">
                 <div class="card-head"><div><p class="eyebrow">Automatic</p><h2 id="orange-title" class="card-title">Orange response</h2></div><svg class="icon card-icon" aria-hidden="true"><use href="#i-flame"/></svg></div>
                 <div class="switch-list">
-                  <label class="switch-row"><input type="checkbox" role="switch" data-setting="Unblockables"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Enable orange response</b><small>Dodge by default; F5 enables orange parry for red/feint.</small></span></label>
+                  <label class="switch-row"><input type="checkbox" role="switch" data-setting="Unblockables"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Enable orange response</b><small>Dodge by default; Orange parry handles red/feint.</small></span></label>
                   <label class="switch-row"><input type="checkbox" role="switch" data-setting="IgnoreOwnOrange"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Ignore own orange attacks</b><small>Skip orange shown right after your own RT/RB, until it clears</small></span></label>
                   <label class="switch-row"><input type="checkbox" role="switch" data-setting="OrangeLight"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Auto light on orange</b><small>Orange-only: random left, top, or right RB light</small></span></label>
                   <label class="switch-row"><input type="checkbox" role="switch" data-setting="Lightbash"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Bash after dodge</b><small>Guard break follow-up</small></span></label>
@@ -281,26 +274,24 @@
                   <svg class="icon" aria-hidden="true"><use href="#i-bolt"/></svg>
                   <span class="toggle-btn-text"><b>Orange parry</b><small>Parry red/feint follow-ups instead of dodging</small></span>
                   <span class="toggle-btn-state" data-bind="orangeParryLabel">OFF</span>
-                  <kbd>F5</kbd>
                 </button>
               </article>
 
               <article class="card" aria-labelledby="guard-title">
-                <div class="card-head"><div><p class="eyebrow">F / LT hold</p><h2 id="guard-title" class="card-title">Guard &amp; primary reactions</h2></div><svg class="icon card-icon" aria-hidden="true"><use href="#i-shield"/></svg></div>
+                <div class="card-head"><div><p class="eyebrow">LT hold</p><h2 id="guard-title" class="card-title">Guard &amp; primary reactions</h2></div><svg class="icon card-icon" aria-hidden="true"><use href="#i-shield"/></svg></div>
                 <div class="switch-list">
-                  <label class="switch-row"><input type="checkbox" role="switch" data-setting="Autoblock"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Auto block</b><small>Follow red guard indicators. Required by every F/LT and E reaction.</small></span></label>
+                  <label class="switch-row"><input type="checkbox" role="switch" data-setting="Autoblock"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Auto block</b><small>Follow red guard indicators. Required by every LT reaction.</small></span></label>
                   <label class="switch-row"><input type="checkbox" role="switch" data-setting="Parry"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Auto parry</b><small>Right mouse / RT</small></span></label>
                   <label class="switch-row"><input type="checkbox" role="switch" data-setting="Crushing"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Auto crushing counter</b><small>Left mouse / RB</small></span></label>
                   <label class="switch-row"><input type="checkbox" role="switch" data-setting="Deflect"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Auto deflect</b><small>Directional dodge</small></span></label>
                 </div>
-                <p class="hint">F3 cycles Parry → Crushing → Deflect.</p>
               </article>
 
               <article class="card" aria-labelledby="legit-title">
-                <div class="card-head"><div><p class="eyebrow">F / LT hold</p><h2 id="legit-title" class="card-title">Legit &amp; fallbacks</h2></div><svg class="icon card-icon" aria-hidden="true"><use href="#i-sliders"/></svg></div>
+                <div class="card-head"><div><p class="eyebrow">LT hold</p><h2 id="legit-title" class="card-title">Legit &amp; fallbacks</h2></div><svg class="icon card-icon" aria-hidden="true"><use href="#i-sliders"/></svg></div>
                 <div class="switch-list">
                   <label class="switch-row"><input type="checkbox" role="switch" data-setting="Legit"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Legit mode</b><small>Parry a configurable percentage; otherwise use an enabled fallback or guard</small></span></label>
-                  <label class="switch-row"><input type="checkbox" role="switch" data-setting="BulwarkFallback"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Bulwark fallback</b><small>Failed F/LT Legit rolls flip with Black Prior; requires Auto block</small></span></label>
+                  <label class="switch-row"><input type="checkbox" role="switch" data-setting="BulwarkFallback"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Bulwark fallback</b><small>Failed LT Legit rolls flip with Black Prior; requires Auto block</small></span></label>
                 </div>
                 <div class="field-grid three">
                   <label class="field">
@@ -323,15 +314,6 @@
                   </label>
                 </div>
                 <p class="flow-note"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>Failed Legit roll → Deflect chance → Crushing / Bulwark mix → guard.</p>
-              </article>
-
-              <article class="card" aria-labelledby="ehold-title">
-                <div class="card-head"><div><p class="eyebrow">E hold</p><h2 id="ehold-title" class="card-title">Secondary reactions</h2></div><span class="key-badge">E</span></div>
-                <div class="switch-list">
-                  <label class="switch-row"><input type="checkbox" role="switch" data-setting="Parry2"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Auto parry</b><small>Secondary hold</small></span></label>
-                  <label class="switch-row"><input type="checkbox" role="switch" data-setting="Crushing2"><span class="switch" aria-hidden="true"></span><span class="switch-text"><b>Auto crushing counter</b><small>Secondary hold</small></span></label>
-                </div>
-                <p class="hint">F4 cycles Parry → Crushing → Off.</p>
               </article>
             </div>
           </section>
@@ -419,9 +401,9 @@
                 <p class="card-copy">These start from orange detection or the feint transition and govern orange follow-ups.</p>
                 <div class="field-grid three">
                   <label class="field">
-                    <span class="field-label">Orange delay <kbd>F1</kbd></span>
+                    <span class="field-label">Orange delay</span>
                     <span class="field-control"><input type="number" min="0" max="10000" step="1" required data-setting="Pause" data-timing="dodge" aria-describedby="pause-help err-Pause"><span class="unit">ms</span></span>
-                    <small class="field-help" id="pause-help">From a fresh orange indicator. F1 toggles 0 ↔ 80 ms live.</small>
+                    <small class="field-help" id="pause-help">From a fresh orange indicator.</small>
                     <small class="field-error" id="err-Pause" data-error-for="Pause"></small>
                   </label>
                   <label class="field">
@@ -483,12 +465,12 @@
                     <button class="btn btn-secondary btn-sm" type="button" id="auto-dodge-bind-button" data-action="bind-auto-dodge" data-bind-on="bindAutoDodgeCapturing" aria-pressed="false">Bind</button>
                   </li>
                   <li class="bind-row" data-bind-state="bindOrangeParryState">
-                    <span class="bind-name"><b>Orange parry</b><small>Same as F5</small></span>
+                    <span class="bind-name"><b>Orange parry</b><small>Orange parry on/off</small></span>
                     <span class="bind-value mono" data-bind="bindOrangeParry">UNBOUND</span>
                     <button class="btn btn-secondary btn-sm" type="button" id="orange-parry-bind-button" data-action="bind-orange-parry" data-bind-on="bindOrangeParryCapturing" aria-pressed="false">Bind</button>
                   </li>
                   <li class="bind-row" data-bind-state="bindAutoParryState">
-                    <span class="bind-name"><b>F auto parry</b><small>Parry on/off</small></span>
+                    <span class="bind-name"><b>Auto parry</b><small>Parry on/off</small></span>
                     <span class="bind-value mono" data-bind="bindAutoParry">UNBOUND</span>
                     <button class="btn btn-secondary btn-sm" type="button" id="auto-parry-bind-button" data-action="bind-auto-parry" data-bind-on="bindAutoParryCapturing" aria-pressed="false">Bind</button>
                   </li>
@@ -515,23 +497,13 @@
               </article>
 
               <article class="card" aria-labelledby="hotkeys-title">
-                <div class="card-head"><div><p class="eyebrow">Reference</p><h2 id="hotkeys-title" class="card-title">Hotkeys &amp; mapping</h2></div><svg class="icon card-icon" aria-hidden="true"><use href="#i-help"/></svg></div>
-                <dl class="hotkeys">
-                  <div><dt><kbd>F1</kbd></dt><dd>Orange delay 0 ↔ 80 ms (live)</dd></div>
-                  <div><dt><kbd>F3</kbd></dt><dd>Cycle F/LT action</dd></div>
-                  <div><dt><kbd>F4</kbd></dt><dd>Cycle E action</dd></div>
-                  <div><dt><kbd>F5</kbd></dt><dd>Orange parry on/off</dd></div>
-                  <div><dt><kbd>F6</kbd></dt><dd>Pause / resume</dd></div>
-                  <div><dt><kbd>F7</kbd></dt><dd>Vision overlay</dd></div>
-                  <div><dt><kbd>E</kbd> / <kbd>F</kbd></dt><dd>Hold for parry actions</dd></div>
-                  <div><dt><kbd>LT</kbd></dt><dd>Alternate F hold</dd></div>
-                </dl>
+                <div class="card-head"><div><p class="eyebrow">Reference</p><h2 id="hotkeys-title" class="card-title">Controller mapping</h2></div><svg class="icon card-icon" aria-hidden="true"><use href="#i-help"/></svg></div>
                 <div class="mapping">
                   <div><b>RT</b><span>Heavy / parry</span></div>
                   <div><b>RB</b><span>Light</span></div>
                   <div><b>X</b><span>Guard break</span></div>
                   <div><b>A</b><span>Dodge</span></div>
-                  <div><b>LT</b><span>Alt F hold</span></div>
+                  <div><b>LT</b><span>Reaction hold</span></div>
                   <div><b>R-stick</b><span>Guard direction</span></div>
                 </div>
               </article>
@@ -574,7 +546,6 @@
                     <svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>
                     <span class="toggle-btn-text"><b>Vision overlay</b><small>Click-through HUD, hidden from capture</small></span>
                     <span class="toggle-btn-state" data-bind="visionOverlayLabel">OFF</span>
-                    <kbd>F7</kbd>
                   </button>
                   <button class="toggle-btn" type="button" id="anchor-scan-button" data-action="anchor-scan" data-bind-on="anchorScan" aria-pressed="true">
                     <svg class="icon" aria-hidden="true"><use href="#i-target"/></svg>
@@ -698,16 +669,9 @@
         </ol>
       </section>
       <section aria-labelledby="help-hotkeys">
-        <h3 id="help-hotkeys" tabindex="-1">Hotkeys and holds</h3>
+        <h3 id="help-hotkeys" tabindex="-1">Holds and shortcuts</h3>
         <dl class="hotkeys">
-          <div><dt><kbd>F1</kbd></dt><dd>Orange delay 0 ↔ 80 ms (live)</dd></div>
-          <div><dt><kbd>F3</kbd></dt><dd>Cycle F/LT action</dd></div>
-          <div><dt><kbd>F4</kbd></dt><dd>Cycle E action</dd></div>
-          <div><dt><kbd>F5</kbd></dt><dd>Orange parry on/off</dd></div>
-          <div><dt><kbd>F6</kbd></dt><dd>Pause / resume</dd></div>
-          <div><dt><kbd>F7</kbd></dt><dd>Vision overlay</dd></div>
-          <div><dt><kbd>E</kbd> / <kbd>F</kbd></dt><dd>Hold before an attack for parry/counter actions</dd></div>
-          <div><dt><kbd>LT</kbd></dt><dd>Alternate F hold</dd></div>
+          <div><dt><kbd>LT</kbd></dt><dd>Hold on the DS4 before an attack for parry/counter actions</dd></div>
           <div><dt><kbd>Ctrl 1–5</kbd></dt><dd>Switch pages</dd></div>
         </dl>
       </section>
@@ -718,9 +682,9 @@
           <li>Orange-only dodge/light and optional orange plus red RT parry. Your own controller RT/RB attacks are ignored until their orange clears.</li>
           <li>Auto block and directional guard.</li>
           <li>Hero-specific evades and reactions.</li>
-          <li>ViGEm source/output merge.</li>
+          <li>Direct DS4 input merged into the ViGEm output.</li>
           <li>Configurable reaction delays.</li>
-          <li>F7 anchor-following vision overlay. It is click-through, hidden from capture, and does not change bot behavior.</li>
+          <li>Anchor-following vision overlay. It is click-through, hidden from capture, and does not change bot behavior.</li>
         </ul>
         <p class="help-foot">DANBOT by Danteh.</p>
       </section>

@@ -68,7 +68,7 @@ static partial class Program
     private static void ZeroDelayReactionActionsCommit()
     {
         var parryInput = new FakeInputGateway();
-        parryInput.HeldKeys.Add(Input.VK_F);
+        parryInput.HoldHeld = true;
         var parrySettings = new Settings
         {
             Autoblock = true,
@@ -88,7 +88,7 @@ static partial class Program
         parryScheduler.Dispose();
 
         var failedParryInput = new FakeInputGateway { FailHeavy = true };
-        failedParryInput.HeldKeys.Add(Input.VK_F);
+        failedParryInput.HoldHeld = true;
         var failedParryHost = new FakeAutomationHost(failedParryInput, parrySettings, 103);
         var failedParryScheduler = new ActionScheduler(failedParryHost.ShutdownToken);
         var failedParryExecutor = new ReactionActionExecutor(failedParryHost, failedParryScheduler, new FixedRollSource(0));
@@ -99,7 +99,7 @@ static partial class Program
         failedParryScheduler.Dispose();
 
         var crushingInput = new FakeInputGateway();
-        crushingInput.HeldKeys.Add(Input.VK_F);
+        crushingInput.HoldHeld = true;
         var crushingSettings = new Settings { Autoblock = true, Crushing = true, ParryDelay = 0 };
         var crushingHost = new FakeAutomationHost(crushingInput, crushingSettings, 102);
         var crushingScheduler = new ActionScheduler(crushingHost.ShutdownToken);
@@ -115,7 +115,7 @@ static partial class Program
     private static void CapturedReactionDelaySurvivesTimingEdit()
     {
         var input = new FakeInputGateway();
-        input.HeldKeys.Add(Input.VK_F);
+        input.HoldHeld = true;
         var settings = new Settings
         {
             Autoblock = true,
@@ -244,7 +244,7 @@ static partial class Program
     private static void DeflectSendsLightOnlyAfterSuccessfulDodge()
     {
         var successInput = new FakeInputGateway();
-        successInput.HeldKeys.Add(Input.VK_F);
+        successInput.HoldHeld = true;
         var settings = new Settings { Autoblock = true, Deflect = true, Left = 0, Right = 0 };
         var successHost = new FakeAutomationHost(successInput, settings, 104);
         var successScheduler = new ActionScheduler(successHost.ShutdownToken);
@@ -269,7 +269,7 @@ static partial class Program
         successScheduler.Dispose();
 
         var failedInput = new FakeInputGateway { FailDeflect = true };
-        failedInput.HeldKeys.Add(Input.VK_F);
+        failedInput.HoldHeld = true;
         var failedHost = new FakeAutomationHost(failedInput, settings, 105);
         var failedScheduler = new ActionScheduler(failedHost.ShutdownToken);
         var failedExecutor = new ReactionActionExecutor(failedHost, failedScheduler, new FixedRollSource(0));
@@ -284,7 +284,7 @@ static partial class Program
         failedScheduler.Dispose();
 
         var undeliveredInput = new FakeInputGateway { FailLight = true };
-        undeliveredInput.HeldKeys.Add(Input.VK_F);
+        undeliveredInput.HoldHeld = true;
         var undeliveredHost = new FakeAutomationHost(undeliveredInput, settings, 106);
         var undeliveredScheduler = new ActionScheduler(undeliveredHost.ShutdownToken);
         var undeliveredExecutor = new ReactionActionExecutor(undeliveredHost, undeliveredScheduler, new FixedRollSource(0));
@@ -315,7 +315,7 @@ static partial class Program
     private static void OrochiDeflectSendsHeavyAfterSuccessfulDodge()
     {
         var input = new FakeInputGateway();
-        input.HeldKeys.Add(Input.VK_F);
+        input.HoldHeld = true;
         var settings = new Settings { Autoblock = true, Deflect = true, YourHero = true, Left = 0 };
         settings.Chars["Orochi"] = true;
         var host = new FakeAutomationHost(input, settings, 107);

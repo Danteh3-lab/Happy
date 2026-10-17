@@ -1,6 +1,4 @@
 @echo off
-set HAPPYBOT_INPUT_MODE=vigem
-set HAPPYBOT_CONTROLLER_SOURCE=direct-ds4
 set "HAPPYBOT_EXE=%~dp0bin\Release\net10.0-windows\HappyBot.exe"
 if not exist "%HAPPYBOT_EXE%" set "HAPPYBOT_EXE=%~dp0bin\Debug\net10.0-windows\HappyBot.exe"
 if not exist "%HAPPYBOT_EXE%" (

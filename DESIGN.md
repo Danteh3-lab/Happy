@@ -64,9 +64,9 @@ A combat HUD on a dark console: whether the bot is live is the primary instrumen
 - **Locales:** English UI. User-created profile names are displayed verbatim and safely as text.
 - **Usage scene:** A small desktop window used immediately before or alongside gameplay, often under time pressure.
 - **Register:** Gaming dashboard. State clarity and compact density lead; decoration (grid, glow, HUD brackets) stays behind content.
-- **Memorable signature:** The Dashboard run orb and status word, paired with the Active Behavior card that states the effective F/LT and E action.
+- **Memorable signature:** The Dashboard run orb and status word, paired with the Active Behavior card that states the effective LT action.
 - **Anti-references:** Game-guide prose, decorative HUD clutter that competes with state, and settings screens that expose flags without explaining precedence.
-- **Token ownership/runtime mapping:** `ui/styles/tokens.css` is the runtime source of truth and this file documents it. `Overlay/OverlayTheme.cs` mirrors the shared colors for the F7 overlay; `OverlayThemeTests` fails when they drift. Durable token changes update all three together.
+- **Token ownership/runtime mapping:** `ui/styles/tokens.css` is the runtime source of truth and this file documents it. `Overlay/OverlayTheme.cs` mirrors the shared colors for the vision overlay; `OverlayThemeTests` fails when they drift. Durable token changes update all three together.
 
 ## Colors
 
@@ -101,11 +101,11 @@ All controls provide default, hover, focus-visible, pressed and disabled states.
 
 ### Run status
 
-A large orb with a state glyph (▶ live, ❚❚ paused, ■ standby, ! error), the status word in the display face, a sentence of explanation, **Start bot** and **Pause** (F6). The orb ring spins only while live and only when motion is allowed. The titlebar run pill repeats the state on every page.
+A large orb with a state glyph (▶ live, ❚❚ paused, ■ standby, ! error), the status word in the display face, a sentence of explanation, **Start bot** and **Pause**. The orb ring spins only while live and only when motion is allowed. The titlebar run pill repeats the state on every page.
 
 ### Switches and tiles
 
-Switch rows (`role="switch"` checkboxes) are the configuration primitive. Dashboard quick toggles are switch tiles bound to the same settings, so changing either updates both. Host-owned toggles (orange parry, vision overlay, anchor scan) are `aria-pressed` buttons with an ON/OFF label and their hotkey.
+Switch rows (`role="switch"` checkboxes) are the configuration primitive. Dashboard quick toggles are switch tiles bound to the same settings, so changing either updates both. Host-owned toggles (orange parry, vision overlay, anchor scan) are `aria-pressed` buttons with an ON/OFF label.
 
 ### Stat tiles and counters
 
@@ -125,7 +125,7 @@ The hero and profile pickers share one listbox component (arrow keys, Home/End, 
 
 ### Help panel
 
-A slide-over from the titlebar **?** holds the setup guide, all hotkeys (including F1) and feature notes. It closes on Escape and returns focus.
+A slide-over from the titlebar **?** holds the setup guide, the LT hold and page shortcuts, and feature notes. It closes on Escape and returns focus.
 
 ### Iconography
 
@@ -137,7 +137,7 @@ Short and state-oriented: page entry, dialog and toast entry, the live orb ring,
 
 ### Overlay HUD
 
-The F7 overlay uses the same palette in GDI+. Chips are opaque `--surface-1` panels with a hairline border, a 3px bar in the state color and white text; the header reads `DANBOT // VISION` with a filled LIVE or outlined IDLE pill; the diagnostics line is muted mono. The active guard zone is a solid 2px line in the decision color; inactive zones are dashed `--signal-dim`. The window's transparency key is near-black (1, 2, 3) rather than magenta, every fill is opaque, and text uses grayscale anti-aliasing, so edges blend toward dark instead of fringing pink.
+The vision overlay uses the same palette in GDI+. Chips are opaque `--surface-1` panels with a hairline border, a 3px bar in the state color and white text; the header reads `DANBOT // VISION` with a filled LIVE or outlined IDLE pill; the diagnostics line is muted mono. The active guard zone is a solid 2px line in the decision color; inactive zones are dashed `--signal-dim`. The window's transparency key is near-black (1, 2, 3) rather than magenta, every fill is opaque, and text uses grayscale anti-aliasing, so edges blend toward dark instead of fringing pink.
 
 ### Content
 

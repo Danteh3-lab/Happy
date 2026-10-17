@@ -13,7 +13,6 @@ internal interface IAutomationHost
     bool MarkerFound { get; }
     bool OrangeParryEnabled { get; }
     OutgoingOrangeGuardResult OutgoingOrangeState { get; }
-    bool IsEHeld();
     bool IsFHeld();
     bool IsCurrentCandidate(long candidateId);
     bool IsYourChar(string name);
@@ -28,7 +27,6 @@ internal interface IAutomationHost
         long feintDetectedAtMs, long clearStartedAtMs);
     void RegisterAutomationLight();
     void RegisterAutomationHeavy();
-    void RestoreAutoGuardAfterDirectionalLight();
 }
 
 /// <summary>
@@ -206,7 +204,7 @@ internal sealed class ReactionActionExecutor
                 else
                     _host.RegisterAutomationHeavy();
                 _host.SetVisionReaction("DEFLECT + " + (followUpInput == Input.VK_RBUTTON ? "HEAVY" : "LIGHT") + " SENT",
-                    "F hold + directional dodge + " + followUpName, DirectionName(command.Direction), 1300, delay);
+                    "LT hold + directional dodge + " + followUpName, DirectionName(command.Direction), 1300, delay);
             }
             else
                 _host.SetVisionReaction("DEFLECT FAILED", "Directional dodge or " + followUpName + " input was not delivered",
@@ -222,8 +220,7 @@ internal sealed class ReactionActionExecutor
 
     private bool CanCommitAction(ReactionCommand command, CancellationToken token)
     {
-        bool holdStillDown = command.Hold == "E" ? _host.IsEHeld() : _host.IsFHeld();
-        return !token.IsCancellationRequested && holdStillDown && _host.IsReactionActive &&
+        return !token.IsCancellationRequested && _host.IsFHeld() && _host.IsReactionActive &&
             IsCommandStillEnabled(command) && _scheduler.IsCurrent(command.CandidateId) &&
             _host.IsCurrentCandidate(command.CandidateId);
     }
@@ -232,13 +229,12 @@ internal sealed class ReactionActionExecutor
     {
         Settings settings = _host.Settings;
         if (!settings.Autoblock) return false;
-        if (command.RequiresParryEnabled && !(command.Hold == "E" ? settings.Parry2 : settings.Parry)) return false;
+        if (command.RequiresParryEnabled && !settings.Parry) return false;
         return command.Kind switch
         {
-            ReactionCommandKind.Parry => command.Hold == "E" ? settings.Parry2 : settings.Parry,
-            ReactionCommandKind.Crushing => command.Hold == "E"
-                ? settings.Crushing2
-                : settings.Crushing || (settings.Parry && command.Direction == CombatDirection.Top && _host.IsYourChar("Warden")),
+            ReactionCommandKind.Parry => settings.Parry,
+            ReactionCommandKind.Crushing =>
+                settings.Crushing || (settings.Parry && command.Direction == CombatDirection.Top && _host.IsYourChar("Warden")),
             ReactionCommandKind.Deflect => settings.Deflect,
             ReactionCommandKind.Bulwark => settings.BulwarkFallback && settings.Legit && settings.Parry && _host.IsYourChar("Blackprior"),
             ReactionCommandKind.Hero => _host.HasHeroAction,
@@ -250,22 +246,13 @@ internal sealed class ReactionActionExecutor
     {
         bool sent = true;
         IInputGateway input = _host.Input;
-        input.Block(true);
-        try
-        {
-            sent &= input.KeyUp(Input.VK_W);
-            sent &= input.KeyUp(Input.VK_S);
-            sent &= input.KeyUp(Input.VK_A);
-            sent &= input.KeyUp(Input.VK_D);
-            if (direction == CombatDirection.Left) sent &= input.KeyDown(Input.VK_LEFT);
-            else if (direction == CombatDirection.Right) sent &= input.KeyDown(Input.VK_RIGHT);
-            else sent &= input.KeyDown(Input.VK_UP);
-            sent &= input.KeyTap(Input.VK_SPACE);
-            if (direction == CombatDirection.Left) sent &= input.KeyUp(Input.VK_LEFT);
-            else if (direction == CombatDirection.Right) sent &= input.KeyUp(Input.VK_RIGHT);
-            else sent &= input.KeyUp(Input.VK_UP);
-        }
-        finally { input.Block(false); }
+        if (direction == CombatDirection.Left) sent &= input.KeyDown(Input.VK_LEFT);
+        else if (direction == CombatDirection.Right) sent &= input.KeyDown(Input.VK_RIGHT);
+        else sent &= input.KeyDown(Input.VK_UP);
+        sent &= input.KeyTap(Input.VK_SPACE);
+        if (direction == CombatDirection.Left) sent &= input.KeyUp(Input.VK_LEFT);
+        else if (direction == CombatDirection.Right) sent &= input.KeyUp(Input.VK_RIGHT);
+        else sent &= input.KeyUp(Input.VK_UP);
         return sent;
     }
 
@@ -297,7 +284,7 @@ internal sealed class ReactionActionExecutor
             finally { input.KeyUp(Input.VK_C); }
         }
         else return false;
-        _host.SetVisionReaction("HERO RESPONSE SENT", "F hold + flash gate", DirectionName(command.Direction), 1300, appliedDelay);
+        _host.SetVisionReaction("HERO RESPONSE SENT", "LT hold + flash gate", DirectionName(command.Direction), 1300, appliedDelay);
         return true;
     }
 

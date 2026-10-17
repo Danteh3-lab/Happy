@@ -11,9 +11,7 @@ public static class ViGEmInput
     private static ViGEmClient _client;
     private static IXbox360Controller _controller;
     private static IVirtualGamepad _gamepad;
-    private static System.Threading.Timer _sourceTimer;
     private static volatile IControllerSource _directSource;
-    private static ControllerSourceMode _sourceMode;
     private static Native.XINPUT_GAMEPAD _source;
     private static Native.XINPUT_GAMEPAD _bot;
     // A short-lived stance may need the right stick without destroying the
@@ -42,13 +40,10 @@ public static class ViGEmInput
     private static long _lastSubmitIntervalMs;
     private static long _maxSubmitIntervalMs;
     private static long _bridgeFailures;
-    private static long _lastSourceReportTick;
     private static int _otherXInputControllers;
 
     public static bool IsAvailable { get; private set; }
-    public static bool UsesDirectSource => _sourceMode == ControllerSourceMode.DirectDs4;
-    public static string SourceType => _sourceMode == ControllerSourceMode.DirectDs4
-        ? "direct-ds4" : "xinput-legacy";
+    public const string SourceType = "direct-ds4";
     public static bool SourceConnected
     {
         get
@@ -100,16 +95,14 @@ public static class ViGEmInput
                 _maxSubmitIntervalMs,
                 _bridgeFailures,
                 SourceType,
-                directDiagnostics?.Transport ?? "xinput",
+                directDiagnostics?.Transport ?? "hid",
                 directDiagnostics?.Fingerprint ?? "",
                 directDiagnostics?.Reports ?? _sourcePolls,
                 directDiagnostics?.StateChanges ?? _sourceChanges,
                 directDiagnostics?.ParseErrors ?? 0,
                 directDiagnostics?.ReadErrors ?? 0,
                 directDiagnostics?.Reconnects ?? 0,
-                direct == null
-                    ? (_lastSourceReportTick == 0 ? -1 : Math.Max(0, Environment.TickCount64 - _lastSourceReportTick))
-                    : directDiagnostics?.LastReportAgeMs ?? -1,
+                directDiagnostics?.LastReportAgeMs ?? -1,
                 directDiagnostics?.LastReportIntervalMs ?? _lastSubmitIntervalMs,
                 directDiagnostics?.MaxReportIntervalMs ?? _maxSubmitIntervalMs,
                 _otherXInputControllers);
@@ -122,11 +115,8 @@ public static class ViGEmInput
         {
             try
             {
-                _sourceMode = ControllerSourceModeExtensions.Read();
                 if (IsAvailable) return;
-                _otherXInputControllers = _sourceMode == ControllerSourceMode.DirectDs4
-                    ? CountConnectedXInputControllers()
-                    : 0;
+                _otherXInputControllers = CountConnectedXInputControllers();
                 _client = new ViGEmClient();
                 _controller = _client.CreateXbox360Controller();
                 _gamepad = _controller as IVirtualGamepad
@@ -139,17 +129,10 @@ public static class ViGEmInput
                     _hasLastReport = false;
                     if (!ApplyLocked()) throw new InvalidOperationException("Unable to submit the initial controller report.");
                 }
-                if (_sourceMode == ControllerSourceMode.DirectDs4)
-                {
-                    IControllerSource source = null;
-                    source = new Ds4HidControllerSource((state, diagnostics) => OnDirectSourceState(source, state, diagnostics));
-                    _directSource = source;
-                    source.Start();
-                }
-                else
-                {
-                    _sourceTimer = new System.Threading.Timer(PollSource, null, 0, 8);
-                }
+                IControllerSource source = null;
+                source = new Ds4HidControllerSource((state, diagnostics) => OnDirectSourceState(source, state, diagnostics));
+                _directSource = source;
+                source.Start();
             }
             catch
             {
@@ -162,14 +145,6 @@ public static class ViGEmInput
     {
         lock (LifecycleSync)
         {
-            System.Threading.Timer timer = _sourceTimer;
-            _sourceTimer = null;
-            if (timer != null)
-            {
-                using var callbacksStopped = new ManualResetEvent(false);
-                if (timer.Dispose(callbacksStopped)) callbacksStopped.WaitOne(500);
-            }
-
             IControllerSource directSource = _directSource;
             _directSource = null;
             try { directSource?.Dispose(); } catch { }
@@ -183,7 +158,6 @@ public static class ViGEmInput
                 _rightStickOverrideY = 0;
                 _sourceConnected = false;
                 _sourceSlot = -1;
-                _lastSourceReportTick = 0;
                 _otherXInputControllers = 0;
                 TrySubmitNeutralLocked();
                 _hasLastReport = false;
@@ -264,8 +238,7 @@ public static class ViGEmInput
             _sourceConnected = connected;
             _sourceSlot = connected ? -2 : -1;
             _sourcePolls++;
-            if (connected) _lastSourceReportTick = Environment.TickCount64;
-            else
+            if (!connected)
             {
                 // A disconnected physical source must not leave an automated
                 // button, trigger, or guard latched on the virtual output.
@@ -359,47 +332,6 @@ public static class ViGEmInput
             _rightStickOverrideY = 0;
             return ApplyLocked();
         }
-    }
-
-    private static void PollSource(object _)
-    {
-        int outputSlot = OutputSlot();
-        int sourceSlot = -1;
-        Native.XINPUT_GAMEPAD source = default;
-        for (int slot = 0; slot < 4; slot++)
-        {
-            if (slot == outputSlot) continue;
-            if (Native.XInputGetState(slot, out var state) != 0) continue;
-            sourceSlot = slot;
-            source = state.Gamepad;
-            break;
-        }
-
-        lock (Sync)
-        {
-            _sourcePolls++;
-            if (sourceSlot != _sourceSlot ||
-                source.wButtons != _source.wButtons ||
-                source.bLeftTrigger != _source.bLeftTrigger ||
-                source.bRightTrigger != _source.bRightTrigger ||
-                source.sThumbLX != _source.sThumbLX ||
-                source.sThumbLY != _source.sThumbLY ||
-                source.sThumbRX != _source.sThumbRX ||
-                source.sThumbRY != _source.sThumbRY)
-            {
-                _sourceChanges++;
-            }
-            _source = source;
-            _sourceConnected = sourceSlot >= 0;
-            _sourceSlot = sourceSlot;
-            if (!ApplyLocked()) IsAvailable = false;
-        }
-    }
-
-    private static int OutputSlot()
-    {
-        try { return _controller?.UserIndex ?? -1; }
-        catch { return -1; }
     }
 
     private static bool Slider(Xbox360Slider slider, byte value)
@@ -548,32 +480,13 @@ public static class ViGEmInput
     }
 }
 
-internal enum ControllerSourceMode
-{
-    XInputLegacy,
-    DirectDs4
-}
-
-internal static class ControllerSourceModeExtensions
-{
-    public static ControllerSourceMode Read()
-    {
-        string value = Environment.GetEnvironmentVariable("HAPPYBOT_CONTROLLER_SOURCE")?.Trim();
-        if (string.IsNullOrWhiteSpace(value)) value = Config.Read("ControllerSource")?.Trim();
-        return string.Equals(value, "direct-ds4", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(value, "directds4", StringComparison.OrdinalIgnoreCase)
-            ? ControllerSourceMode.DirectDs4
-            : ControllerSourceMode.XInputLegacy;
-    }
-}
-
 public sealed record InputBridgeSnapshot(bool Available, bool SourceConnected, int SourceSlot,
     short SourceRightX, short SourceRightY, short BotRightX, short BotRightY,
     short MergedRightX, short MergedRightY,
     long ReportsSubmitted = 0, long ReportsSkipped = 0, long SourcePolls = 0,
     long SourceChanges = 0, long LastSubmitAgeMs = -1, long LastSubmitIntervalMs = 0,
     long MaxSubmitIntervalMs = 0, long BridgeFailures = 0,
-    string SourceType = "xinput-legacy", string SourceTransport = "xinput",
+    string SourceType = ViGEmInput.SourceType, string SourceTransport = "hid",
     string SourceFingerprint = "", long SourceReports = 0, long SourceStateChanges = 0,
     long SourceParseErrors = 0, long SourceReadErrors = 0, long SourceReconnects = 0,
     long LastSourceReportAgeMs = -1, long LastSourceReportIntervalMs = 0,

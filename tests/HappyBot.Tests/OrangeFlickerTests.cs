@@ -71,7 +71,7 @@ static partial class Program
         actions.ProcessOrangeObservation(OrangeObservationNow(), false);
         actions.CancelPendingReaction("hold-released");
         Require(SpinWait.SpinUntil(() => OrangeDodgesSent(host) == 1, 2000),
-            "releasing F/LT/E must not cancel a pending orange response");
+            "releasing LT must not cancel a pending orange response");
         Require(SpinWait.SpinUntil(() => !actions.IsBusy, 2000), "the orange dodge should finish");
 
         var scheduler = new ActionScheduler(CancellationToken.None);

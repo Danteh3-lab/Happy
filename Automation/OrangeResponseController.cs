@@ -226,7 +226,6 @@ internal sealed class OrangeResponseController
         OrangeLightDecision decision = OrangeLightDecision.Create(_orangeLightDirections);
         _scheduler.SetState("ORANGE LIGHT");
         bool delivered = _host.Input.DirectionalLight(GuardKey(decision.Direction));
-        _host.RestoreAutoGuardAfterDirectionalLight();
         string direction = DirectionName(decision.Direction);
         _host.SetVisionReaction(delivered ? "ORANGE LIGHT SENT" : "ORANGE LIGHT FAILED",
             delivered ? "Orange-only indicator -> RB light" : "Directional RB input was not delivered",
@@ -251,14 +250,9 @@ internal sealed class OrangeResponseController
         }
         int direction = wantLeft ? Input.VK_LEFT : Input.VK_RIGHT;
         IInputGateway input = _host.Input;
-        input.Block(true);
-        try
-        {
-            input.KeyDown(direction);
-            try { input.KeyTap(Input.VK_SPACE); }
-            finally { input.KeyUp(direction); }
-        }
-        finally { input.Block(false); }
+        input.KeyDown(direction);
+        try { input.KeyTap(Input.VK_SPACE); }
+        finally { input.KeyUp(direction); }
         return wantLeft ? "left" : "right";
     }
 
@@ -345,18 +339,11 @@ internal sealed class OrangeResponseController
             return false;
         }
 
-        // MovingForwardHeld reads the left stick in controller mode; a plain
-        // VK_W check never fired there, so the back-dodge was skipped.
         if (input.MovingForwardHeld())
         {
-            input.Block(true);
-            try
-            {
-                input.KeyDown(Input.VK_DOWN);
-                input.KeyTap(Input.VK_SPACE);
-                input.KeyUp(Input.VK_DOWN);
-            }
-            finally { input.Block(false); }
+            input.KeyDown(Input.VK_DOWN);
+            input.KeyTap(Input.VK_SPACE);
+            input.KeyUp(Input.VK_DOWN);
             return false;
         }
 

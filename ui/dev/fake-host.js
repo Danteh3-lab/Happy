@@ -14,8 +14,8 @@ const settings = {
   CrushingFallbackChance: 50, DeflectFallbackChance: 50, GuardHold: 750, Left: 90, Right: 90, TopDeflect: 110,
   AutoDodgeBind: "LB", OrangeParryBind: "", AutoParryBind: "",
   DodgeL: false, DodgeH: true, Leftdodge: false, Rightdodge: false, Unblockables: true, OrangeLight: false,
-  OrangeParry: false, Autoblock: true, Lightbash: false, Parry: true, Crushing: false, Deflect: false, Parry2: true,
-  Crushing2: false, Nohero: false, YourHero: true, Legit: true, BulwarkFallback: false, IgnoreOwnOrange: true,
+  OrangeParry: false, Autoblock: true, Lightbash: false, Parry: true, Crushing: false, Deflect: false,
+  Nohero: false, YourHero: true, Legit: true, BulwarkFallback: false, IgnoreOwnOrange: true,
 };
 heroes.forEach((hero) => { settings[hero] = hero === "Orochi"; });
 
@@ -38,10 +38,9 @@ const host = {
 function behavior() {
   const fAction = !settings.Autoblock ? "Inactive" : settings.Parry ? (settings.Legit ? "Mixed parry" : "Parry")
     : settings.Crushing ? "Crushing counter" : settings.Deflect ? "Deflect" : "None";
-  const eAction = !settings.Autoblock ? "Inactive" : settings.Parry2 ? "Parry" : settings.Crushing2 ? "Crushing counter" : "None";
   const hero = heroes.find((key) => settings[key]) || "None";
   const notices = [];
-  if (!settings.Autoblock) notices.push("Enable Auto Block to arm F/LT reactions.");
+  if (!settings.Autoblock) notices.push("Enable Auto Block to arm LT reactions.");
   return {
     Hero: hero,
     HeroResponseEnabled: settings.YourHero && hero !== "None",
@@ -49,16 +48,14 @@ function behavior() {
     FAction: fAction,
     FDetail: fAction === "Mixed parry"
       ? settings.LegitParryChance + "% parry after " + settings.ParryDelay + " ms; otherwise block only."
-      : fAction === "Parry" ? "Parry after the flash gate and " + settings.ParryDelay + " ms delay." : "Holding F/LT keeps the normal guard active.",
-    EAction: eAction,
-    EDetail: eAction === "Parry" ? "Parry after the flash gate and " + settings.ParryDelay + " ms delay." : "No reaction is assigned to E hold.",
+      : fAction === "Parry" ? "Parry after the flash gate and " + settings.ParryDelay + " ms delay." : "Holding LT keeps the normal guard active.",
     HeroBehavior: hero === "Orochi" ? "Successful deflects follow up with a heavy instead of a light." : "No hero-specific behavior is selected.",
-    HeroStatus: hero === "Orochi" ? "Applies when Deflect is the active F/LT action." : "Inactive.",
+    HeroStatus: hero === "Orochi" ? "Applies when Deflect is the active LT action." : "Inactive.",
     HeroRequirements: "Select the hero, then enable hero response.",
     HeroTimings: "Uses the Deflect delays.",
     Notices: notices,
-    DeflectTiming: settings.Deflect ? "Deflect is selected; these delays drive F/LT dodges." : "Deflect is not selected, so these values do not affect the current F/LT response.",
-    ParryTiming: settings.Parry ? "Parry is the current F/LT priority; this delay is active." : "Parry is not the current priority, so this delay may be inactive.",
+    DeflectTiming: settings.Deflect ? "Deflect is selected; these delays drive LT dodges." : "Deflect is not selected, so these values do not affect the current LT response.",
+    ParryTiming: settings.Parry ? "Parry is the current LT priority; this delay is active." : "Parry is not the current priority, so this delay may be inactive.",
     DodgeTiming: settings.Unblockables ? "Orange response is enabled; these delays are active." : "Orange response is disabled, so these delays do not affect the current reaction.",
   };
 }
@@ -77,8 +74,8 @@ function status() {
       : { state: "NONE", reason: "", direction: "", delayMs: -1, confirmation: "WAITING" },
     parryCount: host.rtSent, rtSent: host.rtSent, parryAttempts: host.rtSent, parriesConfirmed: host.confirmed,
     parriesUnconfirmed: 0, injected: host.rtSent * 3, mode: "ViGEm", source: "ON", sourceSlot: 0,
-    sourceType: "xinput-legacy", virtualState: "ON",
-    bridge: { Available: true, SourceConnected: true, SourceSlot: 0, SourceType: "xinput-legacy", SourceTransport: "xinput", OtherXInputControllers: 0 },
+    sourceType: "direct-ds4", virtualState: "ON",
+    bridge: { Available: true, SourceConnected: true, SourceSlot: -2, SourceType: "direct-ds4", SourceTransport: "hid", OtherXInputControllers: 0 },
     loop: live ? 118 + Math.round(Math.sin(t) * 4) : 0, legit: settings.Legit, orangeParry: host.orangeParry,
     autoDodgeBind: settings.AutoDodgeBind || "UNBOUND", orangeParryBind: settings.OrangeParryBind || "UNBOUND",
     autoParryBind: settings.AutoParryBind || "UNBOUND",
@@ -146,7 +143,7 @@ window.__danbotFakeHost = {
         break;
       case "vision-overlay":
         host.visionOverlay = !host.visionOverlay;
-        toast(host.visionOverlay ? "Vision overlay enabled. Press F7 to hide it." : "Vision overlay hidden.", "info");
+        toast(host.visionOverlay ? "Vision overlay enabled." : "Vision overlay hidden.", "info");
         break;
       case "anchor-scan":
         host.anchorScan = !host.anchorScan;

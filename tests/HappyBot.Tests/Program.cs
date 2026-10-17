@@ -47,7 +47,7 @@ static partial class Program
             FullFrameScreenCoordinatesPreserveRoiDetection();
             CroppedSearchDoesNotRepeatEdgePixels();
             CapturePlannerCoversBootstrapAndTrackedRegions();
-            ReactionPolicySelectionCoversEAndFWardenPriority();
+            ReactionPolicySelectionCoversWardenPriority();
             BehaviorSummaryMatchesReactionPriorityAndRequirements();
             NuxiaTopDeflectIsDisabledForYourHero();
             VisionAnalyzerUsesExplicitBoundsAndPreservesMarkerLoss();
@@ -107,7 +107,7 @@ static partial class Program
             TimingFieldsCoverEveryNumericSetting();
             DeckControllerApplyCommitsAndReportsInOrder();
             DeckControllerStartRejectsWhenNotReady();
-            DeckControllerHotkeysKeepDraftAndLiveInStep();
+            DeckControllerOrangeParryUpdatesLiveAndDraft();
             DeckControllerOverlayAndTelemetryReportFailures();
             DeckControllerBindsAndTogglesFromController();
             ControllerBindingCaptureEdgesAndThresholds();
@@ -134,7 +134,7 @@ static partial class Program
 
     private static CombatObservation Observation(long ms, CombatDirection direction, bool hasThreat = true, bool flash = false) =>
         new(ms, hasThreat, new Point(900, 400), 2, new Rectangle(700, 400, 360, 450), hasThreat,
-            new Point(900, 550), direction, false, flash, false, false, false, true, true, true);
+            new Point(900, 550), direction, false, flash, false, false, true, true);
 
     private static void Require(bool condition, string message)
     {
@@ -160,17 +160,15 @@ static partial class Program
     private sealed class FakeInputGateway : IInputGateway
     {
         public List<string> Events { get; } = new();
-        public HashSet<int> HeldKeys { get; } = new();
+        public bool HoldHeld { get; set; }
         public bool FailDeflect { get; set; }
         public bool FailLight { get; set; }
         public bool FailHeavy { get; set; }
         public bool ForwardHeld { get; set; }
         public bool IsReady => true;
-        public bool UsesControllerBridge => false;
         public bool CanSendBulwark => true;
         public InputBridgeSnapshot Diagnostics => new(false, false, 0, 0, 0, 0, 0, 0, 0);
-        public bool IsDown(int virtualKey) => HeldKeys.Contains(virtualKey);
-        public bool HoldButtonHeld() => false;
+        public bool HoldButtonHeld() => HoldHeld;
         public bool PhysicalHeavyAttackHeld() => false;
         public bool PhysicalLightAttackHeld() => false;
         public bool MovingForwardHeld() => ForwardHeld;
@@ -186,7 +184,6 @@ static partial class Program
             Events.Add("click:" + virtualKey);
             return !(FailLight && virtualKey == Input.VK_LBUTTON) && !(FailHeavy && virtualKey == Input.VK_RBUTTON);
         }
-        public void Block(bool on) => Events.Add("block:" + on);
         public bool BeginBulwarkStance() { Events.Add("bulwark-down"); return true; }
         public void EndBulwarkStance() => Events.Add("bulwark-up");
         public bool DirectionalLight(int guardKey) { Events.Add("light:" + guardKey); return true; }
@@ -206,10 +203,8 @@ static partial class Program
         public bool SawEvent(string name) { lock (_eventsSync) return _events.Contains(name); }
         private void Add(string name) { lock (_eventsSync) _events.Add(name); }
         public bool IsReady => true;
-        public bool UsesControllerBridge => false;
         public bool CanSendBulwark => true;
         public InputBridgeSnapshot Diagnostics => new(false, false, 0, 0, 0, 0, 0, 0, 0);
-        public bool IsDown(int virtualKey) => false;
         public bool HoldButtonHeld() => false;
         public bool PhysicalHeavyAttackHeld() => false;
         public bool PhysicalLightAttackHeld() => false;
@@ -218,7 +213,6 @@ static partial class Program
         public bool KeyUp(int virtualKey) { Add("up:" + virtualKey); return true; }
         public bool KeyTap(int virtualKey) { Add("tap:" + virtualKey); return true; }
         public bool MouseClick(int virtualKey) { Add("click:" + virtualKey); return true; }
-        public void Block(bool on) => Add("block:" + on);
         public bool BeginBulwarkStance() { Add("bulwark-down"); return true; }
         public void EndBulwarkStance() => Add("bulwark-up");
         public bool DirectionalLight(int guardKey) { Add("light:" + guardKey); return true; }
@@ -251,8 +245,7 @@ static partial class Program
         public bool OrangeParryEnabled { get; }
         public OutgoingOrangeGuardResult OutgoingOrangeState { get; } =
             new(false, false, "", false, false, 0, false, false, false);
-        public bool IsEHeld() => Input.IsDown(HappyBot.Input.VK_E);
-        public bool IsFHeld() => Input.IsDown(HappyBot.Input.VK_F) || Input.HoldButtonHeld();
+        public bool IsFHeld() => Input.HoldButtonHeld();
         public bool IsCurrentCandidate(long candidateId) => candidateId == _candidateId;
         public bool IsYourChar(string name) => ReactionPolicy.IsYourChar(Settings, name);
         public bool HasHeroAction => ReactionPolicy.HasHeroAction(Settings);
@@ -284,6 +277,5 @@ static partial class Program
             OrangeParryEvidenceRequests.Add(observation.TimestampMs + ":" + delay + ":" + clearGapAgeMs);
         public void RegisterAutomationLight() => AutomationLightRegistrations++;
         public void RegisterAutomationHeavy() => AutomationHeavyRegistrations++;
-        public void RestoreAutoGuardAfterDirectionalLight() { }
     }
 }

@@ -274,7 +274,7 @@ internal sealed record ParryDecision(
     }
 }
 
-/// <summary>Combines the percentage roll with optional F-path fallback mixes.</summary>
+/// <summary>Combines the percentage roll with optional fallback mixes.</summary>
 internal sealed record ParryResolution(ParryDecision Decision, ParryOutcome Outcome, int? FallbackRoll, int? DeflectRoll)
 {
     public static ParryResolution Create(
@@ -334,9 +334,7 @@ internal sealed record CombatObservation(
     bool LightFlash,
     bool OrangeIndicator,
     bool OrangeFeint,
-    bool EHeld,
     bool FHeld,
-    bool LtHeld,
     bool InputReady,
     bool SourceHeavyHeld = false,
     bool SourceLightHeld = false,

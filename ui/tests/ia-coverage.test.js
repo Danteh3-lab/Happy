@@ -64,6 +64,7 @@ test("hero catalog matches Settings.Chars", () => {
   assert.deepEqual([...heroKeys].sort(), [...csHeroes].sort());
 });
 
-test("F1 is documented", () => {
-  assert.ok((html.match(/<kbd>F1<\/kbd>/g) || []).length >= 2, "F1 must appear in the hotkey references");
+test("no keyboard hotkeys or E hold remain", () => {
+  assert.ok(!/<kbd>F[1-7]<\/kbd>/.test(html), "function-key hotkeys were removed; the DS4 is the only input");
+  assert.ok(!/data-setting="(Parry2|Crushing2)"/.test(html), "the keyboard-only E hold reactions were removed");
 });

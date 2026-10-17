@@ -41,7 +41,7 @@ internal sealed class ProfileEditorController
         LoadIntoEditor(startupProfile, res1, res2);
     }
 
-    /// <summary>Replaces the draft and marks it dirty (hotkeys, binds, UI edits).</summary>
+    /// <summary>Replaces the draft and marks it dirty (binds, UI edits).</summary>
     public void ReplaceEditor(Settings next)
     {
         EditorSettings = next ?? throw new ArgumentNullException(nameof(next));

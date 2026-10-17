@@ -10,8 +10,6 @@ internal sealed record ReactionBehaviorSummary(
     string HeroMode,
     string FAction,
     string FDetail,
-    string EAction,
-    string EDetail,
     string HeroBehavior,
     string HeroStatus,
     string HeroRequirements,
@@ -37,9 +35,9 @@ internal sealed record ReactionBehaviorSummary(
         {
             fAction = "Inactive";
             fDetail = configuredF == "None"
-                ? "No F/LT reaction is configured."
+                ? "No LT reaction is configured."
                 : configuredF + " is configured, but Auto Block is required.";
-            if (configuredF != "None") notices.Add("Enable Auto Block to arm F/LT reactions.");
+            if (configuredF != "None") notices.Add("Enable Auto Block to arm LT reactions.");
         }
         else if (settings.Parry)
         {
@@ -73,38 +71,12 @@ internal sealed record ReactionBehaviorSummary(
         else
         {
             fAction = "None";
-            fDetail = "Holding F/LT will only keep the normal guard active.";
-        }
-
-        string eAction;
-        string eDetail;
-        if (!settings.Autoblock && ReactionPolicy.HasEAction(settings))
-        {
-            eAction = "Inactive";
-            eDetail = "An E reaction is configured, but Auto Block is required.";
-            notices.Add("Enable Auto Block to arm E reactions.");
-        }
-        else if (settings.Parry2)
-        {
-            eAction = settings.Legit ? "Mixed parry" : "Parry";
-            eDetail = settings.Legit
-                ? $"{settings.LegitParryChance}% parry after {settings.ParryDelay} ms; otherwise block only."
-                : $"Parry after the flash gate and {settings.ParryDelay} ms delay.";
-        }
-        else if (settings.Crushing2)
-        {
-            eAction = "Crushing counter";
-            eDetail = "Sends RB immediately after the flash gate.";
-        }
-        else
-        {
-            eAction = "None";
-            eDetail = "No reaction is assigned to E hold.";
+            fDetail = "Holding LT will only keep the normal guard active.";
         }
 
         notices.AddRange(DescribeOverriddenSwitches(settings));
         string heroStatus = DescribeHeroStatus(settings, hero, heroEnabled);
-        if (hero != "None" && !heroStatus.EndsWith("active F/LT action.", StringComparison.Ordinal))
+        if (hero != "None" && !heroStatus.EndsWith("active LT action.", StringComparison.Ordinal))
             notices.Add(heroStatus);
         if (settings.BulwarkFallback && heroEnabled && hero == "Blackprior" && !canSendBulwark)
             notices.Add("Bulwark fallback unavailable: the ViGEm controller path is not ready.");
@@ -117,8 +89,6 @@ internal sealed record ReactionBehaviorSummary(
             DescribeHeroMode(settings, hero, heroEnabled),
             fAction,
             fDetail,
-            eAction,
-            eDetail,
             DescribeHeroBehavior(hero),
             heroStatus,
             DescribeHeroRequirements(hero),
@@ -143,10 +113,8 @@ internal sealed record ReactionBehaviorSummary(
         else if (!settings.Parry && settings.Crushing && settings.Deflect)
             yield return "Deflect never runs: Crushing counter takes priority.";
 
-        if (settings.Legit && !settings.Parry && !settings.Parry2)
+        if (settings.Legit && !settings.Parry)
             yield return "Legit has no effect: it only rolls for Parry.";
-        if (settings.Parry2 && settings.Crushing2)
-            yield return "E Crushing counter never runs: E Parry takes priority.";
     }
 
     private static string ConfiguredFAction(Settings settings)
@@ -192,7 +160,7 @@ internal sealed record ReactionBehaviorSummary(
     private static string DescribeDeflectTiming(Settings settings, string hero, bool heroEnabled)
     {
         if (!settings.Autoblock)
-            return "Inactive: Auto Block is disabled, so F/LT and E reactions cannot arm.";
+            return "Inactive: Auto Block is disabled, so LT reactions cannot arm.";
         if (!settings.Deflect)
             return "Inactive: Deflect is disabled, so these values do not affect the selected reaction.";
 
@@ -200,41 +168,36 @@ internal sealed record ReactionBehaviorSummary(
         if (settings.Parry)
         {
             if (!settings.Legit)
-                return "Inactive: normal Parry takes priority for F/LT; these values are not used.";
+                return "Inactive: normal Parry takes priority for LT; these values are not used.";
 
             return nuxiaTopBlocked
                 ? "Legit fallback only: after the Parry roll, left/right use these delays; Nuxia top is excluded while standalone response is enabled."
                 : "Legit fallback only: after the Parry roll, an eligible directional deflect uses the matching delay.";
         }
         if (settings.Crushing)
-            return "Inactive: Crushing counter takes priority for F/LT; these values are not used.";
+            return "Inactive: Crushing counter takes priority for LT; these values are not used.";
 
         return nuxiaTopBlocked
-            ? "Direct F/LT deflect after the flash gate: left/right use these delays; Nuxia top is excluded while standalone response is enabled."
-            : "Direct F/LT deflect after the flash gate: the matching directional delay starts after the flash gate.";
+            ? "Direct LT deflect after the flash gate: left/right use these delays; Nuxia top is excluded while standalone response is enabled."
+            : "Direct LT deflect after the flash gate: the matching directional delay starts after the flash gate.";
     }
 
     private static string DescribeParryTiming(Settings settings)
     {
         bool fParry = settings.Autoblock && settings.Parry;
-        bool eParry = settings.Autoblock && settings.Parry2;
         bool orangeParry = settings.Unblockables && settings.OrangeParry;
-        if (!fParry && !eParry && !orangeParry)
+        if (!fParry && !orangeParry)
             return "Inactive: no selected Parry reaction uses this delay.";
 
         var channels = new List<string>();
-        if (fParry) channels.Add("F/LT");
-        if (eParry) channels.Add("E");
+        if (fParry) channels.Add("LT");
         if (orangeParry) channels.Add("orange");
         string channelText = string.Join(", ", channels);
-        var flashChannels = new List<string>();
-        if (fParry) flashChannels.Add("F/LT");
-        if (eParry) flashChannels.Add("E");
-        string start = flashChannels.Count > 0 && orangeParry
-            ? $"{string.Join("/", flashChannels)} Parry starts after the flash gate; orange Parry starts after the orange Pause/Pause1 gate"
+        string start = fParry && orangeParry
+            ? "LT Parry starts after the flash gate; orange Parry starts after the orange Pause/Pause1 gate"
             : orangeParry
                 ? "Orange Parry starts after the orange Pause/Pause1 gate"
-                : $"{string.Join("/", flashChannels)} Parry starts after the flash gate";
+                : "LT Parry starts after the flash gate";
         return $"Active for {channelText}: {start}; {settings.ParryDelay} ms is applied before RT.";
     }
 
@@ -277,7 +240,7 @@ internal sealed record ReactionBehaviorSummary(
         if (settings.Parry) return hero + " response inactive: Parry takes priority.";
         if (settings.Crushing) return hero + " response inactive: Crushing counter takes priority.";
         if (settings.Deflect) return hero + " response inactive: Deflect takes priority.";
-        return hero + " response is the active F/LT action.";
+        return hero + " response is the active LT action.";
     }
 
     private static bool IsStandaloneHero(string hero) => hero is
@@ -323,7 +286,7 @@ internal sealed record ReactionBehaviorSummary(
         "Warden" => "Enable standalone hero response and Parry. Auto Block and the flash gate are required; Warden has no separate hero action.",
         "Nuxia" => "Enable standalone hero response and Deflect. Auto Block and the flash gate are required; Nuxia has no separate hero action.",
         "Peacekeeper" => "The standalone toggle is not required for this timing override. Selecting Peacekeeper forces side deflects to 100 ms when timings are applied.",
-        _ when IsStandaloneHero(hero) => "Enable standalone hero response, Auto Block, and hold F/LT. Parry, Crushing, and Deflect must be off for the standalone response.",
+        _ when IsStandaloneHero(hero) => "Enable standalone hero response, Auto Block, and hold LT. Parry, Crushing, and Deflect must be off for the standalone response.",
         _ => "Selection is saved for compatibility, but this hero has no implemented response."
     };
 

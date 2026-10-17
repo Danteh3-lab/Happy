@@ -75,7 +75,7 @@ static partial class Program
             RequiresParryEnabled: true);
 
         var failInput = new FakeInputGateway();
-        failInput.HeldKeys.Add(Input.VK_F);
+        failInput.HoldHeld = true;
         var failHost = new FakeAutomationHost(failInput, settings, 401);
         var failScheduler = new ActionScheduler(failHost.ShutdownToken);
         try
@@ -87,7 +87,7 @@ static partial class Program
         finally { failScheduler.Dispose(); }
 
         var passInput = new FakeInputGateway();
-        passInput.HeldKeys.Add(Input.VK_F);
+        passInput.HoldHeld = true;
         var passHost = new FakeAutomationHost(passInput, settings, 401);
         var passScheduler = new ActionScheduler(passHost.ShutdownToken);
         try
@@ -121,10 +121,5 @@ static partial class Program
         Require(ReactionBehaviorSummary.Create(legitDeflect, true).Notices
                 .Any(n => n.StartsWith("Legit has no effect")),
             "Legit without Parry must be reported as having no effect");
-
-        var eBoth = new Settings { Autoblock = true, Parry2 = true, Crushing2 = true };
-        Require(ReactionBehaviorSummary.Create(eBoth, true).Notices
-                .Any(n => n.StartsWith("E Crushing counter never runs")),
-            "E Parry must report that it overrides E Crushing");
     }
 }

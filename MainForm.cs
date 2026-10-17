@@ -10,20 +10,11 @@ namespace HappyBot;
 
 /// <summary>
 /// Borderless window that hosts the WebView2 control deck. It owns window
-/// chrome, hotkey registration and the timers; all behavior lives in
+/// chrome and the timers; all behavior lives in
 /// <see cref="DeckController"/>.
 /// </summary>
 public sealed class MainForm : Form, IUiSink, IUiDispatcher
 {
-    private static readonly (int Id, HotkeyAction Action)[] Hotkeys =
-    {
-        (1, HotkeyAction.OrangeDelayToggle),
-        (3, HotkeyAction.CycleF),
-        (4, HotkeyAction.CycleE),
-        (5, HotkeyAction.OrangeParry),
-        (6, HotkeyAction.Pause),
-        (7, HotkeyAction.VisionOverlay)
-    };
     private const int WmNcLButtonDown = 0xA1;
     private const int HtCaption = 0x2;
     private const string AppHost = "danbot.app.example";
@@ -31,7 +22,6 @@ public sealed class MainForm : Form, IUiSink, IUiDispatcher
 
     private readonly BotCore _bot = new();
     private readonly DeckController _controller;
-    private readonly KeyboardHook _hook;
     private readonly WebView2 _webView;
     private readonly VisionOverlayForm _visionOverlay;
     private readonly System.Windows.Forms.Timer _statusTimer;
@@ -63,7 +53,6 @@ public sealed class MainForm : Form, IUiSink, IUiDispatcher
         };
         Controls.Add(_webView);
 
-        _hook = new KeyboardHook(_controller.OnKey);
         _statusTimer = new System.Windows.Forms.Timer { Interval = 200 };
         _statusTimer.Tick += (_, _) => _controller.OnStatusTick();
         _statusTimer.Start();
@@ -198,53 +187,15 @@ public sealed class MainForm : Form, IUiSink, IUiDispatcher
         }
     }
 
-    protected override void OnHandleCreated(EventArgs e)
-    {
-        base.OnHandleCreated(e);
-        foreach ((int id, _) in Hotkeys)
-        {
-            // Ids match the function key number: 1 → F1 (VK 0x70), 3 → F3, ...
-            Native.RegisterHotKey(Handle, id, 0, (uint)(0x70 + id - 1));
-        }
-    }
-
-    protected override void OnHandleDestroyed(EventArgs e)
-    {
-        foreach ((int id, _) in Hotkeys)
-        {
-            Native.UnregisterHotKey(Handle, id);
-        }
-        base.OnHandleDestroyed(e);
-    }
-
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         _statusTimer.Stop();
         _controllerTimer.Stop();
         _controller.Dispose();
         _bot.Dispose();
-        _hook.Dispose();
         _visionOverlay.Dispose();
         _webView.Dispose();
         base.OnFormClosing(e);
-    }
-
-    protected override void WndProc(ref Message m)
-    {
-        if (m.Msg == Native.WM_HOTKEY)
-        {
-            int id = m.WParam.ToInt32();
-            foreach ((int hotkeyId, HotkeyAction action) in Hotkeys)
-            {
-                if (hotkeyId == id)
-                {
-                    _controller.OnHotkey(action);
-                    break;
-                }
-            }
-            return;
-        }
-        base.WndProc(ref m);
     }
 
     [DllImport("user32.dll")]

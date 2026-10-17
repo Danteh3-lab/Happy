@@ -1,7 +1,7 @@
 namespace HappyBot.Overlay;
 
 /// <summary>
-/// HUD colors for the F7 vision overlay. The shared ones mirror the tokens in
+/// HUD colors for the vision overlay. The shared ones mirror the tokens in
 /// ui/styles/tokens.css (OverlayThemeTests keeps them equal) so the overlay and
 /// the control deck read as one product.
 /// </summary>

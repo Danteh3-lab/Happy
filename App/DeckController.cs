@@ -2,25 +2,9 @@ using HappyBot.App.Protocol;
 
 namespace HappyBot.App;
 
-internal enum HotkeyAction
-{
-    /// <summary>F1: orange delay 0 ↔ 80 ms, pushed live at once.</summary>
-    OrangeDelayToggle,
-    /// <summary>F3: cycle the F/LT reaction.</summary>
-    CycleF,
-    /// <summary>F4: cycle the E reaction.</summary>
-    CycleE,
-    /// <summary>F5: orange parry on/off.</summary>
-    OrangeParry,
-    /// <summary>F6: pause/resume.</summary>
-    Pause,
-    /// <summary>F7: vision overlay on/off.</summary>
-    VisionOverlay
-}
-
 /// <summary>
 /// Everything the control deck does, without any WinForms or WebView2 types.
-/// The form forwards page commands, hotkeys, key state and timer ticks here.
+/// The form forwards page commands and timer ticks here.
 /// UI-thread only; background work reports back through <see cref="IUiDispatcher"/>.
 /// </summary>
 internal sealed class DeckController : IDisposable
@@ -36,7 +20,6 @@ internal sealed class DeckController : IDisposable
     private readonly InputTestRunner _tests;
     private readonly ControllerBindingCapture _capture = new();
     private readonly TelemetryCoordinator _telemetry;
-    private bool _fKeyDown;
     private bool _directSourceWarningShown;
 
     public DeckController(BotCore bot, SettingsSession session, IUiSink ui, IUiDispatcher dispatcher,
@@ -150,78 +133,17 @@ internal sealed class DeckController : IDisposable
         }
     }
 
-    public void OnHotkey(HotkeyAction action)
-    {
-        switch (action)
-        {
-            case HotkeyAction.OrangeDelayToggle:
-                // The one timing that goes live without Apply.
-                _session.EditDraft(s => s.Pause = s.Pause == 0 ? 80 : 0, "Pause");
-                SendSettings();
-                if (_session.Draft.Pause == 0) _sound.Unclick(); else _sound.Click();
-                PostStatus();
-                break;
-            case HotkeyAction.CycleF:
-            {
-                string mode = "";
-                _session.EditDraft(s => mode = ReactionModeCycler.CycleF(s));
-                SendSettings();
-                Toast($"F-mode: {mode}", "info");
-                _sound.Click();
-                PostStatus();
-                break;
-            }
-            case HotkeyAction.CycleE:
-            {
-                string mode = "";
-                _session.EditDraft(s => mode = ReactionModeCycler.CycleE(s));
-                SendSettings();
-                Toast($"E-mode: {mode}", "info");
-                _sound.Click();
-                PostStatus();
-                break;
-            }
-            case HotkeyAction.OrangeParry:
-                ToggleOrangeParry();
-                break;
-            case HotkeyAction.Pause:
-                // Unlike the page's Pause button this does not require a running bot.
-                _bot.TogglePause();
-                _sound.Click();
-                PostStatus();
-                break;
-            case HotkeyAction.VisionOverlay:
-                ToggleVisionOverlay();
-                break;
-        }
-    }
-
-    /// <summary>Low-level keyboard hook callback for the E and F hold gates.</summary>
-    public void OnKey(int vk, bool down)
-    {
-        if (vk == Input.VK_E)
-        {
-            _bot.EHeld = down;
-        }
-        else if (vk == Input.VK_F)
-        {
-            _fKeyDown = down;
-            _bot.FHeld = _fKeyDown || _input.HoldButtonHeld();
-        }
-    }
-
     /// <summary>The 200 ms tick: bridge recovery, hold gate, heartbeat, then status.</summary>
     public void OnStatusTick()
     {
         _input.TryRecover();
-        _bot.FHeld = _fKeyDown || _input.HoldButtonHeld();
+        _bot.FHeld = _input.HoldButtonHeld();
 
         if (!_bot.IsRunning || _bot.IsPaused)
             _bot.RecordBridgeHeartbeat();
 
         InputBridgeSnapshot bridge = _input.GetDiagnostics();
-        if (_ui.IsConnected && bridge.SourceType == "direct-ds4" &&
-            bridge.OtherXInputControllers > 0 && !_directSourceWarningShown)
+        if (_ui.IsConnected && bridge.OtherXInputControllers > 0 && !_directSourceWarningShown)
         {
             _directSourceWarningShown = true;
             Toast("Direct DS4 mode detected another XInput controller. Close DS4Windows or other virtual-pad tools.", "warning");
@@ -420,7 +342,7 @@ internal sealed class DeckController : IDisposable
     {
         Settings next = _session.EditDraft(s => s.Parry = !s.Parry);
         SendSettings();
-        Toast(next.Parry ? "F auto parry ON." : "F auto parry OFF.", next.Parry ? "success" : "info");
+        Toast(next.Parry ? "Auto parry ON." : "Auto parry OFF.", next.Parry ? "success" : "info");
         PostStatus();
     }
 
@@ -451,7 +373,7 @@ internal sealed class DeckController : IDisposable
         else if (_overlay.TryShow())
         {
             VisionOverlayVisible = true;
-            Toast("Vision overlay enabled. Press F7 to hide it.", "success");
+            Toast("Vision overlay enabled.", "success");
         }
         else
         {

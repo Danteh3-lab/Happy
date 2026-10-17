@@ -1,4 +1,4 @@
-// Slide-over help panel (setup guide, hotkeys, mapping, feature notes).
+// Slide-over help panel (setup guide, holds, mapping, feature notes).
 import { $$ } from "../dom.js";
 
 export function createHelpPanel(panel) {

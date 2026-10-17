@@ -16,7 +16,7 @@ internal static class SettingsCodec
     public static readonly string[] CheckKeys =
     {
         "DodgeL", "DodgeH", "Leftdodge", "Rightdodge", "Unblockables", "OrangeLight", "OrangeParry", "Autoblock", "Lightbash",
-        "Parry", "Crushing", "Deflect", "Parry2", "Crushing2", "Nohero", "YourHero", "Legit", "BulwarkFallback", "IgnoreOwnOrange",
+        "Parry", "Crushing", "Deflect", "Nohero", "YourHero", "Legit", "BulwarkFallback", "IgnoreOwnOrange",
         "Warden", "Peacekeeper", "Centurion", "Blackprior", "Gryphon", "Conqueror", "Lawbringer", "Gladiator", "Warmonger",
         "Raider", "Berserker", "Highlander", "Jormungandr", "Warlord", "Valkyrie", "Shaman", "Varangian", "Null",
         "Kensei", "Orochi", "Shinobi", "Hitokiri", "Sohei", "Shugoki", "Nobushi", "Aramusha", "Kyoshin",
@@ -106,8 +106,6 @@ internal static class SettingsCodec
             "Parry" => s.Parry,
             "Crushing" => s.Crushing,
             "Deflect" => s.Deflect,
-            "Parry2" => s.Parry2,
-            "Crushing2" => s.Crushing2,
             "Nohero" => s.Nohero,
             "YourHero" => s.YourHero,
             "Legit" => s.Legit,
@@ -133,8 +131,6 @@ internal static class SettingsCodec
             case "Parry": s.Parry = value; break;
             case "Crushing": s.Crushing = value; break;
             case "Deflect": s.Deflect = value; break;
-            case "Parry2": s.Parry2 = value; break;
-            case "Crushing2": s.Crushing2 = value; break;
             case "Nohero": s.Nohero = value; break;
             case "YourHero": s.YourHero = value; break;
             case "Legit": s.Legit = value; break;

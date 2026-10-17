@@ -104,12 +104,9 @@ export function deriveView(settings, status, flags) {
   vm.behaviorHero = heroLabel(hero);
   vm.fAction = behaviorValue(behavior, "fAction", "None");
   vm.fDetail = behaviorValue(behavior, "fDetail", "No reaction is configured.");
-  vm.eAction = behaviorValue(behavior, "eAction", "None");
-  vm.eDetail = behaviorValue(behavior, "eDetail", "No reaction is configured.");
   const notices = behaviorValue(behavior, "notices", []);
   vm.notices = Array.isArray(notices) ? notices.map(String) : [];
   vm.fActionState = vm.fAction === "None" || vm.fAction === "Inactive" ? "idle" : "ok";
-  vm.eActionState = vm.eAction === "None" || vm.eAction === "Inactive" ? "idle" : "ok";
 
   // Hero page
   const selected = selectedHero(s);
@@ -170,7 +167,7 @@ export function deriveView(settings, status, flags) {
   vm.sourceType = String(st.sourceType || bridge.SourceType || "-");
   vm.sourceTransport = String(bridge.SourceTransport || "-");
   const others = Number(bridge.OtherXInputControllers || 0);
-  vm.otherXInputWarning = others > 0 && vm.sourceType === "direct-ds4";
+  vm.otherXInputWarning = others > 0;
   vm.otherXInput = String(others);
   vm.sidebarInput = mode + " / " + (source === "ON" ? "source " + slot : "idle");
   vm.sidebarInputState = virtualOn ? "ok" : "bad";

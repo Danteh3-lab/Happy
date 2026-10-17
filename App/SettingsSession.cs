@@ -6,7 +6,7 @@ namespace HappyBot.App;
 /// Invariant: the bot's live switches always equal the draft's switches, and
 /// <see cref="BotCore.OrangeParry"/> always equals the draft's OrangeParry.
 /// Numeric timings only reach the bot through <see cref="CommitAll"/>, except
-/// for keys an edit names explicitly (F1's orange delay toggle).
+/// for keys an edit names explicitly.
 ///
 /// UI-thread only, like the <see cref="ProfileEditorController"/> it wraps.
 /// </summary>

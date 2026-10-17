@@ -31,8 +31,6 @@ public sealed class Settings
     public bool Parry;
     public bool Crushing;
     public bool Deflect;
-    public bool Parry2;
-    public bool Crushing2;
     public bool Nohero;
     public bool YourHero;
     public bool Legit;
@@ -85,8 +83,6 @@ public sealed class Settings
         Parry = source.Parry;
         Crushing = source.Crushing;
         Deflect = source.Deflect;
-        Parry2 = source.Parry2;
-        Crushing2 = source.Crushing2;
         Nohero = source.Nohero;
         YourHero = source.YourHero;
         Legit = source.Legit;

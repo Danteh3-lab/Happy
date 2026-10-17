@@ -2,11 +2,15 @@
 
 DANBOT by Danteh is a C#/.NET 10 rewrite of the original `archive/legacy-ahk/HappyBot.ahk`. It provides screen-based attack detection, guard automation, parry, deflect, dodge, and hero-specific responses.
 
-The verified input path is a merged virtual Xbox controller:
+The only input path is a DualShock 4 read directly over HID and merged into
+one virtual Xbox controller:
 
 ```text
-DS4Windows controller -> HappyBot state merge -> one ViGEm Xbox controller -> game
+DS4 (HID, hidden by HidHide) -> HappyBot state merge -> one ViGEm Xbox controller -> game
 ```
+
+There is no keyboard or mouse input or output: no hotkeys, no keyboard hold
+keys, and no SendInput/keybd_event modes.
 
 This avoids the input-device switching lag caused by exposing both the source controller and the bot controller to the game.
 
@@ -15,8 +19,8 @@ This avoids the input-device switching lag caused by exposing both the source co
 - Windows 10/11 64-bit
 - .NET 10 SDK
 - ViGEmBus
-- DS4Windows when using a PlayStation 4 controller
-- HidHide when using DS4Windows and the merged-controller path
+- A DualShock 4 controller
+- HidHide
 
 ## Build
 
@@ -31,47 +35,36 @@ The executable is written to:
 bin\Release\net10.0-windows\HappyBot.exe
 ```
 
-The launchers below start the Release build. If only a Debug build exists,
-they fall back to `bin\Debug\net10.0-windows\HappyBot.exe`.
+`HappyBot-DirectDS4.bat` starts the Release build. If only a Debug build
+exists, it falls back to `bin\Debug\net10.0-windows\HappyBot.exe`.
 
-## Run With ViGEm
+## Run
 
-Use `HappyBot-ViGEm.bat` from the repository root after building:
+Run `HappyBot-DirectDS4.bat` from the repository root after building:
 
 ```powershell
-.\HappyBot-ViGEm.bat
+.\HappyBot-DirectDS4.bat
 ```
 
-The launcher sets `HAPPYBOT_INPUT_MODE=vigem` and starts the built executable.
-
-## Run With Direct DS4 Input
-
-`HappyBot-DirectDS4.bat` reads the physical DualShock 4 HID reports directly,
-then merges them into the same single ViGEm Xbox controller. Close DS4Windows
-before using this launcher so it does not create a second virtual Xbox device.
-The legacy `HappyBot-ViGEm.bat` launcher remains available as a rollback.
+HappyBot reads the physical DualShock 4 HID reports directly and merges them
+into a single ViGEm Xbox controller. Close DS4Windows and any other
+virtual-pad tool first, or the game sees a second controller.
 
 Recommended startup order:
 
-1. Connect the DS4 and start DS4Windows using an Xbox 360 profile.
-2. Start HidHide with the source devices hidden from the game.
-3. Run `HappyBot-ViGEm.bat`.
-4. Confirm the Dashboard shows **Virtual controller: Ready**, and that **Controller & Binds › Input bridge** reports Source `ON`.
-5. Start or restart the game after the virtual controller exists.
+1. Connect the DS4 and hide it from the game with HidHide (see below).
+2. Run `HappyBot-DirectDS4.bat`.
+3. Confirm the Dashboard shows **Virtual controller: Ready**, and that **Controller & Binds › Input bridge** reports Source `ON`.
+4. Start or restart the game after the virtual controller exists.
 
-The bot does not need administrator rights in ViGEm mode. Driver installation and HidHide configuration require administrator rights.
+The bot does not need administrator rights. Driver installation and HidHide configuration require administrator rights.
 
 ## HidHide Setup
 
-Add these applications to HidHide's whitelist:
-
-- `HappyBot.exe`
-- `DS4Windows.exe`
-
-Do not whitelist the game. Hide the physical Sony controller and the DS4Windows virtual Xbox controller so the game sees only HappyBot's merged output controller. Reconnect the controller after changing HidHide settings.
-
-For direct DS4 mode, close DS4Windows and hide only the physical Sony
-controller; whitelist `HappyBot.exe` so it can read the hidden HID device.
+Hide the physical Sony controller and add `HappyBot.exe` to HidHide's
+whitelist so it can still read the hidden HID device. Do not whitelist the
+game: it should see only HappyBot's merged output controller. Reconnect the
+controller after changing HidHide settings.
 
 ## Controller Mapping
 
@@ -101,7 +94,9 @@ HappyBot's internal output mapping is:
 | Numpad 4 / 6 / 8 | Right stick left / right / up |
 | Arrow keys | Left stick |
 
-The configured hold button is `LT`, which also drives the bot's F-button response path.
+These bot action names are internal codes; every one is sent as the
+virtual controller input shown. The configured hold button (`HoldButton` in
+`Config.ini`, `LT` by default) arms every guard reaction.
 
 ## Using The Control Deck
 
@@ -110,10 +105,10 @@ commit bar along the bottom of every page.
 
 | Page | What it holds |
 | --- | --- |
-| **Dashboard** | Start / Pause, readiness checks, the active F/LT and E behavior, quick toggles, live signal, and session counters. |
-| **Combat** | Orange response, guard and F/LT reactions, Legit mode with its fallback percentages, and E-hold reactions. |
+| **Dashboard** | Start / Pause, readiness checks, the active LT behavior, quick toggles, live signal, and session counters. |
+| **Combat** | Orange response, guard and LT reactions, and Legit mode with its fallback percentages. |
 | **Heroes & Timing** | The hero picker, hero response, and every reaction delay. |
-| **Controller & Binds** | Controller toggle binds, the input bridge state, **Test input**, and the hotkey/mapping reference. |
+| **Controller & Binds** | Controller toggle binds, the input bridge state, **Test input**, and the controller mapping reference. |
 | **Diagnostics** | Resolution calibration, Scan screen, the vision overlay, live detection, the last reaction, counters, telemetry, and app actions. |
 
 Typical setup:
@@ -132,31 +127,20 @@ profile. The **?** button in the title bar opens the setup guide.
 
 Important feature switches:
 
-- **Auto block** controls automatic guard direction changes and is required by every F/LT and E reaction.
-- **Auto parry** under Guard & primary reactions controls the generic F/LT parry path.
-- **Auto parry** under E hold controls the E-key path.
+- **Auto block** controls automatic guard direction changes and is required by every LT reaction.
+- **Auto parry** under Guard & primary reactions controls the LT parry path.
 - **Auto deflect** controls directional dodge deflects.
 - **Orange response** (`Unblockables`) controls orange detection and dodge responses.
 - **Hero response** enables hero-specific behavior for the selected hero.
 
-## Hotkeys
+## Controller Toggles
 
-| Key | Action |
-| --- | --- |
-| F1 | Orange delay 0 ↔ 80 ms (applied live) |
-| F3 | Cycle F/LT action: Parry → Crushing → Deflect |
-| F4 | Cycle E action: Parry → Crushing → Off |
-| F5 | Orange parry on/off |
-| F6 | Pause / resume |
-| F7 | Vision overlay on/off |
-
-**Controller & Binds** can also bind source-controller buttons to toggle Auto
-dodge, Orange parry, and F auto parry.
+**Controller & Binds** can bind DS4 buttons to toggle Auto dodge, Orange
+parry, and Auto parry. Everything else is set from the control deck.
 
 ## Vision Overlay
 
-Press **F7** or use **Vision overlay** in Diagnostics (or the Dashboard quick
-toggles) to show DANBOT's diagnostic HUD. The overlay is click-through, hidden
+Use **Vision overlay** in Diagnostics (or the Dashboard quick toggles) to show DANBOT's diagnostic HUD. The overlay is click-through, hidden
 from screen capture, and displays the anchor scan area, the green/yellow anchor,
 the derived combat and guard regions, and the live reaction stage (for example,
 `LEFT → GUARD`, `LEFT → PARRY READY`, then `LEFT → PARRY SENT`). It is hidden by
@@ -197,14 +181,14 @@ Architecture:
 ```text
 ui/ (HTML/CSS/ES modules, served from https://danbot.app.example/)
   ⇅ JSON messages (App/Protocol, mirrored in ui/js/protocol.js)
-MainForm         WebView2 host: window chrome, hotkeys, timers, message routing
+MainForm         WebView2 host: window chrome, timers, message routing
   → DeckController   all control-deck behavior, UI-free and unit-tested
       → SettingsSession  draft vs live settings (switches live, timings on Apply)
       → BotCore          detection and reactions
 ```
 
 Design tokens live in `ui/styles/tokens.css` and are documented in `DESIGN.md`;
-the F7 overlay mirrors them in `Overlay/OverlayTheme.cs`.
+the vision overlay mirrors them in `Overlay/OverlayTheme.cs`.
 
 UI protocol v1 — page → host: `ready`, `settings`, `start`, `apply`,
 `toggle-pause`, `resolution`, `scan`, `test`, `profile-select`, `profile-load`,

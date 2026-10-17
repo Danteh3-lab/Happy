@@ -26,7 +26,7 @@ internal static class ControllerToggleBindings
     {
         ControllerToggleAction.AutoDodge => "Auto dodge",
         ControllerToggleAction.OrangeParry => "Orange parry",
-        ControllerToggleAction.AutoParry => "F auto parry",
+        ControllerToggleAction.AutoParry => "Auto parry",
         _ => "Controller"
     };
 

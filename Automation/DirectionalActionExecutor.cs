@@ -42,7 +42,7 @@ internal sealed class DirectionalActionExecutor : IDisposable
 
     /// <summary>
     /// Cancels pending reaction work only. Orange responses run under
-    /// candidate 0 and do not depend on an F/LT/E hold.
+    /// candidate 0 and do not depend on the LT hold.
     /// </summary>
     public void CancelPendingReaction(string reason) =>
         CancelPending(reason, false, candidateId => candidateId != 0);

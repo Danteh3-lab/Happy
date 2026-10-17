@@ -45,35 +45,15 @@ static partial class Program
         }, input);
     }
 
-    private static void DeckControllerHotkeysKeepDraftAndLiveInStep()
+    private static void DeckControllerOrangeParryUpdatesLiveAndDraft()
     {
         WithDeck((deck, ui, h) =>
         {
-            deck.Handle(SettingsJson("{\"ParryDelay\":55}"));
-            deck.OnHotkey(HotkeyAction.OrangeDelayToggle);
-            Require(h.Session.Draft.Pause == 80 && h.Bot.S.Pause == 80, "F1 must push the orange delay live");
-            Require(h.Bot.S.ParryDelay == 0 && h.Session.Draft.ParryDelay == 55,
-                "F1 must not push other pending timings live");
-            deck.OnHotkey(HotkeyAction.OrangeDelayToggle);
-            Require(h.Bot.S.Pause == 0 && h.Sound.Unclicks == 1 && h.Sound.Clicks == 1, "F1 toggles back with the unclick cue");
-
-            ui.Messages.Clear();
-            deck.OnHotkey(HotkeyAction.CycleF);
-            Require(h.Bot.S.Parry && !h.Bot.S.Crushing && h.Session.Draft.Parry, "F3 from nothing selects Parry");
-            Require(ui.Messages.OfType<ToastMessage>().Any(t => t.Message == "F-mode: Parry"), "F3 announces the mode");
-            Require(ui.Types().Count(t => t == "status") == 1, "a hotkey sends one status update");
-            deck.OnHotkey(HotkeyAction.CycleF);
-            Require(h.Bot.S.Crushing && !h.Bot.S.Parry, "F3 then selects Crushing");
-
-            deck.OnHotkey(HotkeyAction.CycleE);
-            Require(h.Bot.S.Parry2 && h.Session.Draft.Parry2, "F4 from nothing selects E parry");
-
-            ui.Messages.Clear();
-            deck.OnHotkey(HotkeyAction.OrangeParry);
+            deck.Handle(new OrangeParryToggleCommand());
             Require(h.Bot.OrangeParry && h.Bot.S.OrangeParry && h.Session.Draft.OrangeParry,
-                "F5 must update both orange-parry flags and the draft");
-            Require(ui.Types().Count(t => t == "status") == 1, "F5 sends one status update");
-            Require(h.Session.IsDirty, "hotkey changes mark the profile dirty");
+                "orange parry must update both orange-parry flags and the draft");
+            Require(ui.Types().Count(t => t == "status") == 1, "orange parry sends one status update");
+            Require(h.Session.IsDirty, "the toggle marks the profile dirty");
         });
     }
 
@@ -82,7 +62,7 @@ static partial class Program
         WithDeck((deck, ui, h) =>
         {
             h.Overlay.ShowSucceeds = false;
-            deck.OnHotkey(HotkeyAction.VisionOverlay);
+            deck.Handle(new VisionOverlayToggleCommand());
             Require(!deck.VisionOverlayVisible && ui.Messages.OfType<ToastMessage>().Any(t => t.Kind == "error"),
                 "an overlay that cannot hide from capture must stay off");
             h.Overlay.ShowSucceeds = true;

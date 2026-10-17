@@ -12,13 +12,6 @@ internal static class ReactionPolicy
 {
     public static ReactionSelection ResolveCommand(CombatObservation observation, Settings settings)
     {
-        if (observation.EHeld && HasEAction(settings))
-        {
-            return new ReactionSelection(
-                settings.Parry2 ? ReactionCommandKind.Parry : ReactionCommandKind.Crushing,
-                "E");
-        }
-
         if (!observation.FHeld || !HasFAction(settings))
             return new ReactionSelection(ReactionCommandKind.None, "");
 
@@ -37,8 +30,6 @@ internal static class ReactionPolicy
             ? new ReactionSelection(ReactionCommandKind.Hero, "F")
             : new ReactionSelection(ReactionCommandKind.None, "");
     }
-
-    public static bool HasEAction(Settings settings) => settings.Parry2 || settings.Crushing2;
 
     public static bool HasFAction(Settings settings) =>
         settings.Parry || settings.Crushing || settings.Deflect || HasHeroAction(settings);

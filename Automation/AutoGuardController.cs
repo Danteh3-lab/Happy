@@ -122,21 +122,6 @@ internal sealed class AutoGuardController : IDisposable
         lock (_sync) ReleaseLocked(reason);
     }
 
-    /// <summary>Re-establishes the keyboard guard after a directional light.</summary>
-    public void RestoreAfterDirectionalLight()
-    {
-        if (_input.UsesControllerBridge) return;
-        lock (_sync)
-        {
-            if (_activeGuardKey == 0 || !_reactionActive()) return;
-            int holdMs = Math.Max(60, _settings().GuardHold);
-            _input.KeyDown(_activeGuardKey);
-            _releaseTick = Environment.TickCount64 + holdMs;
-            _releaseTimer.Change(holdMs, Timeout.Infinite);
-            _recordTelemetry("guard-restored-after-orange-light", new { key = _activeGuardKey, holdMs }, false);
-        }
-    }
-
     private void ReleaseWhenDue()
     {
         lock (_sync)
