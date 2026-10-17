@@ -98,8 +98,14 @@ export function deriveView(settings, status, flags) {
   vm.readyResDetail = resReady ? s.res1 + " × " + s.res2 : "Set a valid resolution";
   vm.readyProfileState = profileDirty ? "warn" : "ok";
   vm.readyProfileDetail = profile + (profileDirty ? " · unsaved edits" : " · saved");
-  vm.readyLicenseState = licenseBlocked ? "bad" : "ok";
-  vm.readyLicenseDetail = licenseBlocked ? String(license.summary || "No license") : "Active";
+  const licenseLeft = String(license.remaining || "");
+  const licenseOffline = String(license.confirmWithin || "");
+  vm.readyLicenseState = licenseBlocked ? "bad" : license.expiring === true ? "warn" : "ok";
+  vm.readyLicenseDetail = licenseBlocked
+    ? String(license.summary || "No license")
+    : license.active === true
+      ? [licenseLeft ? "Licensed · " + licenseLeft : "Lifetime license", licenseOffline].filter(Boolean).join(" · ")
+      : "Active";
   vm.readyFixLicense = licenseBlocked;
   vm.readyFixInput = !virtualOn;
   vm.readyFixRes = !resReady;
@@ -229,8 +235,9 @@ export function deriveView(settings, status, flags) {
   vm.cloudErrorShown = vm.cloudError.length > 0;
   vm.cloudBadge = cloud.available === false ? "Unavailable" : cloud.busy ? "Syncing" : signedIn ? "Signed in" : "Signed out";
   vm.cloudState = cloud.busy ? "busy" : vm.cloudErrorShown ? "warn" : signedIn ? "ok" : "idle";
-  vm.licenseSummary = String(license.summary || (license.active ? "License active" : "Checking license"));
-  vm.licenseState = license.active === true ? "ok" : "warn";
+  vm.licenseSummary = [String(license.summary || (license.active ? "License active" : "Checking license")),
+    licenseLeft, licenseOffline].filter(Boolean).join(" · ");
+  vm.licenseState = license.active === true && license.expiring !== true ? "ok" : "warn";
   vm.licenseNeedsKey = signedIn && license.active !== true && license.state !== "unchecked";
 
   // Controller binds

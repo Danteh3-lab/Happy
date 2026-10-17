@@ -88,7 +88,8 @@ function status() {
     cloud: { available: true, signedIn: Boolean(host.cloudEmail), email: host.cloudEmail, busy: false,
       lastSync: host.cloudLastSync, error: "",
       license: host.licensed
-        ? { active: true, state: "active", summary: "Lifetime license · 1 PC · key …WEJX" }
+        ? { active: true, state: "active", summary: "Licensed until 16 Nov 2026 · 1 PC · key …WEJX",
+            remaining: "2 days left", confirmWithin: "", expiring: true }
         : host.cloudEmail
           ? { active: false, state: "none", summary: "No license on this account. Redeem a license key." }
           : { active: false, state: "unchecked", summary: "A license is needed to start DANBOT. Sign in and redeem your key on the Diagnostics page." } },
@@ -209,7 +210,7 @@ window.__danbotFakeHost = {
         break;
       case "license-redeem":
         host.licensed = true;
-        toast("Lifetime license · 1 PC · key …WEJX", "success");
+        toast("Licensed until 16 Nov 2026 · 1 PC · key …WEJX", "success");
         break;
       case "cloud-sign-out":
         host.cloudEmail = "";

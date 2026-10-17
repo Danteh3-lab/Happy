@@ -77,7 +77,10 @@ internal sealed class CloudCoordinator
                 {
                     Active = active,
                     State = active ? LicenseGrant.Active : _license.Grant?.Status ?? "unchecked",
-                    Summary = _license.Grant != null ? _license.Describe(now) : _license.BlockReason(now, SignedIn)
+                    Summary = _license.Grant != null ? _license.Describe(now) : _license.BlockReason(now, SignedIn),
+                    Remaining = _license.Remaining(now),
+                    ConfirmWithin = _license.ConfirmWithin(now),
+                    Expiring = _license.Expiring(now)
                 }
             };
         }

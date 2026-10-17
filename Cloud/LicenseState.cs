@@ -15,6 +15,15 @@ internal sealed class LicenseState
     /// <summary>A grant older than this is re-checked when the account is online.</summary>
     public static readonly TimeSpan RefreshAfter = TimeSpan.FromHours(6);
 
+    /// <summary>A grant this old missed its regular check, so the PC is probably offline.</summary>
+    public static readonly TimeSpan OfflineNoticeAfter = RefreshAfter + TimeSpan.FromHours(1);
+
+    /// <summary>Under this much time left, the countdown turns into a warning.</summary>
+    public static readonly TimeSpan ExpiryWarning = TimeSpan.FromDays(3);
+
+    /// <summary>Under this much of the offline window left, the countdown turns into a warning.</summary>
+    public static readonly TimeSpan OfflineWarning = TimeSpan.FromHours(24);
+
     /// <summary>A grant issued further in the future than this means the clock was turned back.</summary>
     private static readonly TimeSpan ClockSkew = TimeSpan.FromMinutes(5);
 
@@ -66,6 +75,35 @@ internal sealed class LicenseState
 
     public bool NeedsRefresh(DateTimeOffset now) =>
         Grant == null || now - Grant.IssuedAt >= RefreshAfter || now < Grant.IssuedAt - ClockSkew;
+
+    /// <summary>"29 days left", "5 h left", "12 min left"; "" for a lifetime or unusable license.</summary>
+    public string Remaining(DateTimeOffset now) =>
+        Allows(now) && Grant.ExpiresAt is { } expires ? FormatLeft(expires - now, hoursOnly: false) + " left" : "";
+
+    /// <summary>
+    /// "Offline · confirm within 41 h" once a grant has missed its regular check
+    /// and the offline window, not the expiry, is what runs out first; otherwise "".
+    /// </summary>
+    public string ConfirmWithin(DateTimeOffset now) =>
+        OfflineCountdown(now) ? "Offline · confirm within " + FormatLeft(Grant.ValidUntil - now, hoursOnly: true) : "";
+
+    /// <summary>True when the license still works but runs out soon.</summary>
+    public bool Expiring(DateTimeOffset now) =>
+        Allows(now) && (Grant.ExpiresAt is { } expires && expires - now < ExpiryWarning ||
+                        OfflineCountdown(now) && Grant.ValidUntil - now < OfflineWarning);
+
+    private bool OfflineCountdown(DateTimeOffset now) =>
+        Allows(now) && now - Grant.IssuedAt >= OfflineNoticeAfter &&
+        (Grant.ExpiresAt == null || Grant.ValidUntil < Grant.ExpiresAt);
+
+    /// <summary>Whole days from one day up (hours for the offline window), then hours, then minutes rounded up.</summary>
+    internal static string FormatLeft(TimeSpan left, bool hoursOnly)
+    {
+        if (left < TimeSpan.FromHours(1)) return Math.Max(1, (int)Math.Ceiling(left.TotalMinutes)) + " min";
+        if (hoursOnly || left < TimeSpan.FromDays(1)) return (int)left.TotalHours + " h";
+        int days = (int)left.TotalDays;
+        return days == 1 ? "1 day" : days + " days";
+    }
 
     /// <summary>Why the bot cannot start, or "" when it can.</summary>
     public string BlockReason(DateTimeOffset now, bool signedIn)

@@ -50,6 +50,25 @@ test("license gates start and shows in readiness and the account card", () => {
   assert.equal(deriveView({}, {}, {}).startDisabled, false, "a payload without license data leaves the gate to the host");
 });
 
+test("license countdown shows in readiness and the account card", () => {
+  const lifetime = deriveView({}, { cloud: { signedIn: true, license: { active: true, summary: "Lifetime license" } } }, {});
+  assert.equal(lifetime.readyLicenseDetail, "Lifetime license");
+
+  const timed = deriveView({}, { cloud: { signedIn: true,
+    license: { active: true, summary: "Licensed until 16 Nov 2026", remaining: "29 days left", expiring: false } } }, {});
+  assert.equal(timed.readyLicenseDetail, "Licensed · 29 days left");
+  assert.equal(timed.readyLicenseState, "ok");
+  assert.equal(timed.licenseSummary, "Licensed until 16 Nov 2026 · 29 days left");
+  assert.equal(timed.licenseState, "ok");
+
+  const soon = deriveView({}, { cloud: { signedIn: true, license: { active: true, summary: "Lifetime license",
+    confirmWithin: "Offline · confirm within 20 h", expiring: true } } }, {});
+  assert.equal(soon.readyLicenseDetail, "Lifetime license · Offline · confirm within 20 h");
+  assert.equal(soon.readyLicenseState, "warn");
+  assert.equal(soon.licenseState, "warn");
+  assert.equal(soon.startDisabled, false, "a license that runs out soon still allows Start");
+});
+
 test("last reaction confirmation maps to a state", () => {
   const vm = deriveView({}, { lastReaction: { state: "PARRY SENT", confirmation: "INPUT SENT", delayMs: 60, direction: "LEFT" } }, {});
   assert.equal(vm.lastConfirmationState, "warn");

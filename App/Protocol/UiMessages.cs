@@ -97,6 +97,12 @@ internal sealed record LicenseStatusDto
     /// <summary>active, none, expired, revoked, device_limit or unchecked.</summary>
     [JsonPropertyName("state")] public string State { get; init; } = "unchecked";
     [JsonPropertyName("summary")] public string Summary { get; init; } = "";
+    /// <summary>Countdown to expiry, e.g. "29 days left"; "" for lifetime.</summary>
+    [JsonPropertyName("remaining")] public string Remaining { get; init; } = "";
+    /// <summary>Offline countdown, e.g. "Offline · confirm within 41 h"; "" while checks succeed.</summary>
+    [JsonPropertyName("confirmWithin")] public string ConfirmWithin { get; init; } = "";
+    /// <summary>Still usable but runs out within 3 days (or 24 h of the offline window).</summary>
+    [JsonPropertyName("expiring")] public bool Expiring { get; init; }
 }
 
 /// <summary>The 200 ms status payload. Field names are the page contract.</summary>

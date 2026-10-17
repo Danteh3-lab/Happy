@@ -82,6 +82,31 @@ static partial class Program
                 license.Describe(CloudNow.AddHours(3)).StartsWith("License expired"),
             "a timed license stops at its expiry even inside the offline window");
 
+        license.Accept(SignLicense("active", CloudNow, CloudNow.AddDays(30)));
+        Require(license.Remaining(CloudNow) == "30 days left", license.Remaining(CloudNow));
+        Require(LicenseState.FormatLeft(TimeSpan.FromHours(36), false) == "1 day" &&
+                LicenseState.FormatLeft(TimeSpan.FromHours(23.5), false) == "23 h" &&
+                LicenseState.FormatLeft(TimeSpan.FromMinutes(90), false) == "1 h" &&
+                LicenseState.FormatLeft(TimeSpan.FromSeconds(61), false) == "2 min" &&
+                LicenseState.FormatLeft(TimeSpan.FromHours(64), true) == "64 h",
+            "the countdown goes from days to hours to minutes");
+        Require(!license.Expiring(CloudNow) && license.ConfirmWithin(CloudNow.AddHours(1)) == "",
+            "a fresh 30-day license is neither expiring nor offline");
+        Require(license.ConfirmWithin(CloudNow.AddHours(8)) == "Offline · confirm within 64 h" &&
+                !license.Expiring(CloudNow.AddHours(8)) && license.Expiring(CloudNow.AddHours(50)),
+            "a missed check shows the offline countdown, warning in the last 24 hours");
+        Require(license.Remaining(CloudNow.AddHours(72)) == "" && license.ConfirmWithin(CloudNow.AddHours(72)) == "",
+            "no countdown once the license no longer works");
+
+        license.Accept(SignLicense("active", CloudNow, CloudNow.AddDays(2)));
+        Require(license.Remaining(CloudNow) == "2 days left" && license.Expiring(CloudNow) &&
+                license.ConfirmWithin(CloudNow.AddHours(10)) == "",
+            "under three days left warns, and the expiry (not the offline window) is the countdown");
+
+        license.Accept(SignLicense("active", CloudNow));
+        Require(license.Remaining(CloudNow) == "" && license.ConfirmWithin(CloudNow.AddHours(7)) == "Offline · confirm within 65 h",
+            "a lifetime license has no expiry countdown, only the offline one");
+
         license.Accept(SignLicense("device_limit", CloudNow, maxDevices: 2, devicesUsed: 2));
         Require(!license.Allows(CloudNow) && license.Describe(CloudNow).Contains("2 of 2 PCs"), "device limit blocks and explains");
         license.Accept(SignLicense("none", CloudNow));
