@@ -111,8 +111,8 @@ internal sealed class LicenseState
         if (Allows(now)) return "";
         if (Grant == null)
             return signedIn
-                ? "The license has not been checked yet. Stay online for a moment, or redeem a key on the Diagnostics page."
-                : "A license is needed to start DANBOT. Sign in and redeem your key on the Diagnostics page.";
+                ? "The license has not been checked yet. Stay online for a moment, or redeem your license key."
+                : "A license is needed to use DANBOT. Sign in and redeem your license key.";
         return Describe(now);
     }
 

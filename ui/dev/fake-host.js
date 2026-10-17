@@ -92,7 +92,7 @@ function status() {
             remaining: "2 days left", confirmWithin: "", expiring: true }
         : host.cloudEmail
           ? { active: false, state: "none", summary: "No license on this account. Redeem a license key." }
-          : { active: false, state: "unchecked", summary: "A license is needed to start DANBOT. Sign in and redeem your key on the Diagnostics page." } },
+          : { active: false, state: "unchecked", summary: "A license is needed to use DANBOT. Sign in and redeem your license key." } },
     telemetry: {
       recording: host.telemetry, label: "Training",
       durationSeconds: host.telemetry ? Math.round((Date.now() - host.telemetryStarted) / 1000) : 0, failures: 0, dropped: 0,

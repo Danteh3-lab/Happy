@@ -99,6 +99,51 @@
 /* ---------- workspace */
 .workspace { display: grid; min-height: 0; }
 
+/* ---------- access gate: covers the deck until the account holds a license */
+.gate {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  padding: var(--sp-6) var(--sp-4);
+  overflow-y: auto;
+  background: var(--surface-0);
+}
+.gate::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 10% 15% auto;
+  height: 60%;
+  pointer-events: none;
+  background: radial-gradient(ellipse 50% 50% at 50% 40%, rgba(251, 191, 36, 0.1), transparent 70%);
+  filter: blur(40px);
+}
+.gate-panel {
+  display: grid;
+  justify-items: center;
+  width: min(400px, 100%);
+  padding: var(--sp-8);
+  background: rgba(13, 13, 18, 0.82);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(24px) saturate(1.4);
+  animation: page-in var(--dur-3) var(--ease-out) both;
+}
+.gate-mark { width: 40px; height: 40px; margin-bottom: var(--sp-5); color: var(--accent); }
+.gate-wait { display: flex; align-items: center; gap: var(--sp-2); color: var(--text-2); font-size: var(--fs-15); }
+.gate-wait .icon { width: 18px; height: 18px; color: var(--accent); }
+.gate-step { display: grid; gap: var(--sp-4); width: 100%; }
+.gate-step .eyebrow { margin-bottom: calc(-1 * var(--sp-3)); text-align: center; }
+.gate-title { font-size: var(--fs-24); text-align: center; }
+.gate-copy { margin-top: calc(-1 * var(--sp-2)); color: var(--text-2); font-size: 14px; line-height: 1.55; text-align: center; }
+.gate-copy b { color: var(--text-1); font-weight: 600; }
+.gate-step .callout { margin-top: 0; }
+.gate-submit { width: 100%; justify-content: center; }
+.gate-switch { color: var(--text-3); font-size: var(--fs-13); text-align: center; }
+
 /* ---------- main column */
 .main {
   display: grid;

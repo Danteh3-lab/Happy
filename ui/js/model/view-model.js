@@ -30,6 +30,21 @@ const RUN_TEXT = {
   error: { label: "ERROR", title: "Runtime error", copy: "" },
 };
 
+// Which screen covers the deck: "" once this PC holds a license, otherwise the
+// step the person is on. Nothing before the host's first status is shown.
+function gateStep(cloud, license) {
+  if (!cloud) return "connecting";
+  if (cloud.available === false || license.active === true) return "";
+  if (cloud.signedIn !== true) return cloud.busy === true ? "restoring" : "account";
+  return cloud.busy === true ? "checking" : "license";
+}
+
+const GATE_WAIT = {
+  connecting: "Connecting to DANBOT…",
+  restoring: "Signing in…",
+  checking: "Checking your license…",
+};
+
 function confirmationState(confirmation) {
   switch (confirmation) {
     case "CONFIRMED": return "ok";
@@ -106,7 +121,6 @@ export function deriveView(settings, status, flags) {
     : license.active === true
       ? [licenseLeft ? "Licensed · " + licenseLeft : "Lifetime license", licenseOffline].filter(Boolean).join(" · ")
       : "Active";
-  vm.readyFixLicense = licenseBlocked;
   vm.readyFixInput = !virtualOn;
   vm.readyFixRes = !resReady;
 
@@ -238,7 +252,15 @@ export function deriveView(settings, status, flags) {
   vm.licenseSummary = [String(license.summary || (license.active ? "License active" : "Checking license")),
     licenseLeft, licenseOffline].filter(Boolean).join(" · ");
   vm.licenseState = license.active === true && license.expiring !== true ? "ok" : "warn";
-  vm.licenseNeedsKey = signedIn && license.active !== true && license.state !== "unchecked";
+
+  // Access gate: sign in, then a license, then the deck
+  const gate = gateStep(st.cloud, license);
+  vm.gated = gate !== "";
+  vm.gateAccount = gate === "account";
+  vm.gateLicense = gate === "license";
+  vm.gateWaiting = gate in GATE_WAIT;
+  vm.gateWaitText = GATE_WAIT[gate] || "";
+  vm.gateLicenseSummary = String(license.summary || "Redeem a license key to use DANBOT on this PC.");
 
   // Controller binds
   for (const [key, bindKey, captureKey] of [

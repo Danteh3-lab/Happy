@@ -33,6 +33,9 @@ const settingControls = $$("[data-setting]");
 const numericControls = settingControls.filter((control) => control.type === "number");
 
 let hydrating = false;
+// The gate's account form either signs in or creates an account.
+let accountMode = "sign-in";
+let lastGate = null;
 
 // ---------------------------------------------------------------- sending
 
@@ -329,6 +332,7 @@ const actions = {
   "cloud-sign-up": () => sendCloudCredentials(MSG.CLOUD_SIGN_UP),
   "cloud-sign-out": () => send(MSG.CLOUD_SIGN_OUT),
   "cloud-sync": () => send(MSG.CLOUD_SYNC),
+  "gate-account-mode": () => setAccountMode(accountMode === "sign-in" ? "sign-up" : "sign-in"),
   "license-redeem": () => {
     const field = $("#license-key");
     const key = field.value.trim();
@@ -355,11 +359,34 @@ function sendCloudCredentials(type) {
   passwordField.value = "";
 }
 
-// Sign in runs on submit, so Enter and the button take the same path; the
-// browser never navigates.
+const ACCOUNT_MODES = {
+  "sign-in": {
+    title: "Sign in", copy: "Sign in with your DANBOT account to continue.", submit: "Sign in",
+    switchText: "New to DANBOT?", switchButton: "Create an account", password: "current-password",
+  },
+  "sign-up": {
+    title: "Create your account", copy: "Use an email you can confirm. Your license and profiles are tied to this account.",
+    submit: "Create account", switchText: "Already have an account?", switchButton: "Sign in", password: "new-password",
+  },
+};
+
+function setAccountMode(mode) {
+  accountMode = mode;
+  const text = ACCOUNT_MODES[mode];
+  setText($("#gate-account-title"), text.title);
+  setText($("#gate-account-copy"), text.copy);
+  setText($("#gate-account-submit"), text.submit);
+  setText($("#gate-switch-text"), text.switchText);
+  setText($("#gate-switch-button"), text.switchButton);
+  $("#cloud-password").autocomplete = text.password;
+  $("#cloud-email").focus();
+}
+
+// Account and license forms run on submit, so Enter and the button take the
+// same path; the browser never navigates.
 $("#cloud-form").addEventListener("submit", (event) => {
   event.preventDefault();
-  actions["cloud-sign-in"]();
+  actions[accountMode === "sign-up" ? "cloud-sign-up" : "cloud-sign-in"]();
 });
 
 $("#license-form").addEventListener("submit", (event) => {
@@ -407,6 +434,19 @@ function render() {
     : ["Default"];
   profilePicker.update([{ options: profiles.map((name) => ({ value: name, label: name })) }], vm.profileName);
   document.documentElement.dataset.run = vm.runState;
+  renderGate(vm);
+}
+
+// Moves focus with the gate: into each step's first field, and to the
+// dashboard once the license unlocks the deck.
+function renderGate(vm) {
+  const gate = vm.gateAccount ? "account" : vm.gateLicense ? "license" : vm.gated ? "wait" : "";
+  if (gate === lastGate) return;
+  const unlocked = lastGate !== null && gate === "";
+  lastGate = gate;
+  if (gate === "account") $("#cloud-email").focus();
+  else if (gate === "license") $("#license-key").focus();
+  else if (unlocked) nav.select("dashboard", { focus: true });
 }
 
 // ---------------------------------------------------------------- host messages

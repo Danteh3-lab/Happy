@@ -55,7 +55,7 @@
       <div class="brand">
         <span class="brand-name">danbot<span class="brand-tld">.deck</span></span>
       </div>
-      <nav class="topnav" aria-label="Pages">
+      <nav class="topnav" aria-label="Pages" data-bind-hide="gated" hidden>
         <ul class="nav-list">
           <li><button class="nav-item" type="button" title="Dashboard (Ctrl+1)" data-nav="dashboard" data-nav-item="dashboard"><svg class="icon" aria-hidden="true"><use href="#i-dashboard"/></svg><span class="nav-label">Dashboard</span></button></li>
           <li><button class="nav-item" type="button" title="Combat (Ctrl+2)" data-nav="combat" data-nav-item="combat"><svg class="icon" aria-hidden="true"><use href="#i-combat"/></svg><span class="nav-label">Combat</span></button></li>
@@ -65,7 +65,7 @@
         </ul>
       </nav>
       <div class="titlebar-actions">
-        <div class="run-pill" data-bind-state="runState" role="status" aria-live="polite">
+        <div class="run-pill" data-bind-state="runState" data-bind-hide="gated" role="status" aria-live="polite" hidden>
           <svg class="icon" data-for="live" aria-hidden="true"><use href="#i-play"/></svg>
           <svg class="icon" data-for="paused" aria-hidden="true"><use href="#i-pause"/></svg>
           <svg class="icon" data-for="standby" aria-hidden="true"><use href="#i-stop"/></svg>
@@ -78,7 +78,50 @@
       </div>
     </header>
 
-    <div class="workspace">
+    <!-- ============================== ACCESS GATE (account, then license) -->
+    <section class="gate" data-bind-show="gated" aria-label="Sign in to DANBOT">
+      <div class="gate-panel">
+        <svg class="icon gate-mark" aria-hidden="true"><use href="#i-logo"/></svg>
+
+        <div class="gate-wait" data-bind-show="gateWaiting" role="status" aria-live="polite">
+          <svg class="icon spin" aria-hidden="true"><use href="#i-spinner"/></svg>
+          <span data-bind="gateWaitText">Connecting to DANBOT…</span>
+        </div>
+
+        <form class="gate-step" id="cloud-form" data-bind-show="gateAccount" novalidate hidden>
+          <p class="eyebrow">Step 1 of 2 · Account</p>
+          <h1 class="gate-title" id="gate-account-title">Sign in</h1>
+          <p class="gate-copy" id="gate-account-copy">Sign in with your DANBOT account to continue.</p>
+          <label class="field">
+            <span class="field-label">Email</span>
+            <span class="field-control"><input type="email" id="cloud-email" autocomplete="username" spellcheck="false"></span>
+          </label>
+          <label class="field">
+            <span class="field-label">Password</span>
+            <span class="field-control"><input type="password" id="cloud-password" autocomplete="current-password"></span>
+          </label>
+          <button class="btn btn-primary btn-lg gate-submit" type="submit" id="gate-account-submit" data-bind-disabled="cloudBusy">Sign in</button>
+          <p class="gate-switch"><span id="gate-switch-text">New to DANBOT?</span> <button class="link-btn" type="button" id="gate-switch-button" data-action="gate-account-mode">Create an account</button></p>
+          <p class="callout" data-state="warn" data-bind-show="cloudErrorShown" hidden><svg class="icon" aria-hidden="true"><use href="#i-warn"/></svg><span data-bind="cloudError"></span></p>
+        </form>
+
+        <form class="gate-step" id="license-form" data-bind-show="gateLicense" novalidate hidden>
+          <p class="eyebrow">Step 2 of 2 · License</p>
+          <h1 class="gate-title">Activate your license</h1>
+          <p class="gate-copy">Signed in as <b data-bind="cloudEmail">-</b>. Enter your license key to unlock DANBOT on this PC.</p>
+          <p class="callout" data-state="warn"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><span data-bind="gateLicenseSummary">Redeem a license key to use DANBOT on this PC.</span></p>
+          <label class="field">
+            <span class="field-label">License key</span>
+            <span class="field-control"><input type="text" id="license-key" autocomplete="off" spellcheck="false" placeholder="DANBOT-XXXXX-XXXXX-XXXXX-XXXXX"></span>
+          </label>
+          <button class="btn btn-primary btn-lg gate-submit" type="submit" data-bind-disabled="cloudBusy">Redeem key</button>
+          <p class="gate-switch">Wrong account? <button class="link-btn" type="button" data-action="cloud-sign-out" data-bind-disabled="cloudBusy">Sign out</button></p>
+          <p class="callout" data-state="warn" data-bind-show="cloudErrorShown" hidden><svg class="icon" aria-hidden="true"><use href="#i-warn"/></svg><span data-bind="cloudError"></span></p>
+        </form>
+      </div>
+    </section>
+
+    <div class="workspace" data-bind-hide="gated" hidden>
       <main class="main">
         <div class="page-scroll" id="page-scroll">
 
@@ -120,7 +163,6 @@
                   <li class="readiness-row" data-bind-state="readyLicenseState">
                     <span class="state-icon" aria-hidden="true"><svg class="icon" data-for="ok"><use href="#i-check"/></svg><svg class="icon" data-for="warn"><use href="#i-warn"/></svg><svg class="icon" data-for="bad"><use href="#i-alert"/></svg></span>
                     <span class="readiness-text"><b>License</b><small data-bind="readyLicenseDetail">Checking license</small></span>
-                    <button class="link-btn" type="button" data-nav="diagnostics" data-nav-focus="#cloud-title" data-bind-show="readyFixLicense" hidden>Fix</button>
                   </li>
                   <li class="readiness-row" data-bind-state="readyInputState">
                     <span class="state-icon" aria-hidden="true"><svg class="icon" data-for="ok"><use href="#i-check"/></svg><svg class="icon" data-for="bad"><use href="#i-alert"/></svg></span>
@@ -592,39 +634,13 @@
 
               <article class="card" aria-labelledby="cloud-title">
                 <div class="card-head"><div><p class="eyebrow">Account</p><h2 id="cloud-title" class="card-title" tabindex="-1">License &amp; cloud profiles</h2></div><span class="badge" data-bind-state="cloudState"><svg class="icon" aria-hidden="true"><use href="#i-link"/></svg><span data-bind="cloudBadge">Signed out</span></span></div>
-                <p class="card-copy">Sign in to activate your license and back up your profiles. Profiles stay on this PC as well, and once licensed the bot keeps working offline for up to 3 days.</p>
-                <form class="cloud-form" id="cloud-form" data-bind-show="cloudSignedOut" novalidate>
-                  <div class="field-grid two">
-                    <label class="field">
-                      <span class="field-label">Email</span>
-                      <span class="field-control"><input type="email" id="cloud-email" autocomplete="username" spellcheck="false"></span>
-                    </label>
-                    <label class="field">
-                      <span class="field-label">Password</span>
-                      <span class="field-control"><input type="password" id="cloud-password" autocomplete="current-password"></span>
-                    </label>
-                  </div>
-                  <div class="button-row">
-                    <button class="btn btn-primary" type="submit" data-bind-disabled="cloudBusy">Sign in</button>
-                    <button class="btn btn-secondary" type="button" data-action="cloud-sign-up" data-bind-disabled="cloudBusy">Create account</button>
-                  </div>
-                </form>
-                <div data-bind-show="cloudSignedIn" hidden>
-                  <p class="card-copy">Signed in as <b data-bind="cloudEmail">-</b> · <span data-bind="cloudLastSync">Not synced yet</span></p>
-                  <p class="callout" data-bind-state="licenseState"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><span data-bind="licenseSummary">Checking license</span></p>
-                  <form class="cloud-form" id="license-form" data-bind-show="licenseNeedsKey" novalidate hidden>
-                    <label class="field">
-                      <span class="field-label">License key</span>
-                      <span class="field-control"><input type="text" id="license-key" autocomplete="off" spellcheck="false" placeholder="DANBOT-XXXXX-XXXXX-XXXXX-XXXXX"></span>
-                    </label>
-                    <div class="button-row">
-                      <button class="btn btn-primary" type="submit" data-bind-disabled="cloudBusy">Redeem key</button>
-                    </div>
-                  </form>
-                  <div class="button-row">
-                    <button class="btn btn-secondary" type="button" data-action="cloud-sync" data-bind-disabled="cloudBusy"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Sync now</button>
-                    <button class="btn btn-secondary" type="button" data-action="cloud-sign-out" data-bind-disabled="cloudBusy">Sign out</button>
-                  </div>
+                <p class="card-copy">Your account holds the license for this PC and backs up your profiles. Profiles stay on this PC as well, and the license keeps working offline for up to 3 days.</p>
+                <p class="card-copy" data-bind-show="cloudSignedIn" hidden>Signed in as <b data-bind="cloudEmail">-</b> · <span data-bind="cloudLastSync">Not synced yet</span></p>
+                <p class="card-copy" data-bind-show="cloudSignedOut" hidden>Not signed in right now. The license on this PC keeps working offline until it needs to be confirmed.</p>
+                <p class="callout" data-bind-state="licenseState"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><span data-bind="licenseSummary">Checking license</span></p>
+                <div class="button-row">
+                  <button class="btn btn-secondary" type="button" data-action="cloud-sync" data-bind-show="cloudSignedIn" data-bind-disabled="cloudBusy" hidden><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Sync now</button>
+                  <button class="btn btn-secondary" type="button" data-action="cloud-sign-out" data-bind-disabled="cloudBusy">Sign out</button>
                 </div>
                 <p class="callout" data-state="warn" data-bind-show="cloudErrorShown" hidden><svg class="icon" aria-hidden="true"><use href="#i-warn"/></svg><span data-bind="cloudError"></span></p>
               </article>

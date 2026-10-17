@@ -136,17 +136,20 @@ parry, and Auto parry. Everything else is set from the control deck.
 
 ## License
 
-DANBOT needs a license key to start. Sign in on **Diagnostics › License &
-cloud profiles**, paste the key (`DANBOT-XXXXX-XXXXX-XXXXX-XXXXX`) and press
-**Redeem key**. The key is tied to that account and the PC is registered
-against it; the Dashboard readiness list shows the license state.
+DANBOT needs an account and a license key before the control deck opens. On
+launch the deck shows a sign-in screen (with **Create an account** for new
+users); once signed in it asks for the key (`DANBOT-XXXXX-XXXXX-XXXXX-XXXXX`).
+After **Redeem key** the key is tied to that account, the PC is registered
+against it and the Dashboard appears. Its readiness list and **Diagnostics ›
+License & cloud profiles** show the license state afterwards.
 
 - Keys are lifetime or last a set number of days, counted from redemption.
 - Each key allows a set number of PCs (default 1).
 - The app re-checks the license at sign-in and every 6 hours. Without a check
   it keeps working offline for up to 72 hours (never past the expiry date);
-  after that, or when the license expires or is revoked, Start is refused and
-  a running bot pauses until the license is valid again.
+  after that, or when the license expires or is revoked, the deck goes back
+  to the license screen, Start is refused and a running bot pauses until the
+  license is valid again.
 - Signing out removes the license from that PC until you sign in again.
 
 The `license` edge function (`supabase/functions/license`) answers with a
