@@ -198,7 +198,7 @@ html[data-run="error"] .run-copy { color: var(--danger); }
   min-width: 96px;
   padding: 4px var(--sp-2);
   color: var(--text-3);
-  border: 1px dashed var(--line-strong);
+  border: 1px solid var(--line-2);
   border-radius: var(--r-xs);
   font-size: var(--fs-12);
   text-align: center;

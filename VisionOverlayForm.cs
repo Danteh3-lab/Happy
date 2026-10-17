@@ -220,7 +220,7 @@ public sealed class VisionOverlayForm : Form, App.IVisionOverlay
     private void DrawRegion(Graphics g, RectangleF region, Color color, string label, bool active)
     {
         if (region.Width <= 0 || region.Height <= 0) return;
-        Pen pen = active ? _paint.Pen(color, 2f) : _paint.Pen(color, 1f, DashStyle.Dash);
+        Pen pen = _paint.Pen(color, active ? 2f : 1f);
         g.DrawRectangle(pen, (int)region.X, (int)region.Y, (int)region.Width, (int)region.Height);
         Rectangle chip = MeasureChip(g, label, _paint.Label);
         DrawChip(g, new Point((int)region.Left, Math.Max(3, (int)region.Top - chip.Height - 4)), label, color, _paint.Label,

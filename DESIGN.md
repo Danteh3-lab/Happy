@@ -137,7 +137,7 @@ Short and state-oriented: page entry, dialog and toast entry, the live orb ring,
 
 ### Overlay HUD
 
-The vision overlay uses the same palette in GDI+. Chips are opaque `--surface-1` panels with a hairline border, a 3px bar in the state color and white text; the header reads `DANBOT // VISION` with a filled LIVE or outlined IDLE pill; the diagnostics line is muted mono. The active guard zone is a solid 2px line in the decision color; inactive zones are dashed `--signal-dim`. The window's transparency key is near-black (1, 2, 3) rather than magenta, every fill is opaque, and text uses grayscale anti-aliasing, so edges blend toward dark instead of fringing pink.
+The vision overlay uses the same palette in GDI+. Chips are opaque `--surface-1` panels with a hairline border, a 3px bar in the state color and white text; the header reads `DANBOT // VISION` with a filled LIVE or outlined IDLE pill; the diagnostics line is muted mono. The active guard zone is a solid 2px line in the decision color; inactive zones are a thin 1px solid `--signal-dim` line. The window's transparency key is near-black (1, 2, 3) rather than magenta, every fill is opaque, and text uses grayscale anti-aliasing, so edges blend toward dark instead of fringing pink.
 
 ### Content
 
