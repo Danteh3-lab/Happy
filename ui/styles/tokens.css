@@ -23,13 +23,13 @@
   --text-2: #a1a1aa;
   --text-3: #71717a;
 
-  /* Brand accent: selection, focus, primary action (rose pink) */
-  --accent: #f0a3b8;
-  --accent-hover: #f6b9ca;
-  --accent-ink: #1b1014;  /* text on an accent fill */
-  --accent-soft: rgba(240, 163, 184, 0.12);
-  --accent-line: rgba(240, 163, 184, 0.35);
-  --accent-glow: rgba(240, 163, 184, 0.3);
+  /* Brand accent: selection, focus, primary action (amber gold) */
+  --accent: #fbbf24;
+  --accent-hover: #fcd34d;
+  --accent-ink: #1a1405;  /* text on an accent fill */
+  --accent-soft: rgba(251, 191, 36, 0.12);
+  --accent-line: rgba(251, 191, 36, 0.35);
+  --accent-glow: rgba(251, 191, 36, 0.3);
 
   /* Live readouts and HUD geometry */
   --signal: #4adae6;
@@ -39,8 +39,8 @@
   /* States */
   --ok: #22c55e;
   --ok-soft: rgba(34, 197, 94, 0.1);
-  --warn: #f59e0b;
-  --warn-soft: rgba(245, 158, 11, 0.1);
+  --warn: #fb923c;
+  --warn-soft: rgba(251, 146, 60, 0.1);
   --danger: #ef4444;
   --danger-soft: rgba(239, 68, 68, 0.12);
   --danger-fill: #c0262d;  /* solid "Detected" badge */

@@ -8,11 +8,11 @@ namespace HappyBot.Overlay;
 internal static class OverlayTheme
 {
     // Mirrors of ui/styles/tokens.css
-    public static readonly Color Accent = ColorTranslator.FromHtml("#f0a3b8");   // --accent
+    public static readonly Color Accent = ColorTranslator.FromHtml("#fbbf24");   // --accent
     public static readonly Color Signal = ColorTranslator.FromHtml("#4adae6");   // --signal
     public static readonly Color SignalDim = ColorTranslator.FromHtml("#5a949d"); // --signal-dim
     public static readonly Color Ok = ColorTranslator.FromHtml("#22c55e");       // --ok
-    public static readonly Color Warn = ColorTranslator.FromHtml("#f59e0b");     // --warn
+    public static readonly Color Warn = ColorTranslator.FromHtml("#fb923c");     // --warn
     public static readonly Color Danger = ColorTranslator.FromHtml("#ef4444");   // --danger
     public static readonly Color Text = ColorTranslator.FromHtml("#fafafa");     // --text-1
     public static readonly Color TextMuted = ColorTranslator.FromHtml("#a1a1aa"); // --text-2

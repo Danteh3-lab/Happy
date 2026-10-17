@@ -57,7 +57,7 @@
 .btn .icon { width: 16px; height: 16px; }
 .btn kbd { margin-left: var(--sp-1); }
 .btn-primary { color: var(--accent-ink); background: var(--accent); font-weight: 600; }
-.btn-primary:hover:not(:disabled) { background: var(--accent-hover); box-shadow: 0 6px 22px rgba(240, 163, 184, 0.22); }
+.btn-primary:hover:not(:disabled) { background: var(--accent-hover); box-shadow: 0 6px 22px rgba(251, 191, 36, 0.22); }
 .btn-primary:hover:not(:disabled) .icon:last-child { transform: translateX(2px); }
 .btn-secondary { background: rgba(255, 255, 255, 0.03); border-color: var(--line-2); }
 .btn-secondary:hover:not(:disabled) { background: rgba(255, 255, 255, 0.07); border-color: var(--line-strong); }
@@ -81,7 +81,11 @@
   font-size: var(--fs-13);
   font-weight: 500;
 }
-.link-btn:hover { background: var(--accent-soft); }
+.link-btn {
+  background: linear-gradient(currentColor, currentColor) 50% calc(100% - 1px) / 0 1px no-repeat;
+  transition: background-size var(--dur-2) var(--ease-out);
+}
+.link-btn:hover { background-size: calc(100% - 2 * var(--sp-2)) 1px; }
 
 /* ================================================================ state icons
    Elements with data-state show only the icon whose data-for matches, so
@@ -116,7 +120,7 @@
 .badge { gap: 4px; min-height: 22px; padding: 0 9px; }
 .chip .icon, .badge .icon { width: 13px; height: 13px; stroke-width: 2.2; }
 .chip[data-state="ok"], .badge[data-state="ok"] { color: var(--ok); background: var(--ok-soft); border-color: rgba(34, 197, 94, 0.2); }
-.chip[data-state="warn"], .badge[data-state="warn"] { color: var(--warn); background: var(--warn-soft); border-color: rgba(245, 158, 11, 0.3); }
+.chip[data-state="warn"], .badge[data-state="warn"] { color: var(--warn); background: var(--warn-soft); border-color: rgba(251, 146, 60, 0.3); }
 .chip[data-state="bad"], .badge[data-state="bad"] { color: #fff; background: var(--danger-fill); border-color: transparent; }
 .chip[data-state="busy"], .badge[data-state="busy"] { color: var(--signal); background: var(--signal-soft); border-color: rgba(74, 218, 230, 0.3); }
 .spin { animation: spin 0.9s linear infinite; }
@@ -140,7 +144,7 @@
 }
 .run-pill .icon { width: 13px; height: 13px; }
 .run-pill[data-state="live"] { color: var(--ok); background: var(--ok-soft); border-color: rgba(34, 197, 94, 0.35); box-shadow: 0 0 16px rgba(34, 197, 94, 0.18); }
-.run-pill[data-state="paused"] { color: var(--warn); background: var(--warn-soft); border-color: rgba(245, 158, 11, 0.35); }
+.run-pill[data-state="paused"] { color: var(--warn); background: var(--warn-soft); border-color: rgba(251, 146, 60, 0.35); }
 .run-pill[data-state="error"] { color: #fff; background: var(--danger-fill); border-color: transparent; }
 .run-pill[data-state="live"] > .icon[data-for="live"],
 .run-pill[data-state="paused"] > .icon[data-for="paused"],
@@ -193,7 +197,7 @@ input:focus-visible ~ .switch { outline: 2px solid var(--accent); outline-offset
   transition: background var(--dur-1), border-color var(--dur-1);
 }
 .switch-row:hover { background: rgba(255, 255, 255, 0.03); }
-.switch-row.prominent { margin-top: var(--sp-4); padding: var(--sp-3); background: var(--accent-soft); border-color: rgba(240, 163, 184, 0.2); }
+.switch-row.prominent { margin-top: var(--sp-4); padding: var(--sp-3); background: var(--accent-soft); border-color: rgba(251, 191, 36, 0.2); }
 .switch-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .switch-text b { font-weight: 600; }
 .switch-text small { color: var(--text-2); font-size: var(--fs-12); line-height: 1.45; }
@@ -229,7 +233,7 @@ input:focus-visible ~ .switch { outline: 2px solid var(--accent); outline-offset
 .switch-tile:has(input:checked), .switch-tile[aria-pressed="true"] {
   background: linear-gradient(135deg, var(--accent-soft), transparent 70%), var(--surface-inset);
   border-color: var(--accent-line);
-  box-shadow: inset 0 0 0 1px rgba(240, 163, 184, 0.08), 0 0 18px rgba(240, 163, 184, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.08), 0 0 18px rgba(251, 191, 36, 0.08);
 }
 .switch-tile:has(input:checked) > .icon, .switch-tile[aria-pressed="true"] > .icon { color: var(--accent); filter: drop-shadow(0 0 5px var(--accent-glow)); }
 .switch-tile:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -300,7 +304,7 @@ input:focus-visible ~ .switch { outline: 2px solid var(--accent); outline-offset
   border-radius: var(--r-sm);
   transition: border-color var(--dur-1), box-shadow var(--dur-1);
 }
-.field-control:focus-within { border-color: var(--accent-line); box-shadow: 0 0 0 3px rgba(240, 163, 184, 0.1); }
+.field-control:focus-within { border-color: var(--accent-line); box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.1); }
 .field-control input {
   flex: 1;
   min-width: 0;
@@ -502,7 +506,7 @@ details.advanced summary:hover { color: var(--text-1); }
   line-height: 1.5;
 }
 .callout .icon { width: 16px; height: 16px; margin-top: 1px; }
-.callout[data-state="warn"] { color: var(--warn); background: var(--warn-soft); border-color: rgba(245, 158, 11, 0.28); }
+.callout[data-state="warn"] { color: var(--warn); background: var(--warn-soft); border-color: rgba(251, 146, 60, 0.28); }
 .callout b { font-weight: 700; }
 #license-form { margin-top: var(--sp-4); }
 .affects { margin-top: var(--sp-4); padding-top: var(--sp-3); color: var(--text-2); border-top: 1px dashed var(--line-2); font-size: var(--fs-12); line-height: 1.5; }
@@ -515,7 +519,7 @@ details.advanced summary:hover { color: var(--text-1); }
   padding: 6px var(--sp-3) 6px 28px;
   color: var(--warn);
   background: var(--warn-soft);
-  border: 1px solid rgba(245, 158, 11, 0.22);
+  border: 1px solid rgba(251, 146, 60, 0.22);
   border-radius: var(--r-xs);
   font-size: var(--fs-12);
 }
@@ -626,5 +630,13 @@ details.advanced summary:hover { color: var(--text-1); }
 .hotkeys > div { display: grid; grid-template-columns: 88px minmax(0, 1fr); align-items: center; gap: var(--sp-3); }
 .hotkeys dd { color: var(--text-2); }
 
+/* ================================================================ loading pulse
+   Busy chips and badges (applying timings, syncing) breathe; readiness rows
+   pulse until the first status snapshot gives them a state. */
+.chip[data-state="busy"], .badge[data-state="busy"] { animation: pulse 1.6s ease-in-out infinite; }
+.readiness-row:not([data-state]) .readiness-text { animation: pulse 1.6s ease-in-out infinite; }
+.readiness-row:not([data-state]) .state-icon { border-style: dashed; }
+
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes spin { to { transform: rotate(360deg); } }

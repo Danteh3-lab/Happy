@@ -20,7 +20,7 @@
   padding: var(--sp-6);
   overflow: hidden;
   background:
-    radial-gradient(ellipse 80% 90% at 0% 0%, rgba(240, 163, 184, 0.07), transparent 60%),
+    radial-gradient(ellipse 80% 90% at 0% 0%, rgba(251, 191, 36, 0.07), transparent 60%),
     var(--surface-2);
 }
 .run-main { display: flex; align-items: center; gap: var(--sp-6); }
@@ -75,7 +75,7 @@ html[data-run="live"] .run-orb {
 html[data-run="live"] .run-ring { opacity: 0.9; animation: spin 2.4s linear infinite; }
 html[data-run="live"] .run-word { color: var(--ok); text-shadow: 0 4px 24px rgba(34, 197, 94, 0.3); }
 html[data-run="live"] .run-card { border-color: rgba(34, 197, 94, 0.25); }
-html[data-run="paused"] .run-orb { color: var(--warn); border-color: rgba(245, 158, 11, 0.45); background: radial-gradient(circle, rgba(245, 158, 11, 0.18), transparent 65%); }
+html[data-run="paused"] .run-orb { color: var(--warn); border-color: rgba(251, 146, 60, 0.45); background: radial-gradient(circle, rgba(251, 146, 60, 0.18), transparent 65%); }
 html[data-run="paused"] .run-word { color: var(--warn); text-shadow: none; }
 html[data-run="error"] .run-orb { color: var(--danger); border-color: rgba(239, 68, 68, 0.5); background: radial-gradient(circle, rgba(239, 68, 68, 0.18), transparent 65%); }
 html[data-run="error"] .run-word { color: var(--danger); text-shadow: none; }
@@ -204,7 +204,7 @@ html[data-run="error"] .run-copy { color: var(--danger); }
   text-align: center;
 }
 .bind-row[data-state="ok"] .bind-value { color: var(--signal); border-style: solid; border-color: rgba(74, 218, 230, 0.35); background: var(--signal-soft); }
-.bind-row[data-state="busy"] { border-color: var(--accent-line); box-shadow: 0 0 0 3px rgba(240, 163, 184, 0.1); }
+.bind-row[data-state="busy"] { border-color: var(--accent-line); box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.1); }
 .bind-row[data-state="busy"] .bind-value { color: var(--accent); border-color: var(--accent-line); animation: blink 1s ease-in-out infinite alternate; }
 
 .mapping { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-2); margin-top: var(--sp-4); }

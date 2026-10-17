@@ -11,12 +11,12 @@ colors:
   text-1: "#FAFAFA"
   text-2: "#A1A1AA"
   text-3: "#71717A"
-  accent: "#F0A3B8"
-  accent-hover: "#F6B9CA"
+  accent: "#FBBF24"
+  accent-hover: "#FCD34D"
   signal: "#4ADAE6"
   signal-dim: "#5A949D"
   ok: "#22C55E"
-  warn: "#F59E0B"
+  warn: "#FB923C"
   danger: "#EF4444"
 typography:
   ui:
@@ -70,7 +70,7 @@ A combat HUD on a dark console: whether the bot is live is the primary instrumen
 
 ## Colors
 
-Five near-black surfaces separate app background, glass chrome (header, commit bar), cards, raised/hover states and inset wells; borders, not shadows, separate them. Rose pink (`--accent`) is reserved for selection, focus, the primary action (a pink fill with dark `--accent-ink` text), the active-page dot and the `.deck` brand suffix. Cyan (`--signal`) marks live readouts, counters and HUD geometry. State colors carry meaning: green `--ok` is live or committed, amber `--warn` is a recoverable pending state (unapplied timings, unsaved profile), red `--danger` is failure. Status badges are pills: tinted green for ok, solid red (`--danger-fill`) for failure. Every state color is paired with an icon shape and text.
+Five near-black surfaces separate app background, glass chrome (header, commit bar), cards, raised/hover states and inset wells; borders, not shadows, separate them. Amber gold (`--accent`) is reserved for selection, focus, the primary action (a gold fill with dark `--accent-ink` text), the active-page dot and the `.deck` brand suffix. Cyan (`--signal`) marks live readouts, counters and HUD geometry. State colors carry meaning: green `--ok` is live or committed, amber `--warn` is a recoverable pending state (unapplied timings, unsaved profile), red `--danger` is failure. Status badges are pills: tinted green for ok, solid red (`--danger-fill`) for failure. Every state color is paired with an icon shape and text.
 
 ## Typography
 
@@ -79,7 +79,7 @@ Geist (falling back to Segoe UI Variable when it is not installed) carries every
 ## Layout
 
 - Header 56px (brand left, page nav centered, run pill and window buttons right), commit bar 60px; page content max 1180px.
-- Five pages, chosen from the header nav or Ctrl+1–5; the active page is white with a pink dot beneath it: **Dashboard**, **Combat**, **Heroes & Timing**, **Controller & Binds**, **Diagnostics**. The last page is remembered per viewer.
+- Five pages, chosen from the header nav or Ctrl+1–5; the active page is white with a gold dot beneath it: **Dashboard**, **Combat**, **Heroes & Timing**, **Controller & Binds**, **Diagnostics**. The last page is remembered per viewer.
 - The **commit bar** is fixed below every page, so "Timings not applied" and "Profile not saved" are always visible together with Apply and Save.
 - Dashboard uses a 12-column grid: run status (8) + readiness (4), active behavior (7) + quick toggles (5), live signal (7) + session (5). Configuration pages use two columns.
 - Breakpoints: 1040px (dashboard cards go full width), the header nav turns icon-only, 900px (single-column pages), 680px (brand suffix and run-pill label hide). `max-height: 620px` (200% scaling) compacts the chrome so **Start bot** stays above the fold.
@@ -97,7 +97,7 @@ Cards use a 10px radius, buttons and fields 6px, keys 4px. Pills are reserved fo
 
 ### Foundational visual states
 
-All controls provide default, hover, focus-visible, pressed and disabled states. Focus uses a two-pixel pink ring with offset. Elements with a `data-state` (`ok`, `warn`, `bad`, `busy`, `idle`) show the icon whose `data-for` matches, so every state has its own shape as well as color.
+All controls provide default, hover, focus-visible, pressed and disabled states. Focus uses a two-pixel gold ring with offset. Elements with a `data-state` (`ok`, `warn`, `bad`, `busy`, `idle`) show the icon whose `data-for` matches, so every state has its own shape as well as color.
 
 ### Run status
 
