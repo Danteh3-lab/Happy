@@ -53,25 +53,9 @@
   <div class="app">
     <header class="titlebar">
       <div class="brand">
-        <svg class="icon brand-mark" aria-hidden="true"><use href="#i-logo"/></svg>
-        <span class="brand-name">DANBOT</span>
-        <span class="brand-sub">Control Deck</span>
+        <span class="brand-name">danbot<span class="brand-tld">.deck</span></span>
       </div>
-      <div class="titlebar-spacer"></div>
-      <div class="run-pill" data-bind-state="runState" role="status" aria-live="polite">
-        <svg class="icon" data-for="live" aria-hidden="true"><use href="#i-play"/></svg>
-        <svg class="icon" data-for="paused" aria-hidden="true"><use href="#i-pause"/></svg>
-        <svg class="icon" data-for="standby" aria-hidden="true"><use href="#i-stop"/></svg>
-        <svg class="icon" data-for="error" aria-hidden="true"><use href="#i-alert"/></svg>
-        <span data-bind="runLabel">STANDBY</span>
-      </div>
-      <button class="title-btn" type="button" data-action="help" aria-label="Help" aria-expanded="false" aria-controls="help-panel"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg></button>
-      <button class="title-btn" type="button" data-action="minimize" aria-label="Minimize"><svg class="icon" aria-hidden="true"><use href="#i-min"/></svg></button>
-      <button class="title-btn close" type="button" data-action="close" aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
-    </header>
-
-    <div class="workspace">
-      <nav class="sidebar" aria-label="Pages">
+      <nav class="topnav" aria-label="Pages">
         <ul class="nav-list">
           <li><button class="nav-item" type="button" title="Dashboard (Ctrl+1)" data-nav="dashboard" data-nav-item="dashboard"><svg class="icon" aria-hidden="true"><use href="#i-dashboard"/></svg><span class="nav-label">Dashboard</span></button></li>
           <li><button class="nav-item" type="button" title="Combat (Ctrl+2)" data-nav="combat" data-nav-item="combat"><svg class="icon" aria-hidden="true"><use href="#i-combat"/></svg><span class="nav-label">Combat</span></button></li>
@@ -79,18 +63,22 @@
           <li><button class="nav-item" type="button" title="Controller &amp; Binds (Ctrl+4)" data-nav="controller" data-nav-item="controller"><svg class="icon" aria-hidden="true"><use href="#i-gamepad"/></svg><span class="nav-label">Controller &amp; Binds</span></button></li>
           <li><button class="nav-item" type="button" title="Diagnostics (Ctrl+5)" data-nav="diagnostics" data-nav-item="diagnostics"><svg class="icon" aria-hidden="true"><use href="#i-pulse"/></svg><span class="nav-label">Diagnostics</span></button></li>
         </ul>
-        <div class="sidebar-foot">
-          <div class="foot-row" data-bind-state="sidebarInputState">
-            <span class="foot-label">Input engine</span>
-            <span class="foot-value"><svg class="icon dot" aria-hidden="true"><use href="#i-dot"/></svg><span data-bind="sidebarInput">ViGEm / idle</span></span>
-          </div>
-          <div class="foot-row">
-            <span class="foot-label">Build</span>
-            <span class="foot-value mono" data-bind="version">v2.0.0</span>
-          </div>
-        </div>
       </nav>
+      <div class="titlebar-actions">
+        <div class="run-pill" data-bind-state="runState" role="status" aria-live="polite">
+          <svg class="icon" data-for="live" aria-hidden="true"><use href="#i-play"/></svg>
+          <svg class="icon" data-for="paused" aria-hidden="true"><use href="#i-pause"/></svg>
+          <svg class="icon" data-for="standby" aria-hidden="true"><use href="#i-stop"/></svg>
+          <svg class="icon" data-for="error" aria-hidden="true"><use href="#i-alert"/></svg>
+          <span data-bind="runLabel">STANDBY</span>
+        </div>
+        <button class="title-btn" type="button" data-action="help" aria-label="Help" aria-expanded="false" aria-controls="help-panel"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg></button>
+        <button class="title-btn" type="button" data-action="minimize" aria-label="Minimize"><svg class="icon" aria-hidden="true"><use href="#i-min"/></svg></button>
+        <button class="title-btn close" type="button" data-action="close" aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+      </div>
+    </header>
 
+    <div class="workspace">
       <main class="main">
         <div class="page-scroll" id="page-scroll">
 
@@ -665,6 +653,11 @@
             </div>
           </div>
           <div class="commit-states" role="status" aria-live="polite">
+            <span class="chip" data-bind-state="sidebarInputState" title="Input engine">
+              <svg class="icon" data-for="ok" aria-hidden="true"><use href="#i-gamepad"/></svg>
+              <svg class="icon" data-for="bad" aria-hidden="true"><use href="#i-alert"/></svg>
+              <span data-bind="sidebarInput">ViGEm / idle</span>
+            </span>
             <span class="chip" id="timing-state" data-bind-state="timingState">
               <svg class="icon" data-for="ok" aria-hidden="true"><use href="#i-check"/></svg>
               <svg class="icon" data-for="warn" aria-hidden="true"><use href="#i-warn"/></svg>

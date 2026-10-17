@@ -9,24 +9,24 @@
   .field-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .commit-states { justify-content: flex-start; }
   .commit-states .chip { padding: 0 var(--sp-2); }
+  /* Top nav collapses to icons; titles keep the page names as tooltips. */
+  .nav-item { padding: 0 var(--sp-2); }
+  .nav-item .icon { display: block; }
+  .nav-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
 
 @media (max-width: 900px) {
-  :root { --sidebar-w: 176px; }
   .two-col, .hero-grid { grid-template-columns: minmax(0, 1fr); }
-  .nav-key { display: none; }
-  .brand-sub { display: none; }
+  .titlebar { padding-left: var(--sp-4); }
   .commit-label { display: none; }
   .commit-profile .listbox { width: 150px; }
   .commit-bar { gap: var(--sp-2); padding: 0 var(--sp-4); }
 }
 
 @media (max-width: 680px) {
-  :root { --sidebar-w: 60px; }
-  .sidebar { padding-left: var(--sp-2); padding-right: var(--sp-2); }
-  .nav-item { justify-content: center; padding: 0; }
-  .nav-label, .sidebar-foot { display: none; }
-  .nav-item[aria-current="page"]::before { left: -9px; }
+  .brand-tld { display: none; }
+  .run-pill > span { display: none; }
+  .run-pill { padding: 0 10px; margin-right: 0; }
   .page { padding: var(--sp-4) var(--sp-4) var(--sp-8); }
   .run-main { gap: var(--sp-4); }
   .run-orb { width: 64px; height: 64px; }
@@ -47,10 +47,13 @@
 
 /* Short windows (200% scaling): compact chrome so Start stays above the fold. */
 @media (max-height: 620px) {
-  :root { --titlebar-h: 40px; --commitbar-h: 48px; --btn-h: 32px; }
+  :root { --titlebar-h: 44px; --commitbar-h: 48px; --btn-h: 32px; }
   .page { padding-top: var(--sp-4); }
-  .page-head { margin-bottom: var(--sp-3); }
+  .page-head { margin-bottom: var(--sp-4); }
   h1 { font-size: var(--fs-24); }
+  .brand-name { font-size: 18px; }
+  .title-btn { width: 30px; height: 30px; }
+  .run-pill { height: 30px; }
   .page-sub { display: none; }
   .run-card { padding: var(--sp-4); gap: var(--sp-3); }
   .run-orb { width: 56px; height: 56px; }

@@ -11,7 +11,7 @@
 /* Windows High Contrast: rely on system colors, keep borders and focus visible. */
 @media (forced-colors: active) {
   .card, .stat, .counter, .switch-tile, .toggle-btn, .readiness-row, .bind-row, .action-row,
-  .chip, .badge, .run-pill, .listbox-trigger, .field-control, .commit-bar, .sidebar, .titlebar {
+  .chip, .badge, .run-pill, .listbox-trigger, .field-control, .commit-bar, .titlebar {
     border: 1px solid CanvasText;
     forced-color-adjust: auto;
   }
@@ -26,5 +26,4 @@
   input:checked + .switch::after, input:checked ~ .switch::after, [aria-pressed="true"] > .switch::after { background: Highlight; }
   .stat::before { background: CanvasText; }
   :focus-visible { outline: 2px solid Highlight; }
-  .page-scroll { background-image: none; }
 }

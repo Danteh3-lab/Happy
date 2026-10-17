@@ -3,34 +3,34 @@ version: beta
 name: "DANBOT Control Deck"
 description: "A dark gaming dashboard that makes live combat automation state explicit first and configuration second."
 colors:
-  surface-0: "#0A0B0E"
-  surface-1: "#101217"
-  surface-2: "#151820"
-  surface-3: "#1D212B"
-  surface-inset: "#07080B"
-  text-1: "#F2F3F6"
-  text-2: "#A7ACB8"
-  text-3: "#767D8B"
-  accent: "#E2554A"
-  accent-hover: "#F06A5F"
+  surface-0: "#08080C"
+  surface-1: "#0B0B10"
+  surface-2: "#0D0D12"
+  surface-3: "#18181B"
+  surface-inset: "#09090D"
+  text-1: "#FAFAFA"
+  text-2: "#A1A1AA"
+  text-3: "#71717A"
+  accent: "#F0A3B8"
+  accent-hover: "#F6B9CA"
   signal: "#4ADAE6"
   signal-dim: "#5A949D"
-  ok: "#3DCF8E"
-  warn: "#F0B35A"
-  danger: "#FF5C7A"
+  ok: "#22C55E"
+  warn: "#F59E0B"
+  danger: "#EF4444"
 typography:
   ui:
-    fontFamily: "Segoe UI Variable Text, Segoe UI, system-ui, sans-serif"
+    fontFamily: "Geist, Segoe UI Variable Text, Segoe UI, system-ui, sans-serif"
   display:
-    fontFamily: "Bahnschrift, Segoe UI Variable Display, Segoe UI, sans-serif"
+    fontFamily: "Geist, Segoe UI Variable Display, Segoe UI, system-ui, sans-serif"
   mono:
     fontFamily: "Cascadia Mono, Cascadia Code, Consolas, monospace"
   scale: [11, 12, 13, 15, 18, 24, 32, 44]
 rounded:
-  xs: "6px"
-  sm: "10px"
-  md: "14px"
-  lg: "18px"
+  xs: "4px"
+  sm: "6px"
+  md: "10px"
+  lg: "12px"
 spacing:
   grid: "4px"
   page-max: "1180px"
@@ -70,19 +70,19 @@ A combat HUD on a dark console: whether the bot is live is the primary instrumen
 
 ## Colors
 
-Five near-black surfaces separate app background, chrome (titlebar, sidebar, commit bar), cards, raised/hover states and inset wells. Coral (`--accent`) is reserved for selection, focus, the primary action and the product signature. Cyan (`--signal`) marks live readouts, counters and HUD geometry. State colors carry meaning: green `--ok` is live or committed, amber `--warn` is a recoverable pending state (unapplied timings, unsaved profile), rose `--danger` is failure. Danger is deliberately rose so it never reads as the coral accent. Every state color is paired with an icon shape and text.
+Five near-black surfaces separate app background, glass chrome (header, commit bar), cards, raised/hover states and inset wells; borders, not shadows, separate them. Rose pink (`--accent`) is reserved for selection, focus, the primary action (a pink fill with dark `--accent-ink` text), the active-page dot and the `.deck` brand suffix. Cyan (`--signal`) marks live readouts, counters and HUD geometry. State colors carry meaning: green `--ok` is live or committed, amber `--warn` is a recoverable pending state (unapplied timings, unsaved profile), red `--danger` is failure. Status badges are pills: tinted green for ok, solid red (`--danger-fill`) for failure. Every state color is paired with an icon shape and text.
 
 ## Typography
 
-Segoe UI Variable carries controls and explanations at a 13px base. Bahnschrift, a condensed DIN-style face, is the display voice for page titles, the run status word, action names and numeric readouts (with tabular figures). Cascadia Mono is reserved for keys, values, controller labels and compact machine state. Uppercase with tracking is limited to eyebrows, stat labels and status pills; instructions use sentence case.
+Geist (falling back to Segoe UI Variable when it is not installed) carries everything at a 14px base. Headings are bold with tight negative tracking; page titles are centered at 36px with a soft white glow, card titles 19px bold. Geist Mono / Cascadia Mono is reserved for keys, values, controller labels and compact machine state. Uppercase with tracking is limited to card eyebrows; stat labels and badges use sentence case.
 
 ## Layout
 
-- Titlebar 48px, sidebar 212px, commit bar 60px; page content max 1180px.
-- Five pages, chosen from the sidebar or Ctrl+1–5: **Dashboard**, **Combat**, **Heroes & Timing**, **Controller & Binds**, **Diagnostics**. The last page is remembered per viewer.
+- Header 56px (brand left, page nav centered, run pill and window buttons right), commit bar 60px; page content max 1180px.
+- Five pages, chosen from the header nav or Ctrl+1–5; the active page is white with a pink dot beneath it: **Dashboard**, **Combat**, **Heroes & Timing**, **Controller & Binds**, **Diagnostics**. The last page is remembered per viewer.
 - The **commit bar** is fixed below every page, so "Timings not applied" and "Profile not saved" are always visible together with Apply and Save.
 - Dashboard uses a 12-column grid: run status (8) + readiness (4), active behavior (7) + quick toggles (5), live signal (7) + session (5). Configuration pages use two columns.
-- Breakpoints: 1040px (dashboard cards go full width), 900px (single-column pages, 176px sidebar), 680px (icon-only 60px sidebar). `max-height: 620px` (200% scaling) compacts the chrome so **Start bot** stays above the fold.
+- Breakpoints: 1040px (dashboard cards go full width), the header nav turns icon-only, 900px (single-column pages), 680px (brand suffix and run-pill label hide). `max-height: 620px` (200% scaling) compacts the chrome so **Start bot** stays above the fold.
 - Controls wrap instead of truncating essential state.
 
 ## Elevation & Depth
@@ -91,17 +91,17 @@ Hierarchy comes from tonal surfaces, hairline borders and one inset top highligh
 
 ## Shapes
 
-Cards use a 14px radius, buttons and fields 10px, keys and small chips 6px. Pills are reserved for status. Square key chips (`F / LT`, `E`, `kbd`) distinguish input vocabulary from actions.
+Cards use a 10px radius, buttons and fields 6px, keys 4px. Pills are reserved for status and header buttons. Square key chips (`F / LT`, `E`, `kbd`) distinguish input vocabulary from actions.
 
 ## Components
 
 ### Foundational visual states
 
-All controls provide default, hover, focus-visible, pressed and disabled states. Focus uses a two-pixel coral ring with offset. Elements with a `data-state` (`ok`, `warn`, `bad`, `busy`, `idle`) show the icon whose `data-for` matches, so every state has its own shape as well as color.
+All controls provide default, hover, focus-visible, pressed and disabled states. Focus uses a two-pixel pink ring with offset. Elements with a `data-state` (`ok`, `warn`, `bad`, `busy`, `idle`) show the icon whose `data-for` matches, so every state has its own shape as well as color.
 
 ### Run status
 
-A large orb with a state glyph (▶ live, ❚❚ paused, ■ standby, ! error), the status word in the display face, a sentence of explanation, **Start bot** and **Pause**. The orb ring spins only while live and only when motion is allowed. The titlebar run pill repeats the state on every page.
+A large orb with a state glyph (▶ live, ❚❚ paused, ■ standby, ! error), the status word in the display face, a sentence of explanation, **Start bot** and **Pause**. The orb ring spins only while live and only when motion is allowed. The header run pill repeats the state on every page.
 
 ### Switches and tiles
 
@@ -125,7 +125,7 @@ The hero and profile pickers share one listbox component (arrow keys, Home/End, 
 
 ### Help panel
 
-A slide-over from the titlebar **?** holds the setup guide, the LT hold and page shortcuts, and feature notes. It closes on Escape and returns focus.
+A slide-over from the header **?** holds the setup guide, the LT hold and page shortcuts, and feature notes. It closes on Escape and returns focus.
 
 ### Iconography
 

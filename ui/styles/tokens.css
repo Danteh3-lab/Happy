@@ -1,49 +1,56 @@
 /* Design tokens: the runtime source of truth (DESIGN.md documents them,
    Overlay/OverlayTheme.cs mirrors the colors; OverlayThemeTests checks it). */
+
+/* Geist when installed; otherwise the Segoe stack below takes over. */
+@font-face { font-family: "Geist"; src: local("Geist"), local("Geist Variable"), local("Geist-Regular"); font-weight: 100 900; }
+@font-face { font-family: "Geist Mono"; src: local("Geist Mono"), local("GeistMono-Regular"); font-weight: 100 900; }
+
 :root {
   color-scheme: dark;
 
   /* Surfaces, darkest to most raised */
-  --surface-0: #0a0b0e;   /* app background */
-  --surface-1: #101217;   /* titlebar, sidebar, commit bar */
-  --surface-2: #151820;   /* cards */
-  --surface-3: #1d212b;   /* raised / hover */
-  --surface-inset: #07080b; /* inputs, wells */
+  --surface-0: #08080c;   /* app background */
+  --surface-1: #0b0b10;   /* header, commit bar */
+  --surface-2: #0d0d12;   /* cards */
+  --surface-3: #18181b;   /* raised / hover */
+  --surface-inset: #09090d; /* inputs, wells */
 
-  --line-1: rgba(255, 255, 255, 0.06);
+  --line-1: rgba(255, 255, 255, 0.07);
   --line-2: rgba(255, 255, 255, 0.1);
-  --line-strong: rgba(255, 255, 255, 0.17);
+  --line-strong: rgba(255, 255, 255, 0.16);
 
-  --text-1: #f2f3f6;
-  --text-2: #a7acb8;
-  --text-3: #767d8b;
+  --text-1: #fafafa;
+  --text-2: #a1a1aa;
+  --text-3: #71717a;
 
-  /* Brand accent: selection, focus, primary action */
-  --accent: #e2554a;
-  --accent-hover: #f06a5f;
-  --accent-soft: rgba(226, 85, 74, 0.14);
-  --accent-line: rgba(226, 85, 74, 0.38);
-  --accent-glow: rgba(226, 85, 74, 0.35);
+  /* Brand accent: selection, focus, primary action (rose pink) */
+  --accent: #f0a3b8;
+  --accent-hover: #f6b9ca;
+  --accent-ink: #1b1014;  /* text on an accent fill */
+  --accent-soft: rgba(240, 163, 184, 0.12);
+  --accent-line: rgba(240, 163, 184, 0.35);
+  --accent-glow: rgba(240, 163, 184, 0.3);
 
   /* Live readouts and HUD geometry */
   --signal: #4adae6;
-  --signal-soft: rgba(74, 218, 230, 0.12);
+  --signal-soft: rgba(74, 218, 230, 0.1);
   --signal-dim: #5a949d;
 
-  /* States. Danger is rose so it never reads as the coral accent. */
-  --ok: #3dcf8e;
-  --ok-soft: rgba(61, 207, 142, 0.12);
-  --warn: #f0b35a;
-  --warn-soft: rgba(240, 179, 90, 0.12);
-  --danger: #ff5c7a;
-  --danger-soft: rgba(255, 92, 122, 0.12);
-  --idle: #767d8b;
+  /* States */
+  --ok: #22c55e;
+  --ok-soft: rgba(34, 197, 94, 0.1);
+  --warn: #f59e0b;
+  --warn-soft: rgba(245, 158, 11, 0.1);
+  --danger: #ef4444;
+  --danger-soft: rgba(239, 68, 68, 0.12);
+  --danger-fill: #c0262d;  /* solid "Detected" badge */
+  --idle: #71717a;
   --idle-soft: rgba(255, 255, 255, 0.04);
 
   /* Type */
-  --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-  --font-display: "Bahnschrift", "Segoe UI Variable Display", "Segoe UI", sans-serif;
-  --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, monospace;
+  --font-ui: "Geist", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Geist", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Cascadia Mono", "Cascadia Code", Consolas, monospace;
   --fs-11: 11px;
   --fs-12: 12px;
   --fs-13: 13px;
@@ -65,15 +72,16 @@
   --sp-10: 40px;
 
   /* Radii */
-  --r-xs: 6px;
-  --r-sm: 10px;
-  --r-md: 14px;
-  --r-lg: 18px;
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 12px;
   --r-pill: 999px;
 
-  /* Elevation */
-  --elev-1: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 8px 24px rgba(0, 0, 0, 0.22);
-  --elev-2: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 18px 48px rgba(0, 0, 0, 0.5);
+  /* Elevation: borders do the work; shadows only for lift and overlays */
+  --elev-1: none;
+  --elev-2: 0 18px 48px rgba(0, 0, 0, 0.6);
+  --elev-lift: 0 14px 32px rgba(0, 0, 0, 0.45);
 
   /* Motion */
   --dur-1: 120ms;
@@ -82,8 +90,7 @@
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 
   /* Component sizes */
-  --titlebar-h: 48px;
-  --sidebar-w: 212px;
+  --titlebar-h: 56px;
   --commitbar-h: 60px;
   --btn-h: 36px;
   --page-max: 1180px;
