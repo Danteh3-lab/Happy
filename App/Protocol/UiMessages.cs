@@ -85,6 +85,18 @@ internal sealed record CloudStatusDto
     [JsonPropertyName("busy")] public bool Busy { get; init; }
     [JsonPropertyName("lastSync")] public string LastSync { get; init; } = "";
     [JsonPropertyName("error")] public string Error { get; init; } = "";
+    [JsonPropertyName("license")] public LicenseStatusDto License { get; init; } = LicenseStatusDto.Unavailable;
+}
+
+/// <summary>License state for the account card, the readiness list and the start gate.</summary>
+internal sealed record LicenseStatusDto
+{
+    public static readonly LicenseStatusDto Unavailable = new();
+
+    [JsonPropertyName("active")] public bool Active { get; init; }
+    /// <summary>active, none, expired, revoked, device_limit or unchecked.</summary>
+    [JsonPropertyName("state")] public string State { get; init; } = "unchecked";
+    [JsonPropertyName("summary")] public string Summary { get; init; } = "";
 }
 
 /// <summary>The 200 ms status payload. Field names are the page contract.</summary>

@@ -115,6 +115,10 @@ static partial class Program
             DpapiSessionStoreRoundTripsAndRejectsTampering();
             CloudCoordinatorSignInSyncsAndRecovers();
             DeckControllerUsesCloudForProfiles();
+            LicenseTokenVerifiesSignatureDeviceAndTime();
+            SupabaseRestApiCallsLicenseFunction();
+            CloudCoordinatorChecksAndRedeemsLicense();
+            DeckControllerRequiresLicenseToStart();
             ControllerBindingCaptureEdgesAndThresholds();
             OverlayThemeMatchesUiTokens();
             VisionOverlayDrawsOpaqueHud();

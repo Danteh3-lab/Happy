@@ -158,14 +158,14 @@ static partial class Program
     {
         private readonly string _root = Path.Combine(Path.GetTempPath(), "HappyBot.DeckTests", Guid.NewGuid().ToString("N"));
 
-        public DeckHarness(FakeInputEnvironment input)
+        public DeckHarness(FakeInputEnvironment input, CloudCoordinator cloud = null)
         {
             Directory.CreateDirectory(_root);
             Input = input;
             Bot = new BotCore(new FakeInputGateway(), new FixedRollSource(0), new FixedOrangeDirectionSource(CombatDirection.Top));
             Session = new SettingsSession(new ProfileEditorController(new ProfileStore(_root)), Bot);
             Deck = new DeckController(Bot, Session, Ui, new SyncDispatcher(), Input, Overlay, Sound, Picker,
-                new InputTestRunner(Array.Empty<(string, Action)>(), (_, _) => Task.CompletedTask));
+                new InputTestRunner(Array.Empty<(string, Action)>(), (_, _) => Task.CompletedTask), cloud);
             Deck.Initialize(1920, 1080);
         }
 

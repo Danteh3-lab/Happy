@@ -142,6 +142,9 @@ internal sealed class DeckController : IDisposable
                 case CloudSyncCommand:
                     WithCloud(cloud => cloud.Sync());
                     break;
+                case LicenseRedeemCommand c:
+                    WithCloud(cloud => cloud.RedeemLicense(c.Key));
+                    break;
             }
         }
         catch (Exception ex)
@@ -158,6 +161,15 @@ internal sealed class DeckController : IDisposable
 
         if (!_bot.IsRunning || _bot.IsPaused)
             _bot.RecordBridgeHeartbeat();
+
+        _cloud?.OnTick();
+        // Pause rather than stop: a stopped BotCore cannot start again, and a
+        // renewed license should only need Resume.
+        if (_bot.IsRunning && !_bot.IsPaused && _cloud is { LicenseActive: false })
+        {
+            _bot.TogglePause();
+            Toast("DANBOT paused: " + _cloud.LicenseBlockReason, "error");
+        }
 
         InputBridgeSnapshot bridge = _input.GetDiagnostics();
         if (_ui.IsConnected && bridge.OtherXInputControllers > 0 && !_directSourceWarningShown)
@@ -213,6 +225,14 @@ internal sealed class DeckController : IDisposable
 
     private void OnStart(string requestId)
     {
+        if (_cloud is { LicenseActive: false })
+        {
+            string message = _cloud.LicenseBlockReason;
+            ApplyResult(requestId, false, message);
+            Toast(message, "error");
+            return;
+        }
+
         if (!_input.IsReady)
         {
             const string message = "ViGEm input is unavailable. Reconnect the virtual controller before starting.";
@@ -269,6 +289,11 @@ internal sealed class DeckController : IDisposable
     private void OnTogglePause()
     {
         if (!_bot.IsRunning) return;
+        if (_bot.IsPaused && _cloud is { LicenseActive: false })
+        {
+            Toast(_cloud.LicenseBlockReason, "error");
+            return;
+        }
         _bot.TogglePause();
         Toast(_bot.IsPaused ? "DANBOT paused." : "DANBOT resumed.", "info");
         PostStatus();

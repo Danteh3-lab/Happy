@@ -156,7 +156,7 @@ static partial class Program
         api.Cloud.Add(new CloudProfile("Duels", Values(("Left", "120")), CloudNow));
         var toasts = new List<(string Message, string Kind)>();
         var written = new List<string>();
-        var cloud = new CloudCoordinator(api, store, new SyncDispatcher(), local, () => CloudNow);
+        var cloud = new CloudCoordinator(api, store, new SyncDispatcher(), local, NewLicense(), () => CloudNow);
         cloud.Attach((m, k) => toasts.Add((m, k)), () => { }, names => written.AddRange(names));
 
         cloud.SignUp("me@x.test", "short");
@@ -174,7 +174,7 @@ static partial class Program
         api.Calls.Clear();
         cloud.SignIn("me@x.test", "secret");
         WaitIdle(cloud);
-        Require(api.Calls.SequenceEqual(new[] { "signin", "refresh", "list" }) && store.Saved?.RefreshToken == "r2",
+        Require(api.Calls.SequenceEqual(new[] { "signin", "refresh", "license-check", "list" }) && store.Saved?.RefreshToken == "r2",
             "an expiring token is refreshed (and the rotated refresh token stored) before the next request: " +
             string.Join(",", api.Calls));
         api.Calls.Clear();
@@ -206,7 +206,7 @@ static partial class Program
             var session = new SettingsSession(new ProfileEditorController(profiles), bot);
             var api = new FakeSupabaseApi();
             var cloud = new CloudCoordinator(api, new MemorySessionStore(), new SyncDispatcher(),
-                new ProfileStoreLocalProfiles(profiles), () => CloudNow);
+                new ProfileStoreLocalProfiles(profiles), NewLicense(), () => CloudNow);
             var ui = new FakeUiSink();
             using var deck = new DeckController(bot, session, ui, new SyncDispatcher(), new FakeInputEnvironment(),
                 new FakeOverlay(), new FakeSound(), new FakeSavePicker(),
@@ -307,6 +307,9 @@ static partial class Program
         public List<string> Upserts { get; } = new();
         public List<string> Deletes { get; } = new();
         public IReadOnlyDictionary<string, string> LastValues { get; private set; }
+        public string LicenseStatus { get; set; } = "active";
+        public CloudException FailLicense { get; set; }
+        public string LastKey { get; private set; }
 
         private void Check()
         {
@@ -367,6 +370,29 @@ static partial class Program
             Deletes.Add(name);
             Cloud.RemoveAll(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
             return Task.CompletedTask;
+        }
+
+        public Task<string> CheckLicenseAsync(string accessToken, string deviceId, string deviceName, CancellationToken token)
+        {
+            Calls.Add("license-check");
+            return License(deviceId);
+        }
+
+        public Task<string> RedeemLicenseAsync(string accessToken, string key, string deviceId, string deviceName,
+            CancellationToken token)
+        {
+            Calls.Add("license-redeem");
+            LastKey = key;
+            return License(deviceId);
+        }
+
+        private Task<string> License(string deviceId)
+        {
+            Check();
+            CloudException fail = FailLicense;
+            FailLicense = null;
+            if (fail != null) throw fail;
+            return Task.FromResult(SignLicense(LicenseStatus, CloudNow, device: deviceId));
         }
     }
 

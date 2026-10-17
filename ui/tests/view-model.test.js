@@ -27,6 +27,29 @@ test("start and apply controls follow run and pending state", () => {
   assert.equal(applying.startDisabled, true);
 });
 
+test("license gates start and shows in readiness and the account card", () => {
+  const signedOut = deriveView({}, { cloud: { signedIn: false, license: { active: false, state: "unchecked", summary: "Sign in" } } }, {});
+  assert.equal(signedOut.startDisabled, true);
+  assert.equal(signedOut.readyLicenseState, "bad");
+  assert.equal(signedOut.readyLicenseDetail, "Sign in");
+  assert.equal(signedOut.readyFixLicense, true);
+  assert.equal(signedOut.licenseNeedsKey, false);
+
+  const noKey = deriveView({}, { cloud: { signedIn: true, license: { active: false, state: "none", summary: "No license" } } }, {});
+  assert.equal(noKey.licenseNeedsKey, true);
+  assert.equal(noKey.licenseState, "warn");
+  const checking = deriveView({}, { cloud: { signedIn: true, license: { active: false, state: "unchecked" } } }, {});
+  assert.equal(checking.licenseNeedsKey, false);
+
+  const active = deriveView({}, { cloud: { signedIn: true, license: { active: true, state: "active", summary: "Lifetime license" } } }, {});
+  assert.equal(active.startDisabled, false);
+  assert.equal(active.readyLicenseState, "ok");
+  assert.equal(active.licenseSummary, "Lifetime license");
+  assert.equal(active.licenseNeedsKey, false);
+
+  assert.equal(deriveView({}, {}, {}).startDisabled, false, "a payload without license data leaves the gate to the host");
+});
+
 test("last reaction confirmation maps to a state", () => {
   const vm = deriveView({}, { lastReaction: { state: "PARRY SENT", confirmation: "INPUT SENT", delayMs: 60, direction: "LEFT" } }, {});
   assert.equal(vm.lastConfirmationState, "warn");

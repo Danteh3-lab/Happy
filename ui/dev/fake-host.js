@@ -22,6 +22,7 @@ heroes.forEach((hero) => { settings[hero] = hero === "Orochi"; });
 const host = {
   cloudEmail: "",
   cloudLastSync: "",
+  licensed: false,
   profile: "Default",
   profiles: ["Default", "Ranked", "Duels — Orochi"],
   profileDirty: false,
@@ -85,7 +86,12 @@ function status() {
     bindingAutoParry: host.capturing === "AutoParry",
     visionOverlay: host.visionOverlay, anchorScan: host.anchorScan,
     cloud: { available: true, signedIn: Boolean(host.cloudEmail), email: host.cloudEmail, busy: false,
-      lastSync: host.cloudLastSync, error: "" },
+      lastSync: host.cloudLastSync, error: "",
+      license: host.licensed
+        ? { active: true, state: "active", summary: "Lifetime license · 1 PC · key …WEJX" }
+        : host.cloudEmail
+          ? { active: false, state: "none", summary: "No license on this account. Redeem a license key." }
+          : { active: false, state: "unchecked", summary: "A license is needed to start DANBOT. Sign in and redeem your key on the Diagnostics page." } },
     telemetry: {
       recording: host.telemetry, label: "Training",
       durationSeconds: host.telemetry ? Math.round((Date.now() - host.telemetryStarted) / 1000) : 0, failures: 0, dropped: 0,
@@ -201,8 +207,13 @@ window.__danbotFakeHost = {
         host.cloudLastSync = new Date().toTimeString().slice(0, 5);
         toast("Cloud profiles are up to date.", "success");
         break;
+      case "license-redeem":
+        host.licensed = true;
+        toast("Lifetime license · 1 PC · key …WEJX", "success");
+        break;
       case "cloud-sign-out":
         host.cloudEmail = "";
+        host.licensed = false;
         toast("Signed out. Local profiles stay on this PC.", "info");
         break;
     }

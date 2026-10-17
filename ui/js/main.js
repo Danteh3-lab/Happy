@@ -329,6 +329,16 @@ const actions = {
   "cloud-sign-up": () => sendCloudCredentials(MSG.CLOUD_SIGN_UP),
   "cloud-sign-out": () => send(MSG.CLOUD_SIGN_OUT),
   "cloud-sync": () => send(MSG.CLOUD_SYNC),
+  "license-redeem": () => {
+    const field = $("#license-key");
+    const key = field.value.trim();
+    if (!key) {
+      toast("Enter a license key.", "error");
+      return;
+    }
+    send(MSG.LICENSE_REDEEM, { key });
+    field.value = "";
+  },
 };
 
 // The password goes straight to the host (which sends it to Supabase over
@@ -350,6 +360,11 @@ function sendCloudCredentials(type) {
 $("#cloud-form").addEventListener("submit", (event) => {
   event.preventDefault();
   actions["cloud-sign-in"]();
+});
+
+$("#license-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  actions["license-redeem"]();
 });
 
 document.addEventListener("click", (event) => {

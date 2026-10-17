@@ -42,7 +42,7 @@ public sealed class MainForm : Form, IUiSink, IUiDispatcher
         ProfileStore profiles = ProfileStore.ForApplication();
         var session = new SettingsSession(new ProfileEditorController(profiles), _bot);
         var cloud = new CloudCoordinator(SupabaseRestApi.ForProject(), DpapiCloudSessionStore.ForApplication(), this,
-            new ProfileStoreLocalProfiles(profiles));
+            new ProfileStoreLocalProfiles(profiles), LicenseState.ForApplication());
         _controller = new DeckController(_bot, session, this, this, new StaticInputEnvironment(), _visionOverlay,
             new WavSoundCue(), new WinFormsSaveFilePicker(this), new InputTestRunner(), cloud);
 

@@ -34,6 +34,10 @@ internal sealed record CloudSignUpCommand(string Email, string Password) : UiCom
 }
 internal sealed record CloudSignOutCommand : UiCommand;
 internal sealed record CloudSyncCommand : UiCommand;
+internal sealed record LicenseRedeemCommand(string Key) : UiCommand
+{
+    public override string ToString() => "LicenseRedeemCommand { Key = (hidden) }";
+}
 internal sealed record HelpCommand(HelpTopic Topic) : UiCommand;
 internal sealed record WindowCommand(WindowCommandKind Kind) : UiCommand;
 internal sealed record UnknownCommand(string Type) : UiCommand;
@@ -101,6 +105,7 @@ internal static class UiCommandParser
             UiMessageTypes.Inbound.CloudSignUp => new CloudSignUpCommand(ReadString(root, "email"), ReadString(root, "password")),
             UiMessageTypes.Inbound.CloudSignOut => new CloudSignOutCommand(),
             UiMessageTypes.Inbound.CloudSync => new CloudSyncCommand(),
+            UiMessageTypes.Inbound.LicenseRedeem => new LicenseRedeemCommand(ReadString(root, "key")),
             _ => new UnknownCommand(type)
         };
     }

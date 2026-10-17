@@ -9,15 +9,21 @@ namespace HappyBot.App;
 /// callback happens back on the UI thread through <see cref="IUiDispatcher"/>.
 /// Local profile files stay the source of truth: the bot never waits on the
 /// cloud, and signing out leaves them untouched.
+/// The account also carries the license: a signed grant for this PC, checked
+/// at sign-in and every few hours, that the deck needs before the bot starts.
 /// </summary>
 internal sealed class CloudCoordinator
 {
     public const int MinimumPasswordLength = 6;
 
+    /// <summary>Wait this long after a background license check before trying again.</summary>
+    internal static readonly TimeSpan LicenseRetry = TimeSpan.FromMinutes(5);
+
     private readonly ISupabaseApi _api;
     private readonly ICloudSessionStore _store;
     private readonly IUiDispatcher _dispatcher;
     private readonly ILocalProfiles _local;
+    private readonly LicenseState _license;
     private readonly Func<DateTimeOffset> _clock;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _sessionSync = new();
@@ -26,17 +32,19 @@ internal sealed class CloudCoordinator
     private string _email = "";
     private string _error = "";
     private DateTimeOffset? _lastSync;
+    private DateTimeOffset _nextLicenseCheck = DateTimeOffset.MinValue;
     private Action<string, string> _toast = (_, _) => { };
     private Action _statusChanged = () => { };
     private Action<IReadOnlyCollection<string>> _profilesWritten = _ => { };
 
     public CloudCoordinator(ISupabaseApi api, ICloudSessionStore store, IUiDispatcher dispatcher, ILocalProfiles local,
-        Func<DateTimeOffset> clock = null)
+        LicenseState license, Func<DateTimeOffset> clock = null)
     {
         _api = api ?? throw new ArgumentNullException(nameof(api));
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _local = local ?? throw new ArgumentNullException(nameof(local));
+        _license = license ?? throw new ArgumentNullException(nameof(license));
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
     }
 
@@ -45,15 +53,35 @@ internal sealed class CloudCoordinator
         get { lock (_sessionSync) return _session != null; }
     }
 
-    public CloudStatusDto Status => new()
+    /// <summary>True while this PC holds a valid, recently confirmed license.</summary>
+    public bool LicenseActive => _license.Allows(_clock());
+
+    /// <summary>Why the bot cannot start, or "" when it can.</summary>
+    public string LicenseBlockReason => _license.BlockReason(_clock(), SignedIn);
+
+    public CloudStatusDto Status
     {
-        Available = true,
-        SignedIn = SignedIn,
-        Email = _email,
-        Busy = Volatile.Read(ref _pending) > 0,
-        LastSync = _lastSync?.ToLocalTime().ToString("HH:mm") ?? "",
-        Error = _error
-    };
+        get
+        {
+            DateTimeOffset now = _clock();
+            bool active = _license.Allows(now);
+            return new CloudStatusDto
+            {
+                Available = true,
+                SignedIn = SignedIn,
+                Email = _email,
+                Busy = Volatile.Read(ref _pending) > 0,
+                LastSync = _lastSync?.ToLocalTime().ToString("HH:mm") ?? "",
+                Error = _error,
+                License = new LicenseStatusDto
+                {
+                    Active = active,
+                    State = active ? LicenseGrant.Active : _license.Grant?.Status ?? "unchecked",
+                    Summary = _license.Grant != null ? _license.Describe(now) : _license.BlockReason(now, SignedIn)
+                }
+            };
+        }
+    }
 
     /// <summary>Wires UI callbacks; called once by the deck controller.</summary>
     public void Attach(Action<string, string> toast, Action statusChanged, Action<IReadOnlyCollection<string>> profilesWritten)
@@ -63,15 +91,17 @@ internal sealed class CloudCoordinator
         _profilesWritten = profilesWritten ?? throw new ArgumentNullException(nameof(profilesWritten));
     }
 
-    /// <summary>Resumes the stored login at startup and syncs quietly.</summary>
+    /// <summary>Resumes the stored license and login at startup, then checks and syncs quietly.</summary>
     public void Restore()
     {
+        _license.Load();
         StoredCloudLogin login = _store.Load();
         if (login == null) return;
         _email = login.Email ?? "";
         Run(token => _api.RefreshAsync(login.RefreshToken, token), session =>
         {
             SetSession(session);
+            CheckLicense(quiet: true);
             Sync(quiet: true);
         }, "Cloud sign-in");
     }
@@ -88,6 +118,7 @@ internal sealed class CloudCoordinator
         {
             SetSession(session);
             _toast($"Signed in as {_email}.", "success");
+            CheckLicense(quiet: false);
             Sync();
         }, "Sign-in failed");
     }
@@ -115,6 +146,7 @@ internal sealed class CloudCoordinator
             }
             SetSession(result.Session);
             _toast($"Account created. Signed in as {_email}.", "success");
+            CheckLicense(quiet: false);
             Sync();
         }, "Account creation failed");
     }
@@ -124,6 +156,7 @@ internal sealed class CloudCoordinator
         CloudSession session;
         lock (_sessionSync) session = _session;
         ClearSession();
+        _license.Clear();
         _toast("Signed out. Local profiles stay on this PC.", "info");
         _statusChanged();
         if (session == null) return;
@@ -133,6 +166,59 @@ internal sealed class CloudCoordinator
             catch (CloudException) { }
             return true;
         }, _ => { }, "Sign-out");
+    }
+
+    /// <summary>Ties a license key to the signed-in account and registers this PC.</summary>
+    public void RedeemLicense(string key)
+    {
+        key = (key ?? "").Trim();
+        if (!SignedIn)
+        {
+            _toast("Sign in first, then redeem the license key.", "error");
+            return;
+        }
+        if (key.Length == 0)
+        {
+            _toast("Enter a license key.", "error");
+            return;
+        }
+        Run(async token =>
+        {
+            string access = await AccessTokenAsync(token).ConfigureAwait(false);
+            return await _api.RedeemLicenseAsync(access, key, _license.DeviceId, _license.DeviceName, token)
+                .ConfigureAwait(false);
+        }, licenseToken => AcceptLicense(licenseToken, quiet: false), "License key not accepted");
+    }
+
+    /// <summary>Asks the license service for a fresh grant for this PC.</summary>
+    public void CheckLicense(bool quiet)
+    {
+        if (!SignedIn) return;
+        _nextLicenseCheck = _clock() + LicenseRetry;
+        Run(async token =>
+        {
+            string access = await AccessTokenAsync(token).ConfigureAwait(false);
+            return await _api.CheckLicenseAsync(access, _license.DeviceId, _license.DeviceName, token)
+                .ConfigureAwait(false);
+        }, licenseToken => AcceptLicense(licenseToken, quiet), "License check failed", toastFailure: !quiet);
+    }
+
+    /// <summary>Status-tick hook: re-checks an aging grant while signed in, at most every few minutes.</summary>
+    public void OnTick()
+    {
+        DateTimeOffset now = _clock();
+        if (!SignedIn || Volatile.Read(ref _pending) > 0 || now < _nextLicenseCheck || !_license.NeedsRefresh(now)) return;
+        CheckLicense(quiet: true);
+    }
+
+    /// <summary>Quiet checks only speak up when the license changes between usable and not.</summary>
+    private void AcceptLicense(string licenseToken, bool quiet)
+    {
+        bool wasActive = _license.Allows(_clock());
+        _license.Accept(licenseToken);
+        bool active = _license.Allows(_clock());
+        if (quiet && active == wasActive) return;
+        _toast(_license.Describe(_clock()), active ? "success" : "warning");
     }
 
     /// <summary>Two-way sync of every local profile against the account.</summary>
@@ -262,7 +348,8 @@ internal sealed class CloudCoordinator
         _store.Clear();
     }
 
-    private void Run<T>(Func<CancellationToken, Task<T>> work, Action<T> onSuccess, string failurePrefix)
+    private void Run<T>(Func<CancellationToken, Task<T>> work, Action<T> onSuccess, string failurePrefix,
+        bool toastFailure = true)
     {
         Interlocked.Increment(ref _pending);
         _statusChanged();
@@ -295,7 +382,7 @@ internal sealed class CloudCoordinator
                     }
                     else
                     {
-                        Fail(failurePrefix, failure);
+                        Fail(failurePrefix, failure, toastFailure);
                     }
                 }
                 finally
@@ -309,7 +396,7 @@ internal sealed class CloudCoordinator
         });
     }
 
-    private void Fail(string prefix, Exception failure)
+    private void Fail(string prefix, Exception failure, bool toast)
     {
         if (failure is CloudException { Unauthorized: true })
         {
@@ -320,6 +407,6 @@ internal sealed class CloudCoordinator
         }
         string message = failure is CloudException ? failure.Message : "Unexpected error: " + failure.Message;
         _error = message;
-        _toast(prefix + ": " + message, "error");
+        if (toast) _toast(prefix + ": " + message, "error");
     }
 }

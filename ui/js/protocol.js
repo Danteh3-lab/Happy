@@ -35,6 +35,7 @@ export const MSG = Object.freeze({
   CLOUD_SIGN_UP: "cloud-sign-up",
   CLOUD_SIGN_OUT: "cloud-sign-out",
   CLOUD_SYNC: "cloud-sync",
+  LICENSE_REDEEM: "license-redeem",
 });
 
 // Host → page

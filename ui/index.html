@@ -129,6 +129,11 @@
               <article class="card readiness-card" aria-labelledby="readiness-title">
                 <div class="card-head"><h2 id="readiness-title" class="card-title">Readiness</h2></div>
                 <ul class="readiness-list">
+                  <li class="readiness-row" data-bind-state="readyLicenseState">
+                    <span class="state-icon" aria-hidden="true"><svg class="icon" data-for="ok"><use href="#i-check"/></svg><svg class="icon" data-for="bad"><use href="#i-alert"/></svg></span>
+                    <span class="readiness-text"><b>License</b><small data-bind="readyLicenseDetail">Checking license</small></span>
+                    <button class="link-btn" type="button" data-nav="diagnostics" data-nav-focus="#cloud-title" data-bind-show="readyFixLicense" hidden>Fix</button>
+                  </li>
                   <li class="readiness-row" data-bind-state="readyInputState">
                     <span class="state-icon" aria-hidden="true"><svg class="icon" data-for="ok"><use href="#i-check"/></svg><svg class="icon" data-for="bad"><use href="#i-alert"/></svg></span>
                     <span class="readiness-text"><b>Virtual controller</b><small data-bind="readyInputDetail">Checking input bridge</small></span>
@@ -598,8 +603,8 @@
               </article>
 
               <article class="card" aria-labelledby="cloud-title">
-                <div class="card-head"><div><p class="eyebrow">Account</p><h2 id="cloud-title" class="card-title">Cloud profiles</h2></div><span class="badge" data-bind-state="cloudState"><svg class="icon" aria-hidden="true"><use href="#i-link"/></svg><span data-bind="cloudBadge">Signed out</span></span></div>
-                <p class="card-copy">Back up your profiles to an account and use them on any PC. Profiles stay on this PC as well, and the bot never waits on the cloud.</p>
+                <div class="card-head"><div><p class="eyebrow">Account</p><h2 id="cloud-title" class="card-title" tabindex="-1">License &amp; cloud profiles</h2></div><span class="badge" data-bind-state="cloudState"><svg class="icon" aria-hidden="true"><use href="#i-link"/></svg><span data-bind="cloudBadge">Signed out</span></span></div>
+                <p class="card-copy">Sign in to activate your license and back up your profiles. Profiles stay on this PC as well, and once licensed the bot keeps working offline for up to 3 days.</p>
                 <form class="cloud-form" id="cloud-form" data-bind-show="cloudSignedOut" novalidate>
                   <div class="field-grid two">
                     <label class="field">
@@ -618,6 +623,16 @@
                 </form>
                 <div data-bind-show="cloudSignedIn" hidden>
                   <p class="card-copy">Signed in as <b data-bind="cloudEmail">-</b> · <span data-bind="cloudLastSync">Not synced yet</span></p>
+                  <p class="callout" data-bind-state="licenseState"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><span data-bind="licenseSummary">Checking license</span></p>
+                  <form class="cloud-form" id="license-form" data-bind-show="licenseNeedsKey" novalidate hidden>
+                    <label class="field">
+                      <span class="field-label">License key</span>
+                      <span class="field-control"><input type="text" id="license-key" autocomplete="off" spellcheck="false" placeholder="DANBOT-XXXXX-XXXXX-XXXXX-XXXXX"></span>
+                    </label>
+                    <div class="button-row">
+                      <button class="btn btn-primary" type="submit" data-bind-disabled="cloudBusy">Redeem key</button>
+                    </div>
+                  </form>
                   <div class="button-row">
                     <button class="btn btn-secondary" type="button" data-action="cloud-sync" data-bind-disabled="cloudBusy"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Sync now</button>
                     <button class="btn btn-secondary" type="button" data-action="cloud-sign-out" data-bind-disabled="cloudBusy">Sign out</button>

@@ -38,6 +38,12 @@ internal interface ISupabaseApi
     Task<IReadOnlyList<CloudProfile>> ListProfilesAsync(string accessToken, CancellationToken token);
     Task UpsertProfileAsync(string accessToken, string name, IReadOnlyDictionary<string, string> values, CancellationToken token);
     Task DeleteProfileAsync(string accessToken, string name, CancellationToken token);
+
+    /// <summary>Returns a signed license token for this account on this PC.</summary>
+    Task<string> CheckLicenseAsync(string accessToken, string deviceId, string deviceName, CancellationToken token);
+
+    /// <summary>Ties a license key to the account, then returns a token like <see cref="CheckLicenseAsync"/>.</summary>
+    Task<string> RedeemLicenseAsync(string accessToken, string key, string deviceId, string deviceName, CancellationToken token);
 }
 
 /// <summary>What survives a restart: never the password, only a rotating refresh token.</summary>

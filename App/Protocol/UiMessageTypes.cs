@@ -43,6 +43,7 @@ internal static class UiMessageTypes
         public const string CloudSignUp = "cloud-sign-up";
         public const string CloudSignOut = "cloud-sign-out";
         public const string CloudSync = "cloud-sync";
+        public const string LicenseRedeem = "license-redeem";
 
         // Legacy aliases still accepted from older pages.
         public const string LegacySave = "save";

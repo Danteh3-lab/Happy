@@ -134,11 +134,45 @@ Important feature switches:
 **Controller & Binds** can bind DS4 buttons to toggle Auto dodge, Orange
 parry, and Auto parry. Everything else is set from the control deck.
 
+## License
+
+DANBOT needs a license key to start. Sign in on **Diagnostics › License &
+cloud profiles**, paste the key (`DANBOT-XXXXX-XXXXX-XXXXX-XXXXX`) and press
+**Redeem key**. The key is tied to that account and the PC is registered
+against it; the Dashboard readiness list shows the license state.
+
+- Keys are lifetime or last a set number of days, counted from redemption.
+- Each key allows a set number of PCs (default 1).
+- The app re-checks the license at sign-in and every 6 hours. Without a check
+  it keeps working offline for up to 72 hours (never past the expiry date);
+  after that, or when the license expires or is revoked, Start is refused and
+  a running bot pauses until the license is valid again.
+- Signing out removes the license from that PC until you sign in again.
+
+The `license` edge function (`supabase/functions/license`) answers with a
+token signed by an ECDSA P-256 key that it created on first use and keeps in
+Supabase Vault. The app checks it with the public key in
+`Cloud/SupabaseProject.cs` and stores it next to the login in
+`%LOCALAPPDATA%\DANBOT\license.bin` (DPAPI). Only SHA-256 hashes of keys are
+stored in `public.licenses`; clients cannot read or write the license tables.
+
+Managing keys (Supabase dashboard › SQL editor):
+
+```sql
+-- Create keys; the plain keys are shown only here, so copy them.
+select * from license_create(5);                    -- 5 lifetime keys, 1 PC each
+select * from license_create(1, 30, 2, 'Sam');      -- 30 days, 2 PCs, with a note
+
+select * from license_overview order by created_at desc;  -- who has what
+select license_reset_devices('<license id>');             -- free the PC slots
+select license_revoke('<license id>');                    -- stop a key
+```
+
 ## Cloud Profiles
 
-**Diagnostics › Cloud profiles** signs in to a DANBOT account (Supabase) so
-profiles follow you between PCs. Local profile files stay the real copy: the
-bot runs the same offline or signed out, and signing out never deletes them.
+The same account syncs profiles between PCs. Local profile files stay the real
+copy: syncing works the same offline or signed out, and signing out never
+deletes them.
 
 - **Sign in** downloads your cloud profiles and uploads the local ones.
 - **Save profile** and **Save as** upload that profile; deleting a profile
@@ -202,7 +236,7 @@ ui/ (HTML/CSS/ES modules, served from https://danbot.app.example/)
 MainForm         WebView2 host: window chrome, timers, message routing
   → DeckController   all control-deck behavior, UI-free and unit-tested
       → SettingsSession  draft vs live settings (switches live, timings on Apply)
-      → CloudCoordinator account sign-in and profile sync (Cloud/, Supabase REST)
+      → CloudCoordinator account sign-in, license and profile sync (Cloud/, Supabase REST)
       → BotCore          detection and reactions
 ```
 
@@ -214,7 +248,7 @@ UI protocol v1 — page → host: `ready`, `settings`, `start`, `apply`,
 `profile-save`, `profile-save-as`, `profile-delete`, `orange-parry`,
 `vision-overlay`, `anchor-scan`, `bind-auto-dodge`, `bind-orange-parry`,
 `bind-auto-parry`, `telemetry`, `export-telemetry`, `cloud-sign-in`,
-`cloud-sign-up`, `cloud-sign-out`, `cloud-sync`, `howto`, `readme`, `reload`,
+`cloud-sign-up`, `cloud-sign-out`, `cloud-sync`, `license-redeem`, `howto`, `readme`, `reload`,
 `minimize`, `close`, `drag`. Host → page: `init` (settings, status, protocol),
 `status` (every 200 ms), `settings`, `apply-result`, `toast`, `dialog`.
 

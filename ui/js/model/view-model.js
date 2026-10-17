@@ -67,8 +67,11 @@ export function deriveView(settings, status, flags) {
   vm.runLabel = text.label;
   vm.runTitle = text.title;
   vm.runCopy = run === "error" ? String(st.error) : text.copy;
+  // The host enforces the license too; an older payload without one is not blocked here.
+  const license = (st.cloud && st.cloud.license) || {};
+  const licenseBlocked = license.active === false;
   vm.startLabel = running ? (paused ? "Bot paused" : "Bot running") : "Start bot";
-  vm.startDisabled = running || applyPending;
+  vm.startDisabled = running || applyPending || licenseBlocked;
   vm.pauseLabel = paused ? "Resume" : "Pause";
   vm.pauseDisabled = !running;
   vm.startNote = !running && st.timingsDirty === true;
@@ -95,6 +98,9 @@ export function deriveView(settings, status, flags) {
   vm.readyResDetail = resReady ? s.res1 + " × " + s.res2 : "Set a valid resolution";
   vm.readyProfileState = profileDirty ? "warn" : "ok";
   vm.readyProfileDetail = profile + (profileDirty ? " · unsaved edits" : " · saved");
+  vm.readyLicenseState = licenseBlocked ? "bad" : "ok";
+  vm.readyLicenseDetail = licenseBlocked ? String(license.summary || "No license") : "Active";
+  vm.readyFixLicense = licenseBlocked;
   vm.readyFixInput = !virtualOn;
   vm.readyFixRes = !resReady;
 
@@ -223,6 +229,9 @@ export function deriveView(settings, status, flags) {
   vm.cloudErrorShown = vm.cloudError.length > 0;
   vm.cloudBadge = cloud.available === false ? "Unavailable" : cloud.busy ? "Syncing" : signedIn ? "Signed in" : "Signed out";
   vm.cloudState = cloud.busy ? "busy" : vm.cloudErrorShown ? "warn" : signedIn ? "ok" : "idle";
+  vm.licenseSummary = String(license.summary || (license.active ? "License active" : "Checking license"));
+  vm.licenseState = license.active === true ? "ok" : "warn";
+  vm.licenseNeedsKey = signedIn && license.active !== true && license.state !== "unchecked";
 
   // Controller binds
   for (const [key, bindKey, captureKey] of [

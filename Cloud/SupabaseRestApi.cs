@@ -13,6 +13,7 @@ namespace HappyBot.Cloud;
 internal sealed class SupabaseRestApi : ISupabaseApi
 {
     private const string ProfilesPath = "/rest/v1/bot_profiles";
+    private const string LicensePath = "/functions/v1/license";
 
     private readonly HttpClient _http;
     private readonly string _url;
@@ -107,6 +108,22 @@ internal sealed class SupabaseRestApi : ISupabaseApi
     {
         using JsonDocument _ = await SendAsync(HttpMethod.Delete, ProfilesPath + "?name=eq." + Uri.EscapeDataString(name),
             accessToken, null, "return=minimal", token).ConfigureAwait(false);
+    }
+
+    public Task<string> CheckLicenseAsync(string accessToken, string deviceId, string deviceName, CancellationToken token) =>
+        LicenseAsync(accessToken, new { action = "check", device_id = deviceId, device_name = deviceName }, token);
+
+    public Task<string> RedeemLicenseAsync(string accessToken, string key, string deviceId, string deviceName,
+        CancellationToken token) =>
+        LicenseAsync(accessToken, new { action = "redeem", key, device_id = deviceId, device_name = deviceName }, token);
+
+    private async Task<string> LicenseAsync(string accessToken, object body, CancellationToken token)
+    {
+        using JsonDocument document = await SendAsync(HttpMethod.Post, LicensePath, accessToken, body, null, token)
+            .ConfigureAwait(false);
+        string licenseToken = ReadString(document.RootElement, "token");
+        if (licenseToken.Length == 0) throw new CloudException("The license service returned no token.");
+        return licenseToken;
     }
 
     private async Task<JsonDocument> SendAsync(HttpMethod method, string path, string accessToken, object body,
