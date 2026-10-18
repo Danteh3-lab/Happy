@@ -22,7 +22,7 @@ internal static class HelpContent
         "- Orange-only dodge/light and optional orange plus red RT parry\n" +
         "- Own controller RT/RB attacks are excluded from orange responses\n" +
         "- Auto block and directional guard\n" +
-        "- Hero-specific evades and reactions\n" +
+        "- Hero-specific evades and reactions (deflect follow-ups: RB light, Orochi RT heavy, Shinobi X)\n" +
         "- Direct DS4 input merged into the ViGEm output\n" +
         "- Configurable reaction delays\n" +
         "- Anchor-following vision overlay\n" +

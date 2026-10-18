@@ -182,8 +182,12 @@ internal sealed class ReactionActionExecutor
             await PreciseDelay.WaitUntilAsync(flashTimestamp, Math.Max(0, delay), token);
             if (!CanCommitAction(command, token)) return false;
             _scheduler.SetCommitted(true);
-            int followUpInput = _host.IsYourChar("Orochi") ? Input.VK_RBUTTON : Input.VK_LBUTTON;
-            string followUpName = followUpInput == Input.VK_RBUTTON ? "RT HEAVY" : "RB LIGHT";
+            // Shinobi replaces the light with X (guard break) to land the deflect follow-up.
+            bool shinobi = _host.IsYourChar("Shinobi");
+            int followUpInput = shinobi ? Input.VK_NUMPAD5
+                : _host.IsYourChar("Orochi") ? Input.VK_RBUTTON : Input.VK_LBUTTON;
+            string followUpLabel = shinobi ? "X" : followUpInput == Input.VK_RBUTTON ? "HEAVY" : "LIGHT";
+            string followUpName = shinobi ? "X" : followUpInput == Input.VK_RBUTTON ? "RT HEAVY" : "RB LIGHT";
             long dodgeTimestamp = PreciseDelay.Now;
             bool dodgeSent = SendDeflect(command.Direction);
             _host.RecordTelemetry("deflect-timing", new
@@ -193,17 +197,21 @@ internal sealed class ReactionActionExecutor
                 configuredDelayMs = delay,
                 flashToDodgeMs = Math.Round(PreciseDelay.ElapsedMs(flashTimestamp, dodgeTimestamp), 1),
                 followUpAfterDodgeMs = DeflectFollowUpDelayMs,
+                followUp = followUpName,
                 dodgeSent
             });
             if (dodgeSent)
                 await PreciseDelay.WaitUntilAsync(dodgeTimestamp, DeflectFollowUpDelayMs, token);
-            if (dodgeSent && _host.Input.MouseClick(followUpInput))
+            bool followUpSent = dodgeSent && (shinobi
+                ? _host.Input.KeyTap(followUpInput)
+                : _host.Input.MouseClick(followUpInput));
+            if (followUpSent)
             {
                 if (followUpInput == Input.VK_LBUTTON)
                     _host.RegisterAutomationLight();
-                else
+                else if (followUpInput == Input.VK_RBUTTON)
                     _host.RegisterAutomationHeavy();
-                _host.SetVisionReaction("DEFLECT + " + (followUpInput == Input.VK_RBUTTON ? "HEAVY" : "LIGHT") + " SENT",
+                _host.SetVisionReaction("DEFLECT + " + followUpLabel + " SENT",
                     "LT hold + directional dodge + " + followUpName, DirectionName(command.Direction), 1300, delay);
             }
             else

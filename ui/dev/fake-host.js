@@ -52,8 +52,10 @@ function behavior() {
     FDetail: fAction === "Mixed parry"
       ? settings.LegitParryChance + "% parry after " + settings.ParryDelay + " ms; otherwise block only."
       : fAction === "Parry" ? "Parry after the flash gate and " + settings.ParryDelay + " ms delay." : "Holding LT keeps the normal guard active.",
-    HeroBehavior: hero === "Orochi" ? "Successful deflects follow up with a heavy instead of a light." : "No hero-specific behavior is selected.",
-    HeroStatus: hero === "Orochi" ? "Applies when Deflect is the active LT action." : "Inactive.",
+    HeroBehavior: hero === "Orochi" ? "Successful deflects follow up with a heavy instead of a light."
+      : hero === "Shinobi" ? "Every deflect (top, left, and right) sends X instead of the RB light follow-up."
+      : "No hero-specific behavior is selected.",
+    HeroStatus: hero === "Orochi" || hero === "Shinobi" ? "Applies when Deflect is the active LT action." : "Inactive.",
     HeroRequirements: "Select the hero, then enable hero response.",
     HeroTimings: "Uses the Deflect delays.",
     Notices: notices,

@@ -47,8 +47,8 @@ internal sealed record ReactionBehaviorSummary(
                 : (wardenTopOverride ? "Parry / top Crushing" : "Parry");
             fDetail = settings.Legit
                     ? wardenTopOverride
-                        ? $"Top attacks replace the parry with an immediate crushing counter (same roll); {DescribeLegitF(settings, heroEnabled, canSendBulwark, hero == "Orochi")}"
-                    : DescribeLegitF(settings, heroEnabled, canSendBulwark, hero == "Orochi")
+                        ? $"Top attacks replace the parry with an immediate crushing counter (same roll); {DescribeLegitF(settings, heroEnabled, canSendBulwark, hero == "Orochi", heroEnabled && hero == "Shinobi")}"
+                    : DescribeLegitF(settings, heroEnabled, canSendBulwark, hero == "Orochi", heroEnabled && hero == "Shinobi")
                 : wardenTopOverride
                     ? $"Top attacks send a crushing counter immediately; side attacks use Parry after the flash gate and {settings.ParryDelay} ms delay."
                     : $"Parry after the flash gate and {settings.ParryDelay} ms delay.";
@@ -61,7 +61,8 @@ internal sealed record ReactionBehaviorSummary(
         else if (settings.Deflect)
         {
             fAction = "Deflect";
-            fDetail = DescribeDeflect(settings, heroEnabled && hero == "Nuxia", heroEnabled && hero == "Orochi");
+            fDetail = DescribeDeflect(settings, heroEnabled && hero == "Nuxia", heroEnabled && hero == "Orochi",
+                heroEnabled && hero == "Shinobi");
         }
         else if (ReactionPolicy.HasHeroAction(settings))
         {
@@ -127,13 +128,14 @@ internal sealed record ReactionBehaviorSummary(
         return "None";
     }
 
-    private static string DescribeLegitF(Settings settings, bool heroEnabled, bool canSendBulwark, bool orochi)
+    private static string DescribeLegitF(Settings settings, bool heroEnabled, bool canSendBulwark, bool orochi, bool shinobi)
     {
         var fallbacks = new List<string>();
         if (settings.Deflect)
             fallbacks.Add($"{settings.DeflectFallbackChance}% deflect first ({settings.Left}/{settings.TopDeflect}/{settings.Right} ms L/T/R)" +
                 (heroEnabled && settings.Ch("Nuxia") ? "; Nuxia top is excluded" : "") +
-                (orochi ? "; Orochi uses RT heavy follow-up" : ""));
+                (orochi ? "; Orochi uses RT heavy follow-up" : "") +
+                (shinobi ? "; Shinobi uses X follow-up" : ""));
 
         bool crushing = settings.Crushing;
         bool bulwark = settings.BulwarkFallback && heroEnabled && settings.Ch("Blackprior") && canSendBulwark;
@@ -149,11 +151,12 @@ internal sealed record ReactionBehaviorSummary(
         return $"{settings.LegitParryChance}% parry after {settings.ParryDelay} ms; failed rolls: {string.Join(", ", fallbacks)}.";
     }
 
-    private static string DescribeDeflect(Settings settings, bool nuxia, bool orochi)
+    private static string DescribeDeflect(Settings settings, bool nuxia, bool orochi, bool shinobi)
     {
         string result = $"Directional dodge after the flash gate: {settings.Left} ms left, {settings.TopDeflect} ms top, {settings.Right} ms right.";
         if (nuxia) result += " Nuxia top deflect is disabled.";
         if (orochi) result += " Orochi uses the RT heavy follow-up.";
+        if (shinobi) result += " Shinobi presses X 300 ms after the dodge instead of the light.";
         return result;
     }
 
@@ -223,7 +226,7 @@ internal sealed record ReactionBehaviorSummary(
         {
             if (!enabled) return "Nuxia has no standalone hero response; its top-deflect rule is disabled.";
             if (!settings.Autoblock) return "Nuxia top-deflect rule inactive: Auto Block is disabled.";
-            if (IsNuxiaDeflectEligible(settings, enabled))
+            if (IsDeflectModifierEligible(settings, enabled))
             {
                 return settings.Parry
                     ? "Nuxia modifier active in the Legit deflect fallback: Parry is primary; top deflect is blocked while side deflects remain available."
@@ -233,6 +236,21 @@ internal sealed record ReactionBehaviorSummary(
                 return "Nuxia top-deflect rule inactive: Parry takes priority.";
             if (settings.Crushing) return "Nuxia top-deflect rule inactive: Crushing counter takes priority.";
             return "Nuxia has no standalone hero response; enable Deflect to activate its top-direction rule.";
+        }
+        if (hero == "Shinobi")
+        {
+            if (!enabled) return "Shinobi has no standalone hero response; its X deflect follow-up is disabled.";
+            if (!settings.Autoblock) return "Shinobi X follow-up inactive: Auto Block is disabled.";
+            if (IsDeflectModifierEligible(settings, enabled))
+            {
+                return settings.Parry
+                    ? "Shinobi modifier active in the Legit deflect fallback: Parry is primary; fallback deflects follow up with X."
+                    : "Shinobi modifier active: every deflect follows up with X instead of the light.";
+            }
+            if (settings.Parry)
+                return "Shinobi X follow-up inactive: Parry takes priority.";
+            if (settings.Crushing) return "Shinobi X follow-up inactive: Crushing counter takes priority.";
+            return "Shinobi has no standalone hero response; enable Deflect to activate its X follow-up.";
         }
         if (!HasKnownHeroBehavior(hero)) return hero + " has no hero-specific response implemented.";
         if (!enabled) return hero + " response is disabled.";
@@ -247,9 +265,9 @@ internal sealed record ReactionBehaviorSummary(
         "Blackprior" or "Warlord" or "Shaman" or "Varangian" or "Orochi" or
         "Nobushi" or "Aramusha" or "Jiangjun";
 
-    private static bool HasKnownHeroBehavior(string hero) => IsStandaloneHero(hero) || hero is "Warden" or "Nuxia" or "Peacekeeper";
+    private static bool HasKnownHeroBehavior(string hero) => IsStandaloneHero(hero) || hero is "Warden" or "Nuxia" or "Shinobi" or "Peacekeeper";
 
-    private static bool IsNuxiaDeflectEligible(Settings settings, bool enabled) =>
+    private static bool IsDeflectModifierEligible(Settings settings, bool enabled) =>
         enabled && settings.Autoblock && settings.Deflect &&
         ((settings.Parry && settings.Legit) || (!settings.Parry && !settings.Crushing));
 
@@ -257,7 +275,7 @@ internal sealed record ReactionBehaviorSummary(
     {
         if (hero == "Peacekeeper") return "TIMING ONLY";
         if (hero == "Warden") return enabled && settings.Autoblock && settings.Parry ? "OVERRIDE ACTIVE" : "INACTIVE";
-        if (hero == "Nuxia") return IsNuxiaDeflectEligible(settings, enabled) ? "MODIFIER ACTIVE" : "INACTIVE";
+        if (hero is "Nuxia" or "Shinobi") return IsDeflectModifierEligible(settings, enabled) ? "MODIFIER ACTIVE" : "INACTIVE";
         return enabled && settings.Autoblock && IsStandaloneHero(hero) && !settings.Parry && !settings.Crushing && !settings.Deflect
             ? "ENABLED"
             : "INACTIVE";
@@ -275,6 +293,7 @@ internal sealed record ReactionBehaviorSummary(
         "Jiangjun" => "Holds stance for 250 ms, then sends RB and RT.",
         "Warden" => "No standalone hero action. With hero response and Parry enabled, top attacks use an immediate crushing counter; sides use Parry.",
         "Nuxia" => "No standalone hero action. With hero response and Deflect enabled, top deflect is blocked; left and right remain available.",
+        "Shinobi" => "No standalone hero action. With hero response and Deflect enabled, every deflect (top, left, and right) sends X instead of the RB light follow-up.",
         "Peacekeeper" => "No standalone hero action. Selecting Peacekeeper forces side deflect delays to 100 ms when timings are applied.",
         "None" => "No hero-specific behavior is selected.",
         _ => "No hero-specific response is implemented for this hero."
@@ -285,6 +304,7 @@ internal sealed record ReactionBehaviorSummary(
         "None" => "Select a hero, then enable standalone hero response.",
         "Warden" => "Enable standalone hero response and Parry. Auto Block and the flash gate are required; Warden has no separate hero action.",
         "Nuxia" => "Enable standalone hero response and Deflect. Auto Block and the flash gate are required; Nuxia has no separate hero action.",
+        "Shinobi" => "Enable standalone hero response and Deflect. Auto Block and the flash gate are required; Shinobi has no separate hero action.",
         "Peacekeeper" => "The standalone toggle is not required for this timing override. Selecting Peacekeeper forces side deflects to 100 ms when timings are applied.",
         _ when IsStandaloneHero(hero) => "Enable standalone hero response, Auto Block, and hold LT. Parry, Crushing, and Deflect must be off for the standalone response.",
         _ => "Selection is saved for compatibility, but this hero has no implemented response."
@@ -296,6 +316,7 @@ internal sealed record ReactionBehaviorSummary(
         "Jiangjun" => "Fixed 250 ms stance hold; timing fields do not change it.",
         "Peacekeeper" => $"When applied, selected Peacekeeper side deflects are fixed at 100 ms, regardless of the toggle; top uses Top deflect ({settings.TopDeflect} ms).",
         "Nuxia" => $"Left {settings.Left} ms and right {settings.Right} ms; top is disabled.",
+        "Shinobi" => $"Deflects use left {settings.Left} ms, top {settings.TopDeflect} ms, and right {settings.Right} ms; X follows the dodge after a fixed 300 ms.",
         "Warden" => "The top crushing response is immediate; Parry delay applies to side parries.",
         "None" => "No hero timing applies.",
         _ when IsStandaloneHero(hero) => "No configurable hero-specific timing applies.",

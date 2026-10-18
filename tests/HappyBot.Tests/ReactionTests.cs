@@ -127,6 +127,48 @@ static partial class Program
             "Peacekeeper should explain its timing-only behavior even when the toggle is off");
     }
 
+    private static void BehaviorSummaryDescribesShinobiDeflectFollowUp()
+    {
+        var shinobi = new Settings { Autoblock = true, YourHero = true, Left = 70, TopDeflect = 85, Right = 75 };
+        shinobi.Chars["Shinobi"] = true;
+        ReactionBehaviorSummary summary = ReactionBehaviorSummary.Create(shinobi, true);
+        Require(summary.Hero == "Shinobi" && summary.FAction == "None" &&
+                summary.HeroMode == "INACTIVE" && summary.HeroStatus.Contains("enable Deflect"),
+            "Shinobi has no standalone action and should ask for Deflect");
+        Require(!summary.Notices.Any(n => n.Contains("no hero-specific response implemented")),
+            "Shinobi should be a known hero, not an unimplemented one");
+        Require(summary.HeroBehavior.Contains("sends X instead of the RB light") &&
+                summary.HeroBehavior.Contains("top, left, and right") &&
+                summary.HeroTimings.Contains("70 ms") && summary.HeroTimings.Contains("85 ms") &&
+                summary.HeroTimings.Contains("75 ms") && summary.HeroTimings.Contains("300 ms"),
+            "Shinobi should describe the X follow-up for every direction and its timings");
+
+        shinobi.Deflect = true;
+        summary = ReactionBehaviorSummary.Create(shinobi, true);
+        Require(summary.FAction == "Deflect" && summary.FDetail.Contains("Shinobi presses X 300 ms after the dodge") &&
+                summary.HeroMode == "MODIFIER ACTIVE" && summary.HeroStatus.Contains("every deflect follows up with X"),
+            "direct Shinobi deflects should be described as the X follow-up");
+
+        shinobi.Parry = true;
+        shinobi.Legit = true;
+        summary = ReactionBehaviorSummary.Create(shinobi, true);
+        Require(summary.FAction == "Mixed parry" && summary.FDetail.Contains("Shinobi uses X follow-up") &&
+                summary.HeroMode == "MODIFIER ACTIVE" && summary.HeroStatus.Contains("Legit deflect fallback"),
+            "Shinobi's X follow-up should apply to the Legit deflect fallback");
+
+        shinobi.Legit = false;
+        summary = ReactionBehaviorSummary.Create(shinobi, true);
+        Require(summary.HeroMode == "INACTIVE" && summary.HeroStatus.Contains("Parry takes priority"),
+            "Shinobi should not mark the modifier active when Parry has no Legit deflect fallback");
+
+        shinobi.Parry = false;
+        shinobi.YourHero = false;
+        summary = ReactionBehaviorSummary.Create(shinobi, true);
+        Require(summary.FAction == "Deflect" && !summary.FDetail.Contains("Shinobi") &&
+                summary.HeroStatus.Contains("X deflect follow-up is disabled"),
+            "Shinobi's X follow-up must disappear when standalone hero response is disabled");
+    }
+
     private static void FlashWithinGuardSendsOnce()
     {
         var coordinator = new ReactionCoordinator();

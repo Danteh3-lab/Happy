@@ -337,6 +337,50 @@ static partial class Program
         scheduler.Dispose();
     }
 
+    private static void ShinobiDeflectSendsXAfterSuccessfulDodge()
+    {
+        long candidateId = 108;
+        foreach (CombatDirection direction in new[] { CombatDirection.Top, CombatDirection.Left, CombatDirection.Right })
+        {
+            var input = new FakeInputGateway();
+            input.HoldHeld = true;
+            var settings = new Settings { Autoblock = true, Deflect = true, YourHero = true, Left = 0, TopDeflect = 0, Right = 0 };
+            settings.Chars["Shinobi"] = true;
+            var host = new FakeAutomationHost(input, settings, candidateId);
+            var scheduler = new ActionScheduler(host.ShutdownToken);
+            var executor = new ReactionActionExecutor(host, scheduler, new FixedRollSource(0));
+            executor.QueueReaction(new ReactionCommand(candidateId, ReactionCommandKind.Deflect, "F", direction));
+
+            Require(SpinWait.SpinUntil(() => host.VisionStates.Contains("DEFLECT + X SENT"), 2000),
+                $"a {direction} Shinobi deflect must send the X follow-up");
+            int dodgeIndex = input.Events.IndexOf("tap:" + Input.VK_SPACE);
+            int xIndex = input.Events.IndexOf("tap:" + Input.VK_NUMPAD5);
+            int xCount = input.Events.Count(eventName => eventName == "tap:" + Input.VK_NUMPAD5);
+            Require(dodgeIndex >= 0 && xIndex > dodgeIndex && xCount == 1 &&
+                    !input.Events.Contains("click:" + Input.VK_LBUTTON) &&
+                    !input.Events.Contains("click:" + Input.VK_RBUTTON),
+                $"a {direction} Shinobi deflect must dodge, then press X once, with no RB light or RT heavy");
+            Require(host.AutomationLightRegistrations == 0 && host.AutomationHeavyRegistrations == 0,
+                "a Shinobi X follow-up is not an attack and must not register orange attack suppression");
+            scheduler.Dispose();
+            candidateId++;
+        }
+
+        // Shinobi picked but the hero response switch is off: the normal light follow-up is sent.
+        var offInput = new FakeInputGateway();
+        offInput.HoldHeld = true;
+        var offSettings = new Settings { Autoblock = true, Deflect = true, YourHero = false, Left = 0 };
+        offSettings.Chars["Shinobi"] = true;
+        var offHost = new FakeAutomationHost(offInput, offSettings, candidateId);
+        var offScheduler = new ActionScheduler(offHost.ShutdownToken);
+        var offExecutor = new ReactionActionExecutor(offHost, offScheduler, new FixedRollSource(0));
+        offExecutor.QueueReaction(new ReactionCommand(candidateId, ReactionCommandKind.Deflect, "F", CombatDirection.Left));
+        Require(SpinWait.SpinUntil(() => offHost.VisionStates.Contains("DEFLECT + LIGHT SENT"), 2000) &&
+                !offInput.Events.Contains("tap:" + Input.VK_NUMPAD5),
+            "Shinobi's X follow-up must not run while the hero response is off");
+        offScheduler.Dispose();
+    }
+
     private static void ShutdownWithoutStartReleasesInputsInBackground()
     {
         // Closing without ever starting automation, with input submission

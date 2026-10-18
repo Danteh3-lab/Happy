@@ -79,6 +79,8 @@ static partial class Program
             ParryConfirmationTrackerRespectsTimingAndScaledThresholds();
             DeflectSendsLightOnlyAfterSuccessfulDodge();
             OrochiDeflectSendsHeavyAfterSuccessfulDodge();
+            ShinobiDeflectSendsXAfterSuccessfulDodge();
+            BehaviorSummaryDescribesShinobiDeflectFollowUp();
             PreciseDelayLandsOnTarget();
             Ds4UsbReportMapsToXboxState();
             Ds4BluetoothReportMapsToXboxState();
