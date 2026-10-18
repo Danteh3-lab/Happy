@@ -138,7 +138,7 @@ static partial class Program
             "vision ROI should be clipped to the supplied screen bounds");
         Require(right.Observation.HasIndicator && right.Observation.Direction == CombatDirection.Right,
             "a red indicator in the right half-plane should classify as right");
-        Require(right.Observation.Indicator == new Point(160, 260) && right.RedProbe.MatchCount == 1,
+        Require(right.Observation.Indicator == new Point(160, 260) && right.RedProbe.MatchCount == 49,
             "vision should preserve screen coordinates and scoped red telemetry");
 
         VisionAnalysisResult left = analyzer.Scan(SyntheticIndicatorFrame(125, 260), request);
@@ -187,7 +187,7 @@ static partial class Program
 
         ScreenFrame sideFlash = SyntheticClusterFrame(400, 500,
             new[] { (120, 260), (121, 260), (120, 261), (121, 261) }, 255, 154, 141);
-        SetPixel(sideFlash, 110, 260, 255, 49, 41);
+        PaintIndicator(sideFlash, 110, 260);
         VisionAnalysisResult result = analyzer.Scan(sideFlash, request);
         Require(result.Observation.LightFlash && result.Observation.FlashClusterMatches >= 4 &&
             result.Observation.Direction == CombatDirection.Left && result.Observation.Indicator.X == 110,
@@ -195,7 +195,7 @@ static partial class Program
 
         ScreenFrame rightSide = SyntheticClusterFrame(400, 500,
             new[] { (150, 260), (151, 260), (150, 261), (151, 261) }, 255, 154, 141);
-        SetPixel(rightSide, 170, 260, 255, 49, 41);
+        PaintIndicator(rightSide, 170, 260);
         VisionAnalysisResult rightResult = analyzer.Scan(rightSide, request);
         Require(rightResult.Observation.Direction == CombatDirection.Right && rightResult.Observation.Indicator.X == 170,
             "a right indicator inside the original ROI should classify correctly");
@@ -220,7 +220,7 @@ static partial class Program
         SetPixel(nearFlash, 120, 260, 255, 153, 141);
         SetPixel(nearFlash, 121, 260, 254, 156, 142);
         SetPixel(nearFlash, 120, 261, 253, 154, 139);
-        SetPixel(nearFlash, 110, 260, 255, 49, 41);
+        PaintIndicator(nearFlash, 110, 260);
         CombatObservation near = analyzer.Scan(nearFlash, request).Observation;
         Require(near.LightFlash && near.StrictFlashPoint == new Point(120, 260),
             "three flash pixels within 2 shades must open the live flash gate without an exact match");
@@ -275,6 +275,128 @@ static partial class Program
         Require(live.Observation.LightFlash && live.Observation.FlashClusterMatches == 0 &&
             live.Observation.IndicatorFlashClusterMatches == 0,
             "normal play must retain strict flash detection without running calibration scans");
+    }
+
+    private static void PixelClustersMatchEightConnectivityAtCellSizeOne()
+    {
+        var pixels = new List<Point> { new(10, 10), new(11, 11), new(13, 11), new(13, 12) };
+        List<PixelCluster> touching = PixelClusters.Group(pixels, 1);
+        Require(touching.Count == 2 && touching.Any(c => c.PixelCount == 2 && c.First == new Point(10, 10)) &&
+                touching.Any(c => c.PixelCount == 2 && c.First == new Point(13, 11)),
+            "cell size 1 must join diagonal neighbours and split a one-pixel gap");
+
+        List<PixelCluster> linked = PixelClusters.Group(pixels, 4);
+        Require(linked.Count == 1 && linked[0].PixelCount == 4 &&
+                linked[0].Bounds == Rectangle.FromLTRB(10, 10, 14, 13) && linked[0].Center == new Point(12, 11),
+            "a gap smaller than the cell size must not split a cluster");
+
+        List<PixelCluster> apart = PixelClusters.Group(new List<Point> { new(0, 0), new(20, 0) }, 8);
+        Require(apart.Count == 2, "a gap of two cells or more must always split clusters");
+    }
+
+    private static void AnchorDetectorReportsRunnerUpMarker()
+    {
+        ScreenFrame frame = SyntheticClusterFrame(100, 100,
+            new[] { (10, 10), (11, 10), (10, 11), (11, 11), (60, 60), (61, 60) }, 5, 131, 65);
+        AnchorMarkerScanResult scan = new AnchorMarkerDetector().Scan(frame, new Rectangle(0, 0, 100, 100),
+            false, default, "NONE");
+        Require(scan.Found && scan.ChosenPixelCount == 4 && scan.RunnerUpPixelCount == 2 && scan.CandidateCount == 2,
+            "the marker scan must report the largest losing component for contested-anchor telemetry");
+    }
+
+    private static void VisionAnalyzerOwnsOneRedIndicator()
+    {
+        var analyzer = new VisionAnalyzer();
+        // Top band 50-150, right of x 250 / left of x 150 below y 150.
+        VisionScanRequest request = new(
+            100, true, new Point(200, 20), 2, new Rectangle(0, 0, 400, 400),
+            0, 50, 0, 150, 250, 150, 150, 150,
+            new Rectangle(0, 0, 400, 400), true, true, false, false, false);
+        ScreenFrame Blank() => SyntheticClusterFrame(400, 400, Array.Empty<(int x, int y)>(), 0, 0, 0);
+
+        ScreenFrame stray = Blank();
+        SetPixel(stray, 100, 250, 255, 49, 41);
+        CombatObservation strayObservation = analyzer.Scan(stray, request).Observation;
+        Require(!strayObservation.HasIndicator && strayObservation.Direction == CombatDirection.None &&
+                !strayObservation.RedAmbiguous,
+            "a single red pixel from an effect must not count as an indicator");
+
+        ScreenFrame cluttered = Blank();
+        SetPixel(cluttered, 200, 60, 255, 49, 41);
+        SetPixel(cluttered, 201, 60, 255, 49, 41);
+        SetPixel(cluttered, 200, 61, 255, 49, 41);
+        PaintIndicator(cluttered, 100, 250);
+        CombatObservation owned = analyzer.Scan(cluttered, request).Observation;
+        Require(owned.HasIndicator && owned.Direction == CombatDirection.Left &&
+                owned.Indicator == new Point(100, 250) && !owned.RedAmbiguous && owned.RedClusters.Count == 1,
+            "stray red above the indicator must not steal the direction from the real indicator");
+
+        ScreenFrame fragmented = Blank();
+        PaintIndicator(fragmented, 100, 250);
+        PaintIndicator(fragmented, 112, 250, 2);
+        CombatObservation joined = analyzer.Scan(fragmented, request).Observation;
+        Require(joined.HasIndicator && !joined.RedAmbiguous && joined.RedClusters.Count == 1 &&
+                joined.RedClusters[0].PixelCount == 74 && joined.Indicator == new Point(104, 250),
+            "indicator pieces a few pixels apart must join into one cluster centered on both");
+
+        ScreenFrame twoAttackers = Blank();
+        PaintIndicator(twoAttackers, 100, 250);
+        PaintIndicator(twoAttackers, 300, 250);
+        CombatObservation ambiguous = analyzer.Scan(twoAttackers, request).Observation;
+        Require(ambiguous.RedAmbiguous && !ambiguous.HasIndicator && ambiguous.Direction == CombatDirection.None &&
+                ambiguous.RedClusters.Count == 2,
+            "red indicators in two directions must stand down instead of picking one");
+        var coordinator = new ReactionCoordinator();
+        Require(coordinator.Tick(ambiguous, ReactionCommandKind.Deflect, "F").Candidate == null,
+            "an ambiguous frame must not arm a candidate");
+
+        ScreenFrame sameSide = Blank();
+        PaintIndicator(sameSide, 300, 250);
+        PaintIndicator(sameSide, 300, 350, 4);
+        CombatObservation agreeing = analyzer.Scan(sameSide, request).Observation;
+        Require(agreeing.HasIndicator && !agreeing.RedAmbiguous && agreeing.Direction == CombatDirection.Right &&
+                agreeing.Indicator == new Point(300, 350),
+            "two clusters in the same direction must keep the larger one");
+
+        ScreenFrame small = Blank();
+        PaintIndicator(small, 100, 250, 1);
+        Require(!analyzer.Scan(small, request).Observation.HasIndicator &&
+                analyzer.Scan(small, request with { ResolutionScale = 0.5 }).Observation.HasIndicator,
+            "the minimum indicator size must shrink with the game resolution");
+    }
+
+    private static void VisionAnalyzerTiesFlashToOwnedIndicator()
+    {
+        var analyzer = new VisionAnalyzer();
+        VisionScanRequest request = new(
+            100, true, new Point(200, 20), 2, new Rectangle(0, 0, 400, 400),
+            0, 50, 0, 150, 250, 150, 150, 150,
+            new Rectangle(0, 0, 400, 400), true, true, false, false, false);
+        (int x, int y)[] farFlash = { (350, 350), (351, 350), (350, 351) };
+        (int x, int y)[] nearFlash = { (115, 240), (116, 240), (115, 241) };
+
+        ScreenFrame far = SyntheticClusterFrame(400, 400, farFlash, 255, 154, 141);
+        PaintIndicator(far, 100, 250);
+        CombatObservation farObservation = analyzer.Scan(far, request).Observation;
+        Require(farObservation.HasIndicator && !farObservation.LightFlash,
+            "a flash far from the owned indicator must not open the gate");
+
+        ScreenFrame near = SyntheticClusterFrame(400, 400, nearFlash, 255, 154, 141);
+        PaintIndicator(near, 100, 250);
+        CombatObservation nearObservation = analyzer.Scan(near, request).Observation;
+        Require(nearObservation.LightFlash && nearObservation.StrictFlashPoint == new Point(115, 240),
+            "a flash on the owned indicator must open the gate");
+
+        // At flash time the red is gone, so the armed candidate's region decides.
+        ScreenFrame flashOnly = SyntheticClusterFrame(400, 400, farFlash, 255, 154, 141);
+        Require(analyzer.Scan(flashOnly, request).Observation.LightFlash,
+            "with no indicator and no armed region the whole ROI still counts");
+        Require(!analyzer.Scan(flashOnly, request with
+                { FlashRegion = VisionAnalyzer.IndicatorRegion(new Point(100, 250), 1.0) }).Observation.LightFlash,
+            "an armed candidate's region must reject a flash elsewhere");
+        Require(analyzer.Scan(flashOnly, request with
+                { FlashRegion = VisionAnalyzer.IndicatorRegion(new Point(340, 340), 1.0) }).Observation.LightFlash,
+            "an armed candidate's region must accept its own flash");
     }
 
     private static void VisionAnalyzerGraceScanAcceptsFlashWithoutMarker()
@@ -563,13 +685,29 @@ static partial class Program
             OriginY = 200,
             Buffer = new byte[40000]
         };
-        int localX = screenX - frame.OriginX;
-        int localY = screenY - frame.OriginY;
-        int offset = localY * frame.Stride + localX * 4;
-        frame.Buffer[offset] = 41;
-        frame.Buffer[offset + 1] = 49;
-        frame.Buffer[offset + 2] = 255;
+        PaintIndicator(frame, screenX, screenY);
         return frame;
+    }
+
+    /// <summary>
+    /// Paints a square of indicator red centered on a screen point. The
+    /// default 7x7 (49 pixels) is above the analyzer's 24-pixel minimum.
+    /// </summary>
+    private static void PaintIndicator(ScreenFrame frame, int screenX, int screenY, int half = 3)
+    {
+        for (int y = screenY - half; y <= screenY + half; y++)
+        {
+            for (int x = screenX - half; x <= screenX + half; x++)
+            {
+                int localX = x - frame.OriginX;
+                int localY = y - frame.OriginY;
+                if (localX < 0 || localY < 0 || localX >= frame.Width || localY >= frame.Height) continue;
+                int offset = localY * frame.Stride + localX * 4;
+                frame.Buffer[offset] = 41;
+                frame.Buffer[offset + 1] = 49;
+                frame.Buffer[offset + 2] = 255;
+            }
+        }
     }
 
     private static ScreenFrame SyntheticClusterFrame(int width, int height, (int x, int y)[] pixels,
