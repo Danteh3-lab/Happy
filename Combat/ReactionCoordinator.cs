@@ -1,5 +1,4 @@
 using System.Drawing;
-using HappyBot.Vision;
 
 namespace HappyBot.Combat;
 
@@ -351,9 +350,7 @@ internal sealed record CombatObservation(
     Rectangle IndicatorFlashClusterBounds = default,
     VisionTrackingSnapshot Tracking = null,
     int RedMatchCount = 0,
-    string ClosestRedRgb = "",
-    bool RedAmbiguous = false,
-    IReadOnlyList<PixelCluster> RedClusters = null);
+    string ClosestRedRgb = "");
 
 internal sealed record ReactionCandidate(
     long Id,

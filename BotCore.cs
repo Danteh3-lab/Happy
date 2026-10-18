@@ -69,8 +69,6 @@ public sealed class BotCore : IAutomationHost, IDisposable
     private OutgoingOrangeGuardResult _outgoingOrangeState = new(false, false, "", false, false, 0, false, false, false);
     private bool _lastSourceHeavyHeld;
     private bool _lastSourceLightHeld;
-    private bool _lastRedAmbiguous;
-    private bool _lastAnchorContested;
     private long _reactionDisplayUntil;
     private int _indicatorX = -1;
     private int _indicatorY = -1;
@@ -444,17 +442,6 @@ public sealed class BotCore : IAutomationHost, IDisposable
         int scanBox = candidateGraceScan ? cached.Box : tracking.Box;
         FlashTemporalBaseline baseline = calibration is { CandidateId: var calibrationId } && candidate is { Id: var candidateId } &&
             calibrationId == candidateId ? calibration.TemporalBaseline : null;
-        double resolutionScale = tracking.B55 > 0 ? tracking.B55 : 1.0;
-        // An armed candidate owns the flash: it must land on that indicator,
-        // shifted by however far the target's anchor has moved since arming.
-        Rectangle? flashRegion = null;
-        if (candidate != null && cached != null && cached.CandidateId == candidate.Id && cached.Indicator.X >= 0)
-        {
-            int shiftX = candidateGraceScan ? 0 : tracking.Anchor.X - cached.Anchor.X;
-            int shiftY = candidateGraceScan ? 0 : tracking.Anchor.Y - cached.Anchor.Y;
-            flashRegion = VisionAnalyzer.IndicatorRegion(
-                new Point(cached.Indicator.X + shiftX, cached.Indicator.Y + shiftY), resolutionScale);
-        }
         VisionAnalysisResult result = _visionAnalyzer.Scan(_frame, new VisionScanRequest(
             now,
             tracking.MarkerFound,
@@ -481,9 +468,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
             candidateGraceScan,
             trackingGraceAgeMs,
             baseline,
-            tracking,
-            resolutionScale,
-            flashRegion));
+            tracking));
 
         return result.Observation with
         {
@@ -532,28 +517,6 @@ public sealed class BotCore : IAutomationHost, IDisposable
 
     private void ProcessCombatObservationCore(CombatObservation observation)
     {
-        if (observation.RedAmbiguous && !_lastRedAmbiguous)
-        {
-            RecordTelemetry("vision-ambiguous-red", new
-            {
-                clusters = observation.RedClusters?.Select(cluster => new
-                {
-                    x = cluster.Center.X,
-                    y = cluster.Center.Y,
-                    pixels = cluster.PixelCount,
-                    bounds = RectangleTelemetry(cluster.Bounds)
-                }),
-                anchor = observation.Anchor,
-                box = observation.Box,
-                roi = RectangleTelemetry(observation.CombatRoi),
-                anchorCandidates = _lastAnchorScan.CandidateCount,
-                anchorRunnerUpPixels = _lastAnchorScan.RunnerUpPixelCount
-            }, true);
-            _telemetry.CaptureRegionSnapshot("ambiguous-red", _frame, observation.CombatRoi);
-            SetVisionReaction("STOOD DOWN", "Red indicators in two directions", "", 900, -1);
-        }
-        _lastRedAmbiguous = observation.RedAmbiguous;
-
         OutgoingOrangeGuardResult outgoingOrange = _outgoingOrangeGuard.Observe(
             observation.TimestampMs,
             observation.MarkerFound,
@@ -848,8 +811,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
             candidate.Direction,
             observation.Box,
             observation.Anchor,
-            observation.TimestampMs,
-            observation.Indicator);
+            observation.TimestampMs);
     }
 
     private void StartFlashCalibration(ReactionCandidate candidate, CombatObservation observation)
@@ -1697,7 +1659,6 @@ public sealed class BotCore : IAutomationHost, IDisposable
                 chosen = markerScan.Found ? new { x = markerScan.X, y = markerScan.Y } : null,
                 chosenKind = markerScan.Kind,
                 chosenPixelCount = markerScan.ChosenPixelCount,
-                runnerUpPixelCount = markerScan.RunnerUpPixelCount,
                 chosenDistance = markerScan.ChosenDistance,
                 chosenScore = markerScan.ChosenScore,
                 selectionReason = markerScan.SelectionReason,
@@ -1706,25 +1667,6 @@ public sealed class BotCore : IAutomationHost, IDisposable
                 oldRoi,
                 newRoi
             });
-            // A second marker at least half the chosen size is most likely
-            // another enemy's HUD competing for the anchor. Telemetry only.
-            bool anchorContested = markerScan.Found &&
-                markerScan.RunnerUpPixelCount >= Math.Max(3, markerScan.ChosenPixelCount / 2);
-            if (anchorContested && !_lastAnchorContested)
-            {
-                RecordTelemetry("anchor-contested", new
-                {
-                    candidateCount = markerScan.CandidateCount,
-                    chosenPixelCount = markerScan.ChosenPixelCount,
-                    runnerUpPixelCount = markerScan.RunnerUpPixelCount,
-                    x = markerScan.X,
-                    y = markerScan.Y,
-                    kind = markerScan.Kind
-                }, true);
-                _telemetry.CaptureRegionSnapshot("anchor-contested", _frame,
-                    Rectangle.Union(Geometry.AnchorScan(), newRoi));
-            }
-            _lastAnchorContested = anchorContested;
             PublishTrackingSnapshotLocked(Environment.TickCount64);
             if (tracking.BecameLost)
             {
@@ -1769,8 +1711,7 @@ public sealed class BotCore : IAutomationHost, IDisposable
         CombatDirection Direction,
         int Box,
         Point Anchor,
-        long CachedAtMs,
-        Point Indicator);
+        long CachedAtMs);
 
     private sealed record FlashCalibrationCandidate(
         long CandidateId,

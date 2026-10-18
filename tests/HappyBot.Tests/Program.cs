@@ -55,10 +55,6 @@ static partial class Program
             VisionAnalyzerToleratesNearFlashColour();
             VisionAnalyzerProfilesStrictFlashAtArmedIndicator();
             VisionAnalyzerGraceScanAcceptsFlashWithoutMarker();
-            PixelClustersMatchEightConnectivityAtCellSizeOne();
-            AnchorDetectorReportsRunnerUpMarker();
-            VisionAnalyzerOwnsOneRedIndicator();
-            VisionAnalyzerTiesFlashToOwnedIndicator();
             AnchorGraceKeepsExistingCandidateFlashOnly();
             AnchorGraceDoesNotRefreshCandidateValidity();
             AnchorMarkerDetectorRanksNearbyCandidates();

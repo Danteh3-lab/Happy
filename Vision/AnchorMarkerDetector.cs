@@ -27,8 +27,7 @@ internal readonly record struct AnchorMarkerScanResult(
     int ChosenDistance,
     int ChosenScore,
     string SelectionReason,
-    long ScanDurationUs,
-    int RunnerUpPixelCount = 0)
+    long ScanDurationUs)
 {
     public static AnchorMarkerScanResult Empty(long scanDurationUs = 0) =>
         new(false, 0, 0, "NONE", 0, 0, -1, 0, "no-color-match", scanDurationUs);
@@ -92,14 +91,10 @@ internal sealed class AnchorMarkerDetector
         // Preserve the legacy Ax/Ay convention: the accepted anchor is the
         // first exact matching pixel from the selected component. The center
         // remains useful for component ranking without shifting every ROI.
-        // The largest component that lost: a second enemy's marker shows up
-        // here as a runner-up close to the chosen size.
-        int runnerUp = candidates.Where(candidate => candidate != selected)
-            .Select(candidate => candidate.PixelCount).DefaultIfEmpty(0).Max();
         return new AnchorMarkerScanResult(true, selected.Anchor.X, selected.Anchor.Y,
             selected.Kind, candidates.Count, selected.PixelCount,
             selected.DistanceFromPrevious, selected.Score, reason,
-            ElapsedMicroseconds(started), runnerUp);
+            ElapsedMicroseconds(started));
     }
 
     private static AnchorMarkerCandidate SelectEstablishedCandidate(
@@ -154,9 +149,44 @@ internal sealed class AnchorMarkerDetector
     private static void AddComponents(List<AnchorMarkerCandidate> output, List<Point> pixels,
         string kind, bool previousFound, Point previousAnchor, string previousKind)
     {
-        foreach (PixelCluster cluster in PixelClusters.Group(pixels, 1))
+        if (pixels.Count == 0) return;
+
+        var remaining = new HashSet<long>(pixels.Count);
+        foreach (Point pixel in pixels) remaining.Add(Key(pixel));
+        var queue = new Queue<Point>();
+        while (remaining.Count > 0)
         {
-            Point firstPixel = cluster.First;
+            long seedKey = remaining.First();
+            var seed = new Point((int)(seedKey >> 32), (int)seedKey);
+            remaining.Remove(seedKey);
+            queue.Enqueue(seed);
+            int count = 0;
+            long sumX = 0;
+            long sumY = 0;
+            Point firstPixel = new(int.MaxValue, int.MaxValue);
+
+            while (queue.Count > 0)
+            {
+                Point current = queue.Dequeue();
+                count++;
+                sumX += current.X;
+                sumY += current.Y;
+                if (current.Y < firstPixel.Y ||
+                    current.Y == firstPixel.Y && current.X < firstPixel.X)
+                    firstPixel = current;
+                for (int dy = -1; dy <= 1; dy++)
+                {
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        if (dx == 0 && dy == 0) continue;
+                        Point neighbor = new(current.X + dx, current.Y + dy);
+                        if (remaining.Remove(Key(neighbor))) queue.Enqueue(neighbor);
+                    }
+                }
+            }
+
+            var center = new Point((int)Math.Round(sumX / (double)count),
+                (int)Math.Round(sumY / (double)count));
             int distance = previousFound
                 ? Math.Max(Math.Abs(firstPixel.X - previousAnchor.X), Math.Abs(firstPixel.Y - previousAnchor.Y))
                 : 0;
@@ -167,11 +197,13 @@ internal sealed class AnchorMarkerDetector
             // proximity dominates after acquisition, while component size
             // wins during initial acquisition.
             int score = previousFound
-                ? -(distance * 1000) + cluster.PixelCount - kindPenalty
-                : cluster.PixelCount * 1000 - kindPenalty;
-            output.Add(new AnchorMarkerCandidate(firstPixel, cluster.Center, kind, cluster.PixelCount, distance, score));
+                ? -(distance * 1000) + count - kindPenalty
+                : count * 1000 - kindPenalty;
+            output.Add(new AnchorMarkerCandidate(firstPixel, center, kind, count, distance, score));
         }
     }
+
+    private static long Key(Point point) => ((long)point.X << 32) | (uint)point.Y;
 
     private static long ElapsedMicroseconds(long started) =>
         (long)(Stopwatch.GetElapsedTime(started).TotalMilliseconds * 1000.0);

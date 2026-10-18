@@ -31,9 +31,7 @@ internal sealed record VisionScanRequest(
     bool MarkerGraceScan = false,
     long TrackingGraceAgeMs = 0,
     FlashTemporalBaseline TemporalBaseline = null,
-    VisionTrackingSnapshot Tracking = null,
-    double ResolutionScale = 1.0,
-    Rectangle? FlashRegion = null);
+    VisionTrackingSnapshot Tracking = null);
 
 /// <summary>Result of a scan, including the diagnostic red-match probe.</summary>
 internal sealed record VisionAnalysisResult(CombatObservation Observation, ColorProbe RedProbe);
@@ -62,31 +60,6 @@ internal sealed class VisionAnalyzer
     /// </summary>
     internal const int LiveFlashTolerance = 2;
     internal const int LiveFlashMinimumPixels = 3;
-
-    /// <summary>
-    /// Red pixels closer than this (at 1080p) belong to one indicator. The
-    /// indicator often renders as two or three nearby pieces; Oct 17 training
-    /// frames join into one 65-570 pixel cluster at this distance.
-    /// </summary>
-    internal const int RedClusterCellPx = 12;
-
-    /// <summary>
-    /// Smallest red cluster (at 1080p) treated as an indicator. Real
-    /// indicators measured 43+ pixels on the frame they armed; stray red from
-    /// effects and the map measured 1-10.
-    /// </summary>
-    internal const int RedClusterMinimumPixels = 24;
-
-    /// <summary>
-    /// Half-size (at 1080p) of the square around the indicator in which the
-    /// flash must land. The flash renders on the indicator itself: on Oct 17,
-    /// 441 of 442 accepted flash pixels fell inside this square.
-    /// </summary>
-    internal const int IndicatorRegionHalfPx = 90;
-
-    private const int MaxPixelsPerSignal = 4096;
-    private readonly List<Point> _redPixels = new(512);
-    private readonly List<Point> _flashPixels = new(256);
 
     public VisionAnalysisResult Scan(ScreenFrame frame, VisionScanRequest request)
     {
@@ -122,10 +95,8 @@ internal sealed class VisionAnalyzer
             : FindFlashCluster(frame, request.TemporalBaseline.ExcludedIndicatorRegion);
         TemporalFlashMetric temporalFlash = CountTemporalFlash(frame, request.TemporalBaseline);
         LiveSignalMetric live = ScanLiveSignals(frame, roi, request.IncludeTelemetryProbe);
-        RedSelection redSelection = candidateGrace ? RedSelection.None : SelectRed(request);
-        Rectangle? flashRegion = request.FlashRegion ??
-            (redSelection.Found ? IndicatorRegion(redSelection.Indicator, request.ResolutionScale) : null);
-        (bool strictFlash, Point strictFlashPoint) = CountStrictFlash(flashRegion);
+        bool strictFlash = live.StrictFlash;
+        Point strictFlashPoint = live.StrictFlashPoint;
         if (candidateGrace)
         {
             VisionScanMode mode = markerGrace ? VisionScanMode.MarkerGrace : VisionScanMode.AnchorGrace;
@@ -142,91 +113,37 @@ internal sealed class VisionAnalyzer
                 new ColorProbe(0, -1, -1, "n/a", -1));
         }
 
+        bool red = live.Red;
+        bool darkRed = live.DarkRed;
+        bool orange = live.Orange;
+        bool orangeFeint = live.OrangeFeint;
+
+        Point indicator = live.Indicator;
+        CombatDirection direction = red
+            ? ClassifyDirection(indicator.X, indicator.Y, request)
+            : CombatDirection.None;
+        ColorProbe probe = live.RedProbe;
+
         return new VisionAnalysisResult(
-            new CombatObservation(request.TimestampMs, true, request.Anchor, request.Box, roi, redSelection.Found,
-                redSelection.Indicator, redSelection.Direction, live.DarkRed, strictFlash, live.Orange, live.OrangeFeint,
+            new CombatObservation(request.TimestampMs, true, request.Anchor, request.Box, roi, red,
+                indicator, direction, darkRed, strictFlash, orange, orangeFeint,
                 request.FHeld, request.InputReady,
                 request.SourceHeavyHeld, request.SourceLightHeld,
                 VisionScanMode.Tracked, configuredRoi, 0, flashCluster.MatchCount,
                 temporalFlash.MatchCount, temporalFlash.LargestCluster, 0, strictFlashPoint,
-                indicatorFlashCluster.MatchCount, indicatorFlashCluster.Bounds) with
-            {
-                Tracking = request.Tracking,
-                RedAmbiguous = redSelection.Ambiguous,
-                RedClusters = redSelection.Clusters
-            }, live.RedProbe);
-    }
-
-    /// <summary>The square around an indicator in which its flash must land.</summary>
-    internal static Rectangle IndicatorRegion(Point indicator, double resolutionScale)
-    {
-        int half = Math.Max(1, (int)Math.Round(IndicatorRegionHalfPx * resolutionScale));
-        return Rectangle.FromLTRB(indicator.X - half, indicator.Y - half,
-            indicator.X + half + 1, indicator.Y + half + 1);
-    }
-
-    /// <summary>
-    /// Groups this frame's red pixels and keeps clusters large enough to be an
-    /// indicator. One directional cluster is the threat; clusters pointing in
-    /// different directions mean two attackers whose owner cannot be told
-    /// apart, so the scan reports no indicator and flags the frame instead.
-    /// </summary>
-    private RedSelection SelectRed(VisionScanRequest request)
-    {
-        if (_redPixels.Count == 0) return RedSelection.None;
-
-        double scale = request.ResolutionScale > 0 ? request.ResolutionScale : 1.0;
-        int cell = Math.Max(2, (int)Math.Round(RedClusterCellPx * scale));
-        int minimum = Math.Max(6, (int)Math.Round(RedClusterMinimumPixels * scale * scale));
-        List<PixelCluster> clusters = PixelClusters.Group(_redPixels, cell)
-            .Where(cluster => cluster.PixelCount >= minimum)
-            .OrderByDescending(cluster => cluster.PixelCount)
-            .ToList();
-        if (clusters.Count == 0) return RedSelection.None;
-
-        var threats = clusters
-            .Select(cluster => (cluster, direction: ClassifyDirection(cluster.Center.X, cluster.Center.Y, request)))
-            .Where(threat => threat.direction != CombatDirection.None)
-            .ToList();
-        if (threats.Select(threat => threat.direction).Distinct().Count() > 1)
-            return new RedSelection(false, new Point(-1, -1), CombatDirection.None, true, clusters);
-
-        // A lone non-directional cluster is still reported as an indicator
-        // with no direction, matching how a stray red pixel used to show.
-        PixelCluster chosen = threats.Count > 0 ? threats[0].cluster : clusters[0];
-        CombatDirection direction = threats.Count > 0 ? threats[0].direction : CombatDirection.None;
-        return new RedSelection(true, chosen.Center, direction, false, clusters);
-    }
-
-    /// <summary>
-    /// The live parry/deflect gate: enough flash pixels inside the owned
-    /// indicator's square, or anywhere in the ROI when no indicator is owned.
-    /// </summary>
-    private (bool StrictFlash, Point StrictFlashPoint) CountStrictFlash(Rectangle? region)
-    {
-        int count = 0;
-        Point firstPoint = new(-1, -1);
-        foreach (Point pixel in _flashPixels)
-        {
-            if (region is Rectangle owned && !owned.Contains(pixel)) continue;
-            if (count == 0) firstPoint = pixel;
-            if (++count >= LiveFlashMinimumPixels) return (true, firstPoint);
-        }
-        return (false, new Point(-1, -1));
+                indicatorFlashCluster.MatchCount, indicatorFlashCluster.Bounds) with { Tracking = request.Tracking }, probe);
     }
 
     /// <summary>
     /// Performs the live color predicates in one row-major pass.  The old
     /// implementation walked the same combat ROI once per color, which made
-    /// capture/vision cost scale with the number of indicators.  Dark red and
-    /// orange record their first match; red and flash pixels are collected so
-    /// they can be grouped and tied to one indicator afterwards.
+    /// capture/vision cost scale with the number of indicators.  Each predicate
+    /// still records its first match, so direction classification and strict
+    /// flash behavior remain unchanged.
     /// </summary>
-    private LiveSignalMetric ScanLiveSignals(ScreenFrame frame, Rectangle screenRegion,
+    private static LiveSignalMetric ScanLiveSignals(ScreenFrame frame, Rectangle screenRegion,
         bool includeProbe)
     {
-        _redPixels.Clear();
-        _flashPixels.Clear();
         if (frame.Width <= 0 || frame.Height <= 0 || frame.Buffer == null)
             return LiveSignalMetric.Empty;
 
@@ -235,7 +152,10 @@ internal sealed class VisionAnalyzer
         if (region.Width <= 0 || region.Height <= 0)
             return LiveSignalMetric.Empty;
 
-        bool darkRed = false, orange = false, orangeFeint = false;
+        bool red = false, darkRed = false, strictFlash = false, orange = false, orangeFeint = false;
+        int flashPixels = 0;
+        Point indicator = new(-1, -1);
+        Point strictFlashPoint = new(-1, -1);
         int probeCount = 0;
         int firstProbeX = -1, firstProbeY = -1;
         int closestDistance = int.MaxValue;
@@ -275,28 +195,39 @@ internal sealed class VisionAnalyzer
                     }
                 }
 
-                if (Math.Abs(pixelR - 255) <= 2 && Math.Abs(pixelG - 49) <= 2 &&
-                    Math.Abs(pixelB - 41) <= 2 && _redPixels.Count < MaxPixelsPerSignal)
-                    _redPixels.Add(new Point(x, y));
+                if (!red && Math.Abs(pixelR - 255) <= 2 && Math.Abs(pixelG - 49) <= 2 &&
+                    Math.Abs(pixelB - 41) <= 2)
+                {
+                    red = true;
+                    indicator = new Point(x, y);
+                }
                 if (!darkRed && pixelR == 255 && pixelG == 41 && pixelB == 34) darkRed = true;
-                if (Math.Abs(pixelR - 255) <= LiveFlashTolerance &&
-                    Math.Abs(pixelG - 154) <= LiveFlashTolerance && Math.Abs(pixelB - 141) <= LiveFlashTolerance &&
-                    _flashPixels.Count < MaxPixelsPerSignal)
-                    _flashPixels.Add(new Point(x, y));
-                // Orange stays a first-pixel match: real unblockables measured
-                // as little as 1-4 exact pixels, so a size gate would miss them.
+                if (!strictFlash && Math.Abs(pixelR - 255) <= LiveFlashTolerance &&
+                    Math.Abs(pixelG - 154) <= LiveFlashTolerance && Math.Abs(pixelB - 141) <= LiveFlashTolerance)
+                {
+                    if (flashPixels == 0) strictFlashPoint = new Point(x, y);
+                    strictFlash = ++flashPixels >= LiveFlashMinimumPixels;
+                }
                 if (!orange && pixelR == 246 && pixelG == 98 && pixelB == 8) orange = true;
                 if (!orangeFeint && Math.Abs(pixelR - 255) <= 3 && Math.Abs(pixelG - 34) <= 3 &&
                     Math.Abs(pixelB - 28) <= 3) orangeFeint = true;
+
+                if (!includeProbe && red && darkRed && strictFlash && orange && orangeFeint)
+                    return new LiveSignalMetric(red, indicator, darkRed, strictFlash,
+                        strictFlashPoint, orange, orangeFeint,
+                        new ColorProbe(probeCount, firstProbeX, firstProbeY,
+                            $"{closestR},{closestG},{closestB}", closestDistance));
             }
         }
 
+        if (!strictFlash) strictFlashPoint = new Point(-1, -1);
         ColorProbe probe = includeProbe
             ? new ColorProbe(probeCount, firstProbeX, firstProbeY,
                 closestDistance == int.MaxValue ? "n/a" : $"{closestR},{closestG},{closestB}",
                 closestDistance == int.MaxValue ? -1 : closestDistance)
             : new ColorProbe(0, -1, -1, "n/a", -1);
-        return new LiveSignalMetric(darkRed, orange, orangeFeint, probe);
+        return new LiveSignalMetric(red, indicator, darkRed, strictFlash,
+            strictFlashPoint, orange, orangeFeint, probe);
     }
 
     private static VisionAnalysisResult Empty(ScreenFrame frame, VisionScanRequest request,
@@ -433,22 +364,17 @@ internal sealed class VisionAnalyzer
     private readonly record struct FlashClusterMetric(int MatchCount, Rectangle Bounds);
 
     private readonly record struct LiveSignalMetric(
+        bool Red,
+        Point Indicator,
         bool DarkRed,
+        bool StrictFlash,
+        Point StrictFlashPoint,
         bool Orange,
         bool OrangeFeint,
         ColorProbe RedProbe)
     {
-        internal static LiveSignalMetric Empty => new(false, false, false, new ColorProbe(0, -1, -1, "n/a", -1));
-    }
-
-    private readonly record struct RedSelection(
-        bool Found,
-        Point Indicator,
-        CombatDirection Direction,
-        bool Ambiguous,
-        IReadOnlyList<PixelCluster> Clusters)
-    {
-        internal static RedSelection None => new(false, new Point(-1, -1), CombatDirection.None, false, null);
+        internal static LiveSignalMetric Empty => new(false, new Point(-1, -1), false, false,
+            new Point(-1, -1), false, false, new ColorProbe(0, -1, -1, "n/a", -1));
     }
 
     private static CombatDirection ClassifyDirection(int x, int y, VisionScanRequest request)
