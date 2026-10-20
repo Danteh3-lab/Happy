@@ -39,6 +39,8 @@ public sealed class VisionOverlayForm : Form, App.IVisionOverlay
         _getSnapshot = getSnapshot;
         _getFeatures = getFeatures;
         FormBorderStyle = FormBorderStyle.None;
+        // Without Manual, Windows picks the first-show position and can drop the overlay on another monitor.
+        StartPosition = FormStartPosition.Manual;
         ShowInTaskbar = false;
         TopMost = true;
         BackColor = OverlayTheme.TransparencyKey;
