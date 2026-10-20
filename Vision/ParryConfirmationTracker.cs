@@ -1,4 +1,5 @@
 using System.Drawing;
+using HappyBot.Cloud;
 using HappyBot.Combat;
 
 namespace HappyBot.Vision;
@@ -38,10 +39,13 @@ internal sealed record ParryConfirmationScan(
 /// </summary>
 internal sealed class ParryConfirmationTracker
 {
-    internal const long ConfirmationStartMs = 150;
-    internal const long ConfirmationEndMs = 650;
-    internal const int MinimumBaseThreshold = 400;
-    internal const int BaselineDelta = 250;
+    // The confirmation window and thresholds are gated behind an active license
+    // grant (see GatedTuning); they are read per-attempt, not per-pixel. The
+    // reference resolution is not a secret, so it stays a constant.
+    internal static long ConfirmationStartMs => GatedTuning.Current.ParryConfirmationStartMs;
+    internal static long ConfirmationEndMs => GatedTuning.Current.ParryConfirmationEndMs;
+    internal static int MinimumBaseThreshold => GatedTuning.Current.ParryMinimumBaseThreshold;
+    internal static int BaselineDelta => GatedTuning.Current.ParryBaselineDelta;
     internal const int ReferenceWidth = 1920;
     internal const int ReferenceHeight = 1200;
 

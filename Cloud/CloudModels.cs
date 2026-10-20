@@ -17,6 +17,13 @@ internal sealed record CloudProfile(string Name, IReadOnlyDictionary<string, str
 /// <summary>Sign-up returns no session while the project requires email confirmation.</summary>
 internal sealed record SignUpResult(CloudSession Session, bool ConfirmationRequired);
 
+/// <summary>
+/// A license-service reply: the signed grant <see cref="Token"/>, plus the gated
+/// detection tuning <see cref="Tuning"/> (a JSON blob) that the service returns
+/// only for an active grant, or null otherwise.
+/// </summary>
+internal sealed record LicenseResult(string Token, string Tuning);
+
 /// <summary>A cloud call failed. <see cref="Unauthorized"/> means the session is no longer valid.</summary>
 internal sealed class CloudException : Exception
 {
@@ -39,11 +46,11 @@ internal interface ISupabaseApi
     Task UpsertProfileAsync(string accessToken, string name, IReadOnlyDictionary<string, string> values, CancellationToken token);
     Task DeleteProfileAsync(string accessToken, string name, CancellationToken token);
 
-    /// <summary>Returns a signed license token for this account on this PC.</summary>
-    Task<string> CheckLicenseAsync(string accessToken, string deviceId, string deviceName, CancellationToken token);
+    /// <summary>Returns the signed grant (and, when active, the gated tuning) for this account on this PC.</summary>
+    Task<LicenseResult> CheckLicenseAsync(string accessToken, string deviceId, string deviceName, CancellationToken token);
 
-    /// <summary>Ties a license key to the account, then returns a token like <see cref="CheckLicenseAsync"/>.</summary>
-    Task<string> RedeemLicenseAsync(string accessToken, string key, string deviceId, string deviceName, CancellationToken token);
+    /// <summary>Ties a license key to the account, then returns a grant like <see cref="CheckLicenseAsync"/>.</summary>
+    Task<LicenseResult> RedeemLicenseAsync(string accessToken, string key, string deviceId, string deviceName, CancellationToken token);
 }
 
 /// <summary>What survives a restart: never the password, only a rotating refresh token.</summary>

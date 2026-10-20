@@ -233,6 +233,16 @@ internal sealed class DeckController : IDisposable
             return;
         }
 
+        // The detection tuning only arrives with an active grant. Without it the
+        // bot would run but see nothing, so block here with a clear message.
+        if (_cloud is { TuningReady: false })
+        {
+            const string message = "DANBOT needs to finish activating. Connect to the internet once while signed in with an active license.";
+            ApplyResult(requestId, false, message);
+            Toast(message, "error");
+            return;
+        }
+
         if (!_input.IsReady)
         {
             const string message = "ViGEm input is unavailable. Reconnect the virtual controller before starting.";

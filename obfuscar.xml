@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Obfuscar configuration for DANBOT. Runs via the pinned local tool:
+    dotnet tool restore
+    dotnet obfuscar.console obfuscar.xml      (run with CWD = the folder that
+                                               holds HappyBot.dll + every one of
+                                               its dependency DLLs)
+
+  Scope: ONLY HappyBot.dll is obfuscated. The .NET runtime, Nefarius.ViGEm.Client
+  and Microsoft.Web.WebView2 are left untouched (no <Module> entry for them), so
+  their public surfaces keep working and only our own IP is transformed.
+
+  What Obfuscar (free) actually does and does NOT do:
+    - Renaming of types/methods/fields/properties/events        -> ENABLED below.
+    - String encryption (HideStrings) hides string LITERALS in  -> ENABLED below.
+      method bodies (the Supabase URL, "/functions/v1/license",
+      PostgREST paths, JSON key literals, etc. become ldstr of
+      an encrypted blob decoded at runtime).
+    - Control-flow obfuscation / anti-tamper: NOT a feature of Obfuscar. If you
+      want that, see the .NET Reactor follow-up in README. Do not expect it here.
+
+  IMPORTANT string-encryption limit: `const string` FIELDS (e.g.
+  Cloud/SupabaseProject.Url) keep their value in assembly metadata (the Constant
+  table), which HideStrings does NOT cover. The value is still encrypted at every
+  USE site (the compiler inlines the const as an ldstr there), but the raw const
+  field remains readable in SupabaseProject. To fully hide those, convert the
+  consts to runtime-computed values or move them server-side (that is step C's
+  job). This is a known Obfuscar limitation, not a misconfiguration.
+
+  Paths are expressed with Obfuscar's own $(Var) expansion so BOTH callers
+  (obfuscate.targets and tools/obfuscate-release.ps1) reuse this one file by
+  running it from a directory that already contains HappyBot.dll and its deps.
+-->
+<Obfuscator>
+  <Var name="InPath" value="." />
+  <Var name="OutPath" value=".\obfuscated" />
+
+  <!-- Rename everything we can; this assembly is a leaf app, nothing external
+       binds to its public API except the entry point (Obfuscar preserves it)
+       and the few reflection/interop/wire types skipped below. -->
+  <Var name="KeepPublicApi" value="false" />
+  <Var name="HidePrivateApi" value="true" />
+
+  <!-- Renaming of each member kind. -->
+  <Var name="RenameProperties" value="true" />
+  <Var name="RenameEvents" value="true" />
+  <Var name="RenameFields" value="true" />
+
+  <!-- String encryption: the main IP/secret-hiding win here. -->
+  <Var name="HideStrings" value="true" />
+
+  <!-- Keep debug-friendliness off; strip extra metadata where safe. -->
+  <Var name="OptimizeMethods" value="true" />
+  <Var name="SuppressIldasm" value="true" />
+  <Var name="ReuseNames" value="true" />
+
+  <!-- Resolve HappyBot.dll's references from the same working directory. The
+       callers stage all dependency assemblies next to HappyBot.dll first. -->
+  <AssemblySearchPath path="$(InPath)" />
+
+  <Module file="$(InPath)\HappyBot.dll">
+
+    <!--
+      SKIP-LIST. Each rule keeps BOTH the type name and all member names
+      (skipProperties/skipMethods/skipFields/skipEvents = true). String
+      encryption still applies inside these types regardless of these skips.
+
+      Renaming any of these would break at RUNTIME, not at build time, so they
+      are skipped deliberately. Justifications are inline.
+    -->
+
+    <!-- (1) WebView2 wire DTOs. Serialized with System.Text.Json in
+         App/Protocol/UiMessages.cs via UiJson.Serialize(). The outer records
+         carry [JsonPropertyName] (attribute-stable), but inbound parsing
+         (UiCommands.cs) and the page contract depend on this whole surface, so
+         the entire namespace is pinned for safety. -->
+    <SkipType name="HappyBot\.App\.Protocol\..*" skipProperties="true" skipMethods="true" skipFields="true" skipEvents="true" />
+
+    <!-- (2) Cloud layer. Reasons, all runtime-fatal if renamed:
+         - Cloud/CloudModels.cs StoredCloudLogin is round-tripped by
+           JsonSerializer.Deserialize<StoredCloudLogin>() (DpapiCloudSessionStore.cs);
+           STJ binds JSON keys to the record's PROPERTY/CTOR-PARAM names.
+         - Cloud/SupabaseRestApi.cs builds request bodies from ANONYMOUS types
+           (new { email, password }, new { action="check", device_id=... }).
+           STJ emits those property names verbatim; the Supabase Auth/PostgREST/
+           edge-function APIs require exact keys (email, password, refresh_token,
+           action, device_id, device_name, key, name, settings).
+         - Cloud/DpapiFile.cs has crypt32/kernel32 P/Invoke (entry point = method
+           name when no explicit EntryPoint is set).
+         - LicenseToken/LicenseGrant and SupabaseProject consts live here too.
+         - Step C adds Cloud/GatedTuning.cs here; pinning the namespace keeps it
+           safe without cross-session coordination. -->
+    <SkipType name="HappyBot\.Cloud\..*" skipProperties="true" skipMethods="true" skipFields="true" skipEvents="true" />
+
+    <!-- (3) WinForms Form subclasses. Designer/runtime instantiate these and
+         wire control state; MainForm also has explicit interface implementations
+         (IUiSink/IUiDispatcher) and user32 P/Invoke. -->
+    <SkipType name="HappyBot\.MainForm" skipProperties="true" skipMethods="true" skipFields="true" skipEvents="true" />
+    <SkipType name="HappyBot\.VisionOverlayForm" skipProperties="true" skipMethods="true" skipFields="true" skipEvents="true" />
+    <SkipType name="HappyBot\.Update\.UpdateProgressForm" skipProperties="true" skipMethods="true" skipFields="true" skipEvents="true" />
+
+    <!-- (4) Entry point + P/Invoke. Program.Main is [STAThread] and has
+         user32!SetProcessDpiAwarenessContext; Native has user32/xinput1_4 with
+         marshalled structs; Ds4HidControllerSource has hid.dll/setupapi.dll;
+         ProfileStore has kernel32!GetPrivateProfileString. A [DllImport] with no
+         explicit EntryPoint uses the managed method name, so renaming yields
+         EntryPointNotFoundException at runtime. -->
+    <SkipType name="HappyBot\.Program" skipProperties="true" skipMethods="true" skipFields="true" skipEvents="true" />
+    <SkipType name="HappyBot\.Native" skipProperties="true" skipMethods="true" skipFields="true" skipEvents="true" />
+    <SkipType name="HappyBot\.Ds4HidControllerSource" skipProperties="true" skipMethods="true" skipFields="true" skipEvents="true" />
+    <SkipType name="HappyBot\.ProfileStore" skipProperties="true" skipMethods="true" skipFields="true" skipEvents="true" />
+    <SkipType name="HappyBot\.Config" skipProperties="true" skipMethods="true" skipFields="true" skipEvents="true" />
+
+    <!-- (5) Settings data holder + INI/UI-JSON key mapping. Not secret sauce;
+         maps string-literal keys to members. Skipped conservatively because a
+         silent round-trip break here would corrupt every saved profile. -->
+    <SkipType name="HappyBot\.Settings" skipProperties="true" skipMethods="true" skipFields="true" skipEvents="true" />
+    <SkipType name="HappyBot\.SettingsCodec" skipProperties="true" skipMethods="true" skipFields="true" skipEvents="true" />
+
+    <!-- (6) Serialized nested DTOs that have NO [JsonPropertyName] and are emitted
+         by their C# member names (the page reads these PascalCase keys verbatim;
+         see the UiMessages.cs header note). Renaming changes the JSON keys. -->
+    <SkipType name="HappyBot\.Combat\.ReactionBehaviorSummary" skipProperties="true" skipMethods="true" skipFields="true" skipEvents="true" />
+    <SkipType name="HappyBot\.InputBridgeSnapshot" skipProperties="true" skipMethods="true" skipFields="true" skipEvents="true" />
+
+    <!-- (7) Compiler-generated anonymous types. Used as JSON request bodies in
+         SupabaseRestApi; their property names ARE the wire keys. Kept because
+         Obfuscar does not special-case them. (UNCERTAIN CALL - see notes: if a
+         future dnSpy check shows no anonymous types survive renaming anyway,
+         this rule is harmless; if they DO get renamed without it, cloud calls
+         would 400 at runtime.) -->
+    <SkipType name=".*AnonymousType.*" skipProperties="true" skipMethods="true" skipFields="true" skipEvents="true" />
+
+  </Module>
+</Obfuscator>
