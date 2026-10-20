@@ -252,6 +252,16 @@ kbd {
   -webkit-mask-image: radial-gradient(ellipse 85% 80% at 50% 45%, #000 35%, transparent 90%);
   mask-image: radial-gradient(ellipse 85% 80% at 50% 45%, #000 35%, transparent 90%);
 }
+/* Hero swaps the CSS grid for a canvas that reacts to the cursor (site.js). */
+.art[data-dots="canvas"]::before { display: none; }
+.dot-field {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  -webkit-mask-image: radial-gradient(ellipse 85% 80% at 50% 45%, #000 35%, transparent 90%);
+  mask-image: radial-gradient(ellipse 85% 80% at 50% 45%, #000 35%, transparent 90%);
+}
 .art::after {
   content: "";
   position: absolute;
@@ -404,6 +414,22 @@ kbd {
   mask-image: linear-gradient(180deg, #000, transparent 85%);
 }
 .module-art > * { position: relative; }
+/* real in-game captures: photo fills the art, chips sit along the bottom */
+.module-art.has-shot { align-content: end; padding-bottom: var(--sp-4); }
+.module-art.has-shot::before {
+  z-index: 1;
+  background: linear-gradient(180deg, rgba(8, 8, 12, 0.35), transparent 35%, rgba(8, 8, 12, 0.85));
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+.module-art .art-shot {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.module-art.has-shot > :not(.art-shot) { z-index: 2; }
 .art-green { --art-glow: rgba(34, 197, 94, 0.16); }
 .art-red { --art-glow: rgba(239, 68, 68, 0.2); }
 .art-orange { --art-glow: rgba(255, 155, 62, 0.2); }

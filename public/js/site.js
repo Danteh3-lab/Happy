@@ -212,6 +212,85 @@ function initAurora() {
   for (const band of bands) observer.observe(band);
 }
 
+/* ---------------------------------------------------------------- hero dots */
+// Redraws the hero's dot grid on a canvas so dots near the cursor swell, warm
+// to gold and lean away from it. Touch screens and reduced motion keep the
+// static CSS grid. Frames only run while dots are still moving.
+const DOT_GAP = 32;
+const DOT_RADIUS = 1.2;
+const DOT_REACH = 150;
+const DOT_PUSH = 9;
+const DOT_GOLD = [251, 191, 36];
+
+function initDotField() {
+  const art = document.querySelector(".hero .art");
+  const finePointer = window.matchMedia("(hover: hover) and (pointer: fine)");
+  if (!art || reduceMotion.matches || !finePointer.matches) return;
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  canvas.className = "dot-field";
+  art.append(canvas);
+  art.dataset.dots = "canvas";
+
+  const pointer = { x: -1e4, y: -1e4, strength: 0, target: 0 };
+  let width = 0;
+  let height = 0;
+  let dots = [];
+  let frame = 0;
+
+  const draw = () => {
+    frame = 0;
+    pointer.strength += (pointer.target - pointer.strength) * 0.12;
+    let moving = Math.abs(pointer.target - pointer.strength) > 0.005;
+    ctx.clearRect(0, 0, width, height);
+    for (const dot of dots) {
+      const dx = dot.x - pointer.x;
+      const dy = dot.y - pointer.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const k = dist < DOT_REACH ? (1 - dist / DOT_REACH) ** 2 * pointer.strength : 0;
+      dot.ox += ((dx / dist) * k * DOT_PUSH - dot.ox) * 0.18;
+      dot.oy += ((dy / dist) * k * DOT_PUSH - dot.oy) * 0.18;
+      if (Math.abs(dot.ox) > 0.05 || Math.abs(dot.oy) > 0.05) moving = true;
+      const [r, g, b] = DOT_GOLD.map((c) => Math.round(255 + (c - 255) * k));
+      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${0.3 + k * 0.6})`;
+      ctx.beginPath();
+      ctx.arc(dot.x + dot.ox, dot.y + dot.oy, DOT_RADIUS + k * 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (moving) request();
+  };
+  const request = () => { if (!frame) frame = requestAnimationFrame(draw); };
+
+  // Same layout as the CSS grid: 32px tiles centred on the band.
+  const resize = () => {
+    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    width = art.clientWidth;
+    height = art.clientHeight;
+    canvas.width = Math.round(width * ratio);
+    canvas.height = Math.round(height * ratio);
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    dots = [];
+    for (let y = (height / 2) % DOT_GAP; y < height; y += DOT_GAP) {
+      for (let x = (width / 2) % DOT_GAP; x < width; x += DOT_GAP) dots.push({ x, y, ox: 0, oy: 0 });
+    }
+    request();
+  };
+
+  const hero = art.parentElement;
+  hero.addEventListener("pointermove", (event) => {
+    const rect = art.getBoundingClientRect();
+    pointer.x = event.clientX - rect.left;
+    pointer.y = event.clientY - rect.top;
+    pointer.target = 1;
+    request();
+  });
+  hero.addEventListener("pointerleave", () => { pointer.target = 0; request(); });
+  if ("ResizeObserver" in window) new ResizeObserver(resize).observe(art);
+  else window.addEventListener("resize", resize);
+  resize();
+}
+
 initHeader();
 initMenu();
 initSectionDot();
@@ -219,3 +298,4 @@ initBehaviorDemo();
 initStageCycles();
 initCounters();
 initAurora();
+initDotField();
