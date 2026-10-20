@@ -61,9 +61,10 @@ if (!upload) {
 }
 
 // The exe goes up first, so the manifest never points at a missing file.
+// npx.cmd needs the shell, which splits unquoted arguments on spaces ("text/plain; charset=utf-8").
 const put = (object, file, contentType) => {
   const result = spawnSync("npx.cmd", ["--yes", "wrangler@4.151.2", "r2", "object", "put", `${BUCKET}/${object}`,
-    "--file", file, "--content-type", contentType, "--remote"], { stdio: "inherit", shell: true });
+    "--file", `"${file}"`, "--content-type", `"${contentType}"`, "--remote"], { stdio: "inherit", shell: true });
   if (result.status !== 0) fail(`Uploading ${object} failed.`);
 };
 put(`releases/DANBOT-${version}.exe`, exePath, "application/vnd.microsoft.portable-executable");
