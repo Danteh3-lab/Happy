@@ -44,7 +44,11 @@ downloads it, checks its size and SHA-256, swaps it in at the same path (so the
 HidHide whitelist keeps matching) and restarts. Offline or on any error it
 simply starts the current version. Dev builds (`HappyBot.exe`) never update.
 
-To release:
+To release in one step, commit your changes and run
+`node tools/ship.mjs` (or `minor` / `major`; `--dry-run` to preview). It does
+the steps below and commits the version bump. A plain build never releases.
+
+To release by hand:
 
 1. Bump `Version` in `HappyBot.csproj` and `BuildInfo.cs` (they must match).
 2. `dotnet publish HappyBot.csproj -p:PublishProfile=SingleExe`
