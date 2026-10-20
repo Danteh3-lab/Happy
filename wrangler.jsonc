@@ -1,0 +1,9 @@
+{
+  // DANBOT website: a static-assets-only Worker (no Worker script).
+  "name": "danbot-site",
+  "compatibility_date": "2026-10-13",
+  "assets": {
+    "directory": "./public",
+    "not_found_handling": "404-page"
+  }
+}

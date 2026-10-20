@@ -1,0 +1,8 @@
+{
+  "name": "danbot-site",
+  "private": true,
+  "scripts": {
+    "dev": "npx wrangler@4.151.2 dev",
+    "deploy": "npx wrangler@4.151.2 deploy"
+  }
+}
