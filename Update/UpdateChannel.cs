@@ -11,5 +11,5 @@ internal static class UpdateChannel
     /// the release PC (see tools/release-key.mjs); never put it in the repo.
     /// </summary>
     public const string PublicKey =
-        "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAELwr7r0vkyIyse7sHZZBr2ukgFODc0QJ7XfYsf/oEII0YHTdkLjz1nre2kiT1fj4DlpVtjSogsww72hBcFwmPqg==";
+        "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEoNjyYTB2vfvxvlHakDkrKxTvqm7ndOrpyg3OF+u3lMe5m2+T85PWQYD40r9rv+H+ja/tn0kQc+dWiEGCqKlkVQ==";
 }
