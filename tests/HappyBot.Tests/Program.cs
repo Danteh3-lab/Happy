@@ -118,6 +118,8 @@ static partial class Program
             CloudCoordinatorSignInSyncsAndRecovers();
             DeckControllerUsesCloudForProfiles();
             LicenseTokenVerifiesSignatureDeviceAndTime();
+            UpdateManifestVerifiesSignatureAndFields();
+            UpdateManifestOnlyOffersNewerVersions();
             SupabaseRestApiCallsLicenseFunction();
             CloudCoordinatorChecksAndRedeemsLicense();
             DeckControllerRequiresLicenseToStart();

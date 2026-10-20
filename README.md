@@ -36,6 +36,25 @@ it still needs the ViGEmBus driver and the WebView2 runtime (built into
 Windows 10/11). Profiles, settings, telemetry and WebView2 data live in
 `%LOCALAPPDATA%\DANBOT`, so the exe can be moved or replaced freely.
 
+### Releases and auto-update
+
+`DANBOT.exe` updates itself at startup, before the deck opens: it fetches a
+signed manifest (`Update/UpdateChannel.cs`), and when the release is newer it
+downloads it, checks its size and SHA-256, swaps it in at the same path (so the
+HidHide whitelist keeps matching) and restarts. Offline or on any error it
+simply starts the current version. Dev builds (`HappyBot.exe`) never update.
+
+To release:
+
+1. Bump `Version` in `HappyBot.csproj` and `BuildInfo.cs` (they must match).
+2. `dotnet publish HappyBot.csproj -p:PublishProfile=SingleExe`
+3. `node tools/release.mjs --upload` signs `publish\DANBOT.exe` and uploads it
+   and `latest.txt` to the `danbot-downloads` R2 bucket (needs `wrangler login`).
+
+Manifests are signed with `%USERPROFILE%\.danbot\release-key.pem`, created by
+`tools/release-key.mjs`. Keep a backup and never commit it: without it,
+installed copies can no longer be updated automatically.
+
 For development, `dotnet build HappyBot.csproj` still produces the regular
 `bin\<Configuration>\net10.0-windows\HappyBot.exe`.
 

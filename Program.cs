@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using HappyBot.Update;
 
 namespace HappyBot;
 
@@ -10,14 +11,18 @@ internal static class Program
     private static readonly IntPtr DpiAwarenessContextPerMonitorV2 = new(-4);
 
     [STAThread]
-    private static void Main()
+    private static void Main(string[] args)
     {
         SetProcessDpiAwarenessContext(DpiAwarenessContextPerMonitorV2);
+        ApplicationConfiguration.Initialize();
+
+        // Before the virtual controller exists: a newer DANBOT may take over from here.
+        if (AutoUpdater.UpdateAndRelaunch(args)) return;
+
         try
         {
             if (string.IsNullOrEmpty(Config.Read("HoldButton"))) Config.Write("HoldButton", "LT");
             ViGEmInput.Init();
-            ApplicationConfiguration.Initialize();
             Application.Run(new MainForm());
         }
         catch (Exception ex)
