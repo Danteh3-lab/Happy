@@ -1,9 +1,16 @@
 {
-  // DANBOT website: a static-assets-only Worker (no Worker script).
+  // DANBOT website: static assets, plus a small Worker for /download
+  // (releases in the danbot-downloads R2 bucket; DANBOT.exe is over the 25 MiB asset limit).
   "name": "danbot-site",
   "compatibility_date": "2026-10-13",
+  "main": "./src/index.js",
   "assets": {
     "directory": "./public",
-    "not_found_handling": "404-page"
-  }
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/download", "/download/*"]
+  },
+  "r2_buckets": [
+    { "binding": "DOWNLOADS", "bucket_name": "danbot-downloads" }
+  ]
 }

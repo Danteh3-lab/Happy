@@ -55,6 +55,7 @@
     <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="1.5"/><path d="M6 10h.01M9 10h.01M12 10h.01M15 10h.01M18 10h.01M7.5 14h9"/></symbol>
     <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/></symbol>
     <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10.5l5 5 5-5"/><path d="M5 20h14"/></symbol>
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4.5v5h-5"/></symbol>
   </svg>
 
@@ -528,7 +529,7 @@
           <li class="card lift step-card">
             <span class="step-num">03</span>
             <h3>Start DANBOT</h3>
-            <p>Close DS4Windows and any other virtual-pad tool. Open DANBOT.exe, sign in and redeem your key.</p>
+            <p>Close DS4Windows and any other virtual-pad tool. <a class="text-link" href="/download">Download DANBOT.exe</a>, open it, sign in and redeem your key. It updates itself from then on.</p>
           </li>
           <li class="card lift step-card">
             <span class="step-num">04</span>
@@ -601,7 +602,8 @@
             </dl>
             <div class="access-actions">
               <a class="btn btn-primary btn-lg" id="access-link" href="#access">Get a license key<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
-              <p class="access-note">New accounts confirm their email before the first sign-in.</p>
+              <a class="btn btn-ghost btn-lg" href="/download"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>Download for Windows</a>
+              <p class="access-note">DANBOT.exe updates itself at startup. New accounts confirm their email before the first sign-in.</p>
             </div>
           </div>
 
@@ -703,6 +705,7 @@
         <nav class="footer-col" aria-label="Help">
           <h3>Help</h3>
           <ul>
+            <li><a href="/download">Download</a></li>
             <li><a href="#setup">Setup</a></li>
             <li><a href="#requirements">Requirements</a></li>
             <li><a href="#access">License</a></li>

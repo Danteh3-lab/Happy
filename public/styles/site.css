@@ -1052,6 +1052,8 @@ input:checked ~ .switch::after { background: var(--accent); box-shadow: 0 0 10px
 .step-card h3 { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
 .step-card p { color: var(--text-2); font-size: var(--fs-15); line-height: 1.6; }
 .step-card p b { color: var(--text-1); font-weight: 600; }
+.text-link { color: var(--accent); font-weight: 600; text-decoration: underline; text-decoration-color: var(--accent-line); text-underline-offset: 3px; }
+.text-link:hover { text-decoration-color: var(--accent); }
 
 .check-list { display: grid; gap: var(--sp-2); }
 .check-list li { position: relative; padding-left: 26px; color: var(--text-2); font-size: var(--fs-15); line-height: 1.55; }
