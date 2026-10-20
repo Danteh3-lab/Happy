@@ -148,8 +148,10 @@ kbd {
   background: rgba(11, 11, 16, 0.78);
   border: 1px solid var(--line-2);
   border-radius: var(--r-card);
-  -webkit-backdrop-filter: blur(20px) saturate(1.4);
-  backdrop-filter: blur(20px) saturate(1.4);
+  /* A smaller blur radius keeps scrolling smooth on integrated GPUs; the
+     78% backdrop does most of the work anyway. */
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  backdrop-filter: blur(12px) saturate(1.4);
   pointer-events: auto;
 }
 /* Animate only after site.js has set the first state, so the bar never animates on load. */
@@ -258,11 +260,15 @@ kbd {
   left: -15%;
   height: 100%;
   background:
-    radial-gradient(ellipse 34% 46% at 30% 50%, rgba(251, 191, 36, 0.11), transparent 70%),
-    radial-gradient(ellipse 30% 42% at 72% 45%, rgba(74, 218, 230, 0.07), transparent 70%);
-  filter: blur(40px);
+    radial-gradient(ellipse 34% 46% at 30% 50%, rgba(251, 191, 36, 0.11), rgba(251, 191, 36, 0.04) 45%, transparent 75%),
+    radial-gradient(ellipse 30% 42% at 72% 45%, rgba(74, 218, 230, 0.07), rgba(74, 218, 230, 0.025) 45%, transparent 75%);
+  /* No blur filter: the gradients are already soft, and a blurred layer this
+     size is re-filtered on every animation frame. */
   animation: aurora-drift 26s ease-in-out infinite alternate;
+  will-change: transform;
 }
+/* site.js pauses the drift while the band is off screen. */
+.art[data-offscreen]::after { animation-play-state: paused; will-change: auto; }
 
 /* ================================================================ hero */
 .hero {
@@ -690,7 +696,18 @@ kbd {
   font-weight: 600;
 }
 .bind-list kbd { color: var(--text-1); }
-.bind-list .capturing { color: var(--accent); border-color: var(--accent-line); animation: pulse 1.6s ease-in-out infinite; }
+.bind-list .capturing { position: relative; color: var(--accent); border-color: var(--accent-line); }
+/* The ring fades by opacity rather than animating box-shadow, which would repaint every frame. */
+.bind-list .capturing::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.12);
+  opacity: 0;
+  animation: pulse 1.6s ease-in-out infinite;
+  pointer-events: none;
+}
 
 .timing-demo { display: grid; gap: 6px; width: min(220px, 100%); text-align: left; }
 .timing-demo small { color: var(--text-3); font-size: var(--fs-12); }
@@ -1207,8 +1224,8 @@ input:checked ~ .switch::after { background: var(--accent); box-shadow: 0 0 10px
 @keyframes spin { to { transform: rotate(360deg); } }
 
 @keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
-  50% { box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.12); }
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
 }
 
 @keyframes aurora-drift {

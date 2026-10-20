@@ -11,7 +11,11 @@ const canObserve = "IntersectionObserver" in window;
 function initHeader() {
   const header = document.querySelector(".site-header");
   if (!header) return;
-  const update = () => { header.dataset.top = String(window.scrollY < 16); };
+  // Writes only when the state flips, so scrolling doesn't restyle the header every frame.
+  const update = () => {
+    const top = String(window.scrollY < 16);
+    if (header.dataset.top !== top) header.dataset.top = top;
+  };
   update();
   requestAnimationFrame(() => { header.dataset.ready = ""; });
   window.addEventListener("scroll", update, { passive: true });
@@ -196,9 +200,22 @@ function initCounters() {
   for (const el of counters) observer.observe(el);
 }
 
+/* ---------------------------------------------------------------- aurora */
+// Pauses the background drift while its band is off screen, so the hero and
+// closing band don't keep compositing frames nobody sees.
+function initAurora() {
+  const bands = document.querySelectorAll(".art");
+  if (!bands.length || !canObserve) return;
+  const observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) entry.target.toggleAttribute("data-offscreen", !entry.isIntersecting);
+  });
+  for (const band of bands) observer.observe(band);
+}
+
 initHeader();
 initMenu();
 initSectionDot();
 initBehaviorDemo();
 initStageCycles();
 initCounters();
+initAurora();
