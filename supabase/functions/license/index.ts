@@ -62,20 +62,15 @@ function keys(): Promise<SigningKeys> {
 }
 
 // The gated detection tuning (schema version 1). Served only with an active
-// grant, so a client that never had one cannot obtain the values. Cached per
-// instance; best-effort, so a tuning hiccup never voids a valid license token.
-let tuningBlob: Promise<unknown> | null = null;
-async function loadTuning(): Promise<unknown> {
-  tuningBlob ??= admin.from("app_tuning").select("blob").eq("id", 1).single().then(
-    ({ data, error }) => {
-      if (error) {
-        tuningBlob = null;
-        throw error;
-      }
-      return data?.blob ?? null;
-    },
-  );
-  return tuningBlob;
+// grant, so a client that never had one cannot obtain the values. The blob is
+// watermarked per license by the license_tuning() function: each account gets a
+// uniquely perturbed (but functionally identical) set, so a leaked hardcoded
+// value set can be traced back with trace_tuning(). Not cached, since the blob
+// differs per license; best-effort, so a tuning hiccup never voids a token.
+async function loadTuning(licenseId: string | null): Promise<unknown> {
+  const { data, error } = await admin.rpc("license_tuning", { p_license_id: licenseId });
+  if (error) throw error;
+  return data ?? null;
 }
 
 function json(body: unknown, status = 200): Response {
@@ -136,7 +131,7 @@ Deno.serve(async (req) => {
     let tuning: unknown = undefined;
     if (result.status === "active") {
       try {
-        tuning = await loadTuning();
+        tuning = await loadTuning(result.license_id ?? null);
       } catch (e) {
         console.error("tuning load failed", e);
       }
