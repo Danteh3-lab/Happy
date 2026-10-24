@@ -2,7 +2,7 @@ namespace HappyBot;
 
 internal static class BuildInfo
 {
-    public const string Version = "2.0.2";
+    public const string Version = "2.0.3";
 
     public static string Configuration
     {
