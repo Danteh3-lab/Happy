@@ -61,6 +61,23 @@ function keys(): Promise<SigningKeys> {
   return signingKeys;
 }
 
+// The gated detection tuning (schema version 1). Served only with an active
+// grant, so a client that never had one cannot obtain the values. Cached per
+// instance; best-effort, so a tuning hiccup never voids a valid license token.
+let tuningBlob: Promise<unknown> | null = null;
+async function loadTuning(): Promise<unknown> {
+  tuningBlob ??= admin.from("app_tuning").select("blob").eq("id", 1).single().then(
+    ({ data, error }) => {
+      if (error) {
+        tuningBlob = null;
+        throw error;
+      }
+      return data?.blob ?? null;
+    },
+  );
+  return tuningBlob;
+}
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
@@ -113,7 +130,18 @@ Deno.serve(async (req) => {
       devices_used: result.devices_used ?? 0,
       hint: result.key_hint ?? "",
     });
-    return json({ token, status: result.status });
+
+    // Only an active grant receives the gated tuning; failure to load it must
+    // not void the license, so the client keeps the token and retries later.
+    let tuning: unknown = undefined;
+    if (result.status === "active") {
+      try {
+        tuning = await loadTuning();
+      } catch (e) {
+        console.error("tuning load failed", e);
+      }
+    }
+    return json(tuning == null ? { token, status: result.status } : { token, status: result.status, tuning });
   } catch (e) {
     console.error(e);
     return json({ error: "The license service failed. Try again in a minute." }, 500);

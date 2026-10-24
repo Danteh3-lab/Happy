@@ -30,4 +30,8 @@
     <Compile Remove="tests\**\*.cs" />
   </ItemGroup>
 
+  <!-- Release + -p:Obfuscate=true runs Obfuscar on the compiled assembly before
+       single-file bundling. Off for normal debug/dev builds and tests. -->
+  <Import Project="obfuscate.targets" />
+
 </Project>

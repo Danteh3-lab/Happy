@@ -110,20 +110,26 @@ internal sealed class SupabaseRestApi : ISupabaseApi
             accessToken, null, "return=minimal", token).ConfigureAwait(false);
     }
 
-    public Task<string> CheckLicenseAsync(string accessToken, string deviceId, string deviceName, CancellationToken token) =>
+    public Task<LicenseResult> CheckLicenseAsync(string accessToken, string deviceId, string deviceName, CancellationToken token) =>
         LicenseAsync(accessToken, new { action = "check", device_id = deviceId, device_name = deviceName }, token);
 
-    public Task<string> RedeemLicenseAsync(string accessToken, string key, string deviceId, string deviceName,
+    public Task<LicenseResult> RedeemLicenseAsync(string accessToken, string key, string deviceId, string deviceName,
         CancellationToken token) =>
         LicenseAsync(accessToken, new { action = "redeem", key, device_id = deviceId, device_name = deviceName }, token);
 
-    private async Task<string> LicenseAsync(string accessToken, object body, CancellationToken token)
+    private async Task<LicenseResult> LicenseAsync(string accessToken, object body, CancellationToken token)
     {
         using JsonDocument document = await SendAsync(HttpMethod.Post, LicensePath, accessToken, body, null, token)
             .ConfigureAwait(false);
         string licenseToken = ReadString(document.RootElement, "token");
         if (licenseToken.Length == 0) throw new CloudException("The license service returned no token.");
-        return licenseToken;
+        // The service includes "tuning" only for an active grant; keep it as the
+        // raw JSON so GatedTuning owns parsing and caching.
+        string tuning = document.RootElement.TryGetProperty("tuning", out JsonElement t) &&
+            t.ValueKind == JsonValueKind.Object
+                ? t.GetRawText()
+                : null;
+        return new LicenseResult(licenseToken, tuning);
     }
 
     private async Task<JsonDocument> SendAsync(HttpMethod method, string path, string accessToken, object body,

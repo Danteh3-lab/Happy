@@ -51,13 +51,95 @@ the steps below and commits the version bump. A plain build never releases.
 To release by hand:
 
 1. Bump `Version` in `HappyBot.csproj` and `BuildInfo.cs` (they must match).
-2. `dotnet publish HappyBot.csproj -p:PublishProfile=SingleExe`
-3. `node tools/release.mjs --upload` signs `publish\DANBOT.exe` and uploads it
+2. `dotnet tool restore` (first time only; installs the pinned Obfuscar).
+3. `dotnet publish HappyBot.csproj -p:PublishProfile=SingleExe -p:Obfuscate=true`
+   — obfuscates `HappyBot.dll` **before** it is bundled into `DANBOT.exe`.
+4. `node tools/release.mjs --upload` signs `publish\DANBOT.exe` and uploads it
    and `latest.txt` to the `danbot-downloads` R2 bucket (needs `wrangler login`).
+
+The order matters: obfuscation must happen during the publish in step 3, and
+`release.mjs` must run **last** because it hashes and signs the final
+`publish\DANBOT.exe`. Running `release.mjs` before obfuscation would sign the
+wrong bytes and every installed copy would reject the update.
 
 Manifests are signed with `%USERPROFILE%\.danbot\release-key.pem`, created by
 `tools/release-key.mjs`. Keep a backup and never commit it: without it,
 installed copies can no longer be updated automatically.
+
+### Obfuscated release build
+
+`DANBOT.exe` is .NET, which decompiles to near-source with free tools
+(dnSpy/ILSpy). The release build runs [Obfuscar](https://github.com/obfuscar/obfuscar)
+(pinned in `.config/dotnet-tools.json`) on **only** `HappyBot.dll` — never the
+.NET runtime, ViGEm or WebView2 — to rename our types/methods/fields and
+**encrypt string literals** (the Supabase URL, the `/functions/v1/license`
+path, PostgREST paths and JSON key literals). Config lives in `obfuscar.xml`;
+the build hook is `obfuscate.targets` (imported by `HappyBot.csproj`), gated to
+`Release` **and** `-p:Obfuscate=true`, so normal `dotnet build`, debug runs and
+`dotnet test` are never obfuscated.
+
+What Obfuscar does **not** do: control-flow obfuscation or anti-tamper (not a
+feature). Those would need .NET Reactor (paid) — see follow-ups. Also, string
+encryption only covers string literals in method bodies, so a `const string`
+field keeps its value in metadata even though every *use* of it is encrypted;
+fully hiding the Supabase URL/keys means moving them server-side (the tuning
+gate) or making them runtime-computed.
+
+A generous skip-list in `obfuscar.xml` keeps names that would break at
+**runtime** if renamed (and such breakage shows up as a JSON/reflection error
+when you run, not as a build error) — the WebView2 wire DTOs
+(`App/Protocol/*`), the whole `Cloud` namespace (System.Text.Json
+deserialization of `StoredCloudLogin`, the anonymous-type request bodies in
+`SupabaseRestApi`, DPAPI P/Invoke, license tokens), WinForms `Form` subclasses,
+all P/Invoke holders (`Native`, `Program`, `ProfileStore`, `Ds4HidControllerSource`),
+`Settings`/`SettingsCodec`, and the attribute-less serialized records
+`ReactionBehaviorSummary` and `InputBridgeSnapshot`.
+
+**Fallback (if the in-build hook misbehaves):** the MSBuild ordering could not
+be verified in CI, so if `-p:Obfuscate=true` fails to produce an obfuscated exe,
+use the two-step script, which avoids MSBuild ordering (build → obfuscar →
+`publish --no-build`):
+
+```powershell
+pwsh tools/obfuscate-release.ps1
+node tools/release.mjs --upload
+```
+
+### Verifying an obfuscated build (do this before shipping)
+
+Obfuscation breakage is a **runtime** failure, not a build failure, so a clean
+publish is not enough — exercise the real paths:
+
+1. **Unobfuscated first (baseline).**
+   `dotnet publish HappyBot.csproj -p:PublishProfile=SingleExe` → run
+   `publish\DANBOT.exe`: sign in, redeem an active license, start the bot and
+   confirm it detects/parries. This proves the app itself works.
+2. **Obfuscated.**
+   `dotnet publish HappyBot.csproj -p:PublishProfile=SingleExe -p:Obfuscate=true`
+   (or `pwsh tools/obfuscate-release.ps1`) → run the resulting `DANBOT.exe` and
+   repeat the **exact same** flow:
+   - Sign in (exercises the GoTrue anonymous-type request bodies + session
+     JSON) — a 400/parse error here means an anonymous type or Cloud DTO got
+     renamed; widen the skip-list.
+   - Redeem/check a license (exercises the edge-function call and signed-token
+     verification).
+   - Start the bot and confirm detection/parry still fire (exercises the
+     WebView2 status JSON, `ReactionBehaviorSummary`/`InputBridgeSnapshot`
+     serialization, and the `Native`/HID P/Invoke).
+   - Save and reload a profile, and confirm the stored cloud login survives a
+     restart (exercises `SettingsCodec` and `StoredCloudLogin` deserialization).
+3. **Inspect in dnSpy.** Open the obfuscated `DANBOT.exe` and confirm: HappyBot
+   logic types are renamed to short/garbage names, and string literals (Supabase
+   URL, RPC/function names) are encrypted (shown as a decode call, not plain
+   text). The skipped surfaces above will still read clearly — that is expected.
+4. **Sign last.** Only after the obfuscated exe passes (1)–(3), run
+   `node tools/release.mjs` so the signature/manifest cover the final bytes.
+
+If any runtime step fails only in the obfuscated build, add the offending type
+to the skip-list in `obfuscar.xml` (or, as a quick unblock, set
+`HideStrings` → keep but `KeepPublicApi`/rename vars off to ship
+string-encryption-only, which already hides the Supabase URL/RPC names) and
+re-verify.
 
 For development, `dotnet build HappyBot.csproj` still produces the regular
 `bin\<Configuration>\net10.0-windows\HappyBot.exe`.

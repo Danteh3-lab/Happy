@@ -1,5 +1,6 @@
 using System.Drawing;
 using HappyBot;
+using HappyBot.Cloud;
 using HappyBot.Combat;
 
 namespace HappyBot.Vision;
@@ -49,17 +50,13 @@ internal sealed record FlashTemporalBaseline(Rectangle Region, Rectangle Exclude
 /// </summary>
 internal sealed class VisionAnalyzer
 {
-    internal const int FlashClusterTolerance = 24;
     internal const int FlashClusterMinimumMatches = 4;
 
-    /// <summary>
-    /// The flash renders a point or two off 255,154,141 on most frames, so an
-    /// exact pixel fired late or not at all (Oct 17 training: 6 of 20 lights
-    /// flashed with dozens of near pixels and no exact one). Live parry/deflect
-    /// gating takes a small cluster within this per-channel tolerance instead.
-    /// </summary>
-    internal const int LiveFlashTolerance = 2;
-    internal const int LiveFlashMinimumPixels = 3;
+    // The flash target colour and its per-channel tolerances are gated behind an
+    // active license grant (see GatedTuning): the flash renders a point or two
+    // off the target on most frames, so detection takes a small near-colour
+    // cluster instead of an exact pixel. The per-pixel loops snapshot the gated
+    // values into locals, so no value is embedded in the binary.
 
     public VisionAnalysisResult Scan(ScreenFrame frame, VisionScanRequest request)
     {
@@ -160,6 +157,7 @@ internal sealed class VisionAnalyzer
         int firstProbeX = -1, firstProbeY = -1;
         int closestDistance = int.MaxValue;
         int closestR = 0, closestG = 0, closestB = 0;
+        GatedTuning.Values t = GatedTuning.Current;
         for (int y = region.Top; y < region.Bottom; y++)
         {
             int localY = y - frame.OriginY;
@@ -202,11 +200,11 @@ internal sealed class VisionAnalyzer
                     indicator = new Point(x, y);
                 }
                 if (!darkRed && pixelR == 255 && pixelG == 41 && pixelB == 34) darkRed = true;
-                if (!strictFlash && Math.Abs(pixelR - 255) <= LiveFlashTolerance &&
-                    Math.Abs(pixelG - 154) <= LiveFlashTolerance && Math.Abs(pixelB - 141) <= LiveFlashTolerance)
+                if (!strictFlash && Math.Abs(pixelR - t.FlashColorR) <= t.FlashLiveTolerance &&
+                    Math.Abs(pixelG - t.FlashColorG) <= t.FlashLiveTolerance && Math.Abs(pixelB - t.FlashColorB) <= t.FlashLiveTolerance)
                 {
                     if (flashPixels == 0) strictFlashPoint = new Point(x, y);
-                    strictFlash = ++flashPixels >= LiveFlashMinimumPixels;
+                    strictFlash = ++flashPixels >= t.FlashLiveMinimumPixels;
                 }
                 if (!orange && pixelR == 246 && pixelG == 98 && pixelB == 8) orange = true;
                 if (!orangeFeint && Math.Abs(pixelR - 255) <= 3 && Math.Abs(pixelG - 34) <= 3 &&
@@ -256,15 +254,16 @@ internal sealed class VisionAnalyzer
         int matches = 0;
         int minimumX = int.MaxValue, minimumY = int.MaxValue;
         int maximumX = int.MinValue, maximumY = int.MinValue;
+        GatedTuning.Values t = GatedTuning.Current;
         for (int y = top; y <= bottom; y++)
         {
             int row = y * frame.Stride;
             for (int x = left; x <= right; x++)
             {
                 int offset = row + x * 4;
-                if (Math.Abs(frame.Buffer[offset + 2] - 255) <= FlashClusterTolerance &&
-                    Math.Abs(frame.Buffer[offset + 1] - 154) <= FlashClusterTolerance &&
-                    Math.Abs(frame.Buffer[offset] - 141) <= FlashClusterTolerance)
+                if (Math.Abs(frame.Buffer[offset + 2] - t.FlashColorR) <= t.FlashClusterTolerance &&
+                    Math.Abs(frame.Buffer[offset + 1] - t.FlashColorG) <= t.FlashClusterTolerance &&
+                    Math.Abs(frame.Buffer[offset] - t.FlashColorB) <= t.FlashClusterTolerance)
                 {
                     matches++;
                     int screenX = x + frame.OriginX;

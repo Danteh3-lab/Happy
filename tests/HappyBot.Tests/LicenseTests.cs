@@ -125,12 +125,13 @@ static partial class Program
         var handler = new FakeHttpHandler();
         var api = new SupabaseRestApi(new HttpClient(handler), "https://example.supabase.co", "pk_test");
 
-        handler.Respond(HttpStatusCode.OK, "{\"token\":\"t.1\",\"status\":\"active\"}");
-        string token = api.RedeemLicenseAsync("a1", "DANBOT-AAAAA", TestDevice, "PC", CancellationToken.None).GetAwaiter().GetResult();
+        handler.Respond(HttpStatusCode.OK, "{\"token\":\"t.1\",\"status\":\"active\",\"tuning\":{\"v\":1}}");
+        LicenseResult redeemResult = api.RedeemLicenseAsync("a1", "DANBOT-AAAAA", TestDevice, "PC", CancellationToken.None).GetAwaiter().GetResult();
         FakeHttpHandler.Captured redeem = handler.Requests.Last();
-        Require(token == "t.1" && redeem.Url == "https://example.supabase.co/functions/v1/license" && redeem.Method == "POST" &&
+        Require(redeemResult.Token == "t.1" && redeem.Url == "https://example.supabase.co/functions/v1/license" && redeem.Method == "POST" &&
                 redeem.Authorization == "Bearer a1" && redeem.ApiKey == "pk_test",
             "redeem posts to the license function with the user's token");
+        Require(redeemResult.Tuning == "{\"v\":1}", "an active grant carries the gated tuning blob");
         using (JsonDocument body = JsonDocument.Parse(redeem.Body))
             Require(body.RootElement.GetProperty("action").GetString() == "redeem" &&
                     body.RootElement.GetProperty("key").GetString() == "DANBOT-AAAAA" &&

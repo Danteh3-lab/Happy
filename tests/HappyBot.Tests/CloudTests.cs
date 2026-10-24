@@ -372,13 +372,13 @@ static partial class Program
             return Task.CompletedTask;
         }
 
-        public Task<string> CheckLicenseAsync(string accessToken, string deviceId, string deviceName, CancellationToken token)
+        public Task<LicenseResult> CheckLicenseAsync(string accessToken, string deviceId, string deviceName, CancellationToken token)
         {
             Calls.Add("license-check");
             return License(deviceId);
         }
 
-        public Task<string> RedeemLicenseAsync(string accessToken, string key, string deviceId, string deviceName,
+        public Task<LicenseResult> RedeemLicenseAsync(string accessToken, string key, string deviceId, string deviceName,
             CancellationToken token)
         {
             Calls.Add("license-redeem");
@@ -386,13 +386,13 @@ static partial class Program
             return License(deviceId);
         }
 
-        private Task<string> License(string deviceId)
+        private Task<LicenseResult> License(string deviceId)
         {
             Check();
             CloudException fail = FailLicense;
             FailLicense = null;
             if (fail != null) throw fail;
-            return Task.FromResult(SignLicense(LicenseStatus, CloudNow, device: deviceId));
+            return Task.FromResult(new LicenseResult(SignLicense(LicenseStatus, CloudNow, device: deviceId), null));
         }
     }
 

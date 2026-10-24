@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Imported by HappyBot.csproj. Obfuscates the compiled HappyBot assembly in the
+  INTERMEDIATE output (obj) right after Compile, so that publish (and the
+  single-file bundler) pick up the obfuscated copy.
+
+  GATED: runs only when BOTH are true:
+    - Configuration == Release
+    - Obfuscate     == true   (set explicitly, e.g. -p:Obfuscate=true)
+  So `dotnet build`, debug runs, and `dotnet test` are never obfuscated.
+
+  Why AfterTargets="Compile": the app assembly flows obj -> bin -> single-file
+  bundle. Obfuscating the obj copy before it is copied onward means every later
+  stage consumes the obfuscated assembly. We stage all reference assemblies next
+  to it first so Obfuscar can resolve HappyBot.dll's dependencies, then copy the
+  obfuscated result back over the intermediate assembly.
+
+  *** UNVERIFIED IN THIS REPO: dotnet is not installed where this was authored,
+  so the exact Compile-time ordering and reference staging could need a tweak on
+  your machine. If this target misbehaves, use the reliable two-step path
+  instead: tools/obfuscate-release.ps1 (build, then obfuscar, then publish with no build).
+  See README "Obfuscated release build". ***
+-->
+<Project>
+
+  <PropertyGroup>
+    <!-- Default off. Flip with -p:Obfuscate=true on the publish command. -->
+    <Obfuscate Condition="'$(Obfuscate)' == ''">false</Obfuscate>
+    <ObfuscarConfig>$(MSBuildThisFileDirectory)obfuscar.xml</ObfuscarConfig>
+    <ObfuscarStageDir>$(IntermediateOutputPath)obfuscar-stage\</ObfuscarStageDir>
+  </PropertyGroup>
+
+  <Target Name="ObfuscateHappyBot"
+          AfterTargets="Compile"
+          Condition="'$(Configuration)' == 'Release' and '$(Obfuscate)' == 'true'">
+
+    <PropertyGroup>
+      <_ObfIntermediateAssembly>$(IntermediateOutputPath)$(TargetName).dll</_ObfIntermediateAssembly>
+    </PropertyGroup>
+
+    <Error Condition="!Exists('$(_ObfIntermediateAssembly)')"
+           Text="Obfuscate: intermediate assembly not found at $(_ObfIntermediateAssembly). Check AfterTargets ordering." />
+
+    <Message Importance="high" Text="Obfuscate: obfuscating $(_ObfIntermediateAssembly) via $(ObfuscarConfig)" />
+
+    <!-- Collect the directories of every resolved reference so Obfuscar can
+         resolve HappyBot.dll's dependencies (framework ref assemblies + NuGet
+         package assemblies). -->
+    <ItemGroup>
+      <_ObfRefDir Include="@(ReferencePathWithRefAssemblies->'%(RootDir)%(Directory)')" />
+      <_ObfRefDir Include="@(ReferencePath->'%(RootDir)%(Directory)')" />
+      <_ObfRefCopyLocal Include="@(ReferenceCopyLocalPaths)" Condition="'%(Extension)' == '.dll'" />
+    </ItemGroup>
+
+    <!-- Fresh staging dir: the intermediate HappyBot.dll + a flat copy of every
+         reference assembly, so Obfuscar (CWD = stage) resolves everything via
+         obfuscar.xml's AssemblySearchPath="." -->
+    <RemoveDir Directories="$(ObfuscarStageDir)" />
+    <MakeDir Directories="$(ObfuscarStageDir)" />
+    <Copy SourceFiles="$(_ObfIntermediateAssembly)" DestinationFolder="$(ObfuscarStageDir)" />
+    <Copy SourceFiles="@(_ObfRefCopyLocal)" DestinationFolder="$(ObfuscarStageDir)" SkipUnchangedFiles="true" ContinueOnError="true" />
+    <Copy SourceFiles="@(ReferencePathWithRefAssemblies)" DestinationFolder="$(ObfuscarStageDir)" SkipUnchangedFiles="true" ContinueOnError="true" />
+
+    <!-- Run the pinned local tool from the stage dir. obfuscar.xml writes the
+         obfuscated assembly to .\obfuscated\HappyBot.dll (relative to CWD). -->
+    <Exec Command="dotnet tool restore" WorkingDirectory="$(MSBuildProjectDirectory)" />
+    <Exec Command="dotnet obfuscar.console &quot;$(ObfuscarConfig)&quot;"
+          WorkingDirectory="$(ObfuscarStageDir)" />
+
+    <Error Condition="!Exists('$(ObfuscarStageDir)obfuscated\$(TargetName).dll')"
+           Text="Obfuscate: Obfuscar did not produce $(ObfuscarStageDir)obfuscated\$(TargetName).dll" />
+
+    <!-- Copy the obfuscated assembly back over the intermediate one so bin/ and
+         the single-file bundle consume it. OverwriteReadOnlyFiles for safety. -->
+    <Copy SourceFiles="$(ObfuscarStageDir)obfuscated\$(TargetName).dll"
+          DestinationFiles="$(_ObfIntermediateAssembly)"
+          OverwriteReadOnlyFiles="true" />
+
+    <Message Importance="high" Text="Obfuscate: done; obfuscated $(TargetName).dll is now the intermediate assembly." />
+  </Target>
+
+</Project>

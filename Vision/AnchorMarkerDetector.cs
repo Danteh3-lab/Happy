@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Drawing;
+using HappyBot.Cloud;
 
 namespace HappyBot.Vision;
 
@@ -40,14 +41,10 @@ internal readonly record struct AnchorMarkerScanResult(
 /// </summary>
 internal sealed class AnchorMarkerDetector
 {
-    private const int GreenR = 5;
-    private const int GreenG = 131;
-    private const int GreenB = 65;
-    private const int YellowR = 255;
-    private const int YellowG = 255;
-    private const int YellowB = 10;
-    private const int NearbyRadiusPx = 64;
-    private const int MaxPixelsPerKind = 4096;
+    // Marker colours and pixel caps are gated: the real values arrive only with
+    // an active license grant (see GatedTuning). The per-pixel scan snapshots
+    // them into locals; NearbyRadiusPx is read per-candidate, so an accessor is fine.
+    private static int NearbyRadiusPx => GatedTuning.Current.AnchorNearbyRadiusPx;
 
     public AnchorMarkerScanResult Scan(ScreenFrame frame, Rectangle requestedRegion,
         bool previousFound, Point previousAnchor, string previousKind)
@@ -125,6 +122,7 @@ internal sealed class AnchorMarkerDetector
     private static void ScanPixels(ScreenFrame frame, Rectangle region,
         List<Point> green, List<Point> yellow)
     {
+        GatedTuning.Values t = GatedTuning.Current;
         for (int y = region.Top; y < region.Bottom; y++)
         {
             int row = (y - frame.OriginY) * frame.Stride;
@@ -134,13 +132,13 @@ internal sealed class AnchorMarkerDetector
                 int blue = frame.Buffer[offset];
                 int greenValue = frame.Buffer[offset + 1];
                 int red = frame.Buffer[offset + 2];
-                if (red == GreenR && greenValue == GreenG && blue == GreenB)
+                if (red == t.AnchorGreenR && greenValue == t.AnchorGreenG && blue == t.AnchorGreenB)
                 {
-                    if (green.Count < MaxPixelsPerKind) green.Add(new Point(x, y));
+                    if (green.Count < t.AnchorMaxPixelsPerKind) green.Add(new Point(x, y));
                 }
-                else if (red == YellowR && greenValue == YellowG && blue == YellowB)
+                else if (red == t.AnchorYellowR && greenValue == t.AnchorYellowG && blue == t.AnchorYellowB)
                 {
-                    if (yellow.Count < MaxPixelsPerKind) yellow.Add(new Point(x, y));
+                    if (yellow.Count < t.AnchorMaxPixelsPerKind) yellow.Add(new Point(x, y));
                 }
             }
         }

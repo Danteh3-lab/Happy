@@ -56,6 +56,13 @@ internal sealed class CloudCoordinator
     /// <summary>True while this PC holds a valid, recently confirmed license.</summary>
     public bool LicenseActive => _license.Allows(_clock());
 
+    /// <summary>
+    /// True once the gated detection tuning has been delivered (by an active
+    /// grant) and is available this run. Without it the bot can start but detects
+    /// nothing, so the deck treats it as a precondition for running.
+    /// </summary>
+    public bool TuningReady => GatedTuning.IsLoaded;
+
     /// <summary>Why the bot cannot start, or "" when it can.</summary>
     public string LicenseBlockReason => _license.BlockReason(_clock(), SignedIn);
 
@@ -98,6 +105,9 @@ internal sealed class CloudCoordinator
     public void Restore()
     {
         _license.Load();
+        // Restore the gated tuning from its cache while the stored grant still
+        // allows offline use, so the bot works offline exactly as the license does.
+        if (_license.Allows(_clock())) GatedTuning.Load();
         StoredCloudLogin login = _store.Load();
         if (login == null) return;
         _email = login.Email ?? "";
@@ -160,6 +170,7 @@ internal sealed class CloudCoordinator
         lock (_sessionSync) session = _session;
         ClearSession();
         _license.Clear();
+        GatedTuning.Clear();
         _toast("Signed out. Local profiles stay on this PC.", "info");
         _statusChanged();
         if (session == null) return;
@@ -190,7 +201,7 @@ internal sealed class CloudCoordinator
             string access = await AccessTokenAsync(token).ConfigureAwait(false);
             return await _api.RedeemLicenseAsync(access, key, _license.DeviceId, _license.DeviceName, token)
                 .ConfigureAwait(false);
-        }, licenseToken => AcceptLicense(licenseToken, quiet: false), "License key not accepted");
+        }, result => AcceptLicense(result, quiet: false), "License key not accepted");
     }
 
     /// <summary>Asks the license service for a fresh grant for this PC.</summary>
@@ -203,7 +214,7 @@ internal sealed class CloudCoordinator
             string access = await AccessTokenAsync(token).ConfigureAwait(false);
             return await _api.CheckLicenseAsync(access, _license.DeviceId, _license.DeviceName, token)
                 .ConfigureAwait(false);
-        }, licenseToken => AcceptLicense(licenseToken, quiet), "License check failed", toastFailure: !quiet);
+        }, result => AcceptLicense(result, quiet), "License check failed", toastFailure: !quiet);
     }
 
     /// <summary>Status-tick hook: re-checks an aging grant while signed in, at most every few minutes.</summary>
@@ -215,11 +226,14 @@ internal sealed class CloudCoordinator
     }
 
     /// <summary>Quiet checks only speak up when the license changes between usable and not.</summary>
-    private void AcceptLicense(string licenseToken, bool quiet)
+    private void AcceptLicense(LicenseResult result, bool quiet)
     {
         bool wasActive = _license.Allows(_clock());
-        _license.Accept(licenseToken);
+        _license.Accept(result.Token);
         bool active = _license.Allows(_clock());
+        // The service only sends tuning for an active grant; store it so the bot
+        // can run (and keep working offline from the cache).
+        if (active && result.Tuning != null) GatedTuning.Accept(result.Tuning);
         if (quiet && active == wasActive) return;
         _toast(_license.Describe(_clock()), active ? "success" : "warning");
     }
